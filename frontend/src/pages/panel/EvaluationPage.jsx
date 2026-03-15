@@ -17,7 +17,6 @@ export default function EvaluationPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const isPanel = user?.role === "panel";
-  const isCoordinator = user?.role === "coordinator";
 
   const [evaluations, setEvaluations] = useState([]);
   const [students, setStudents] = useState([]);
@@ -31,7 +30,7 @@ export default function EvaluationPage() {
     studentId: "",
     rubricId: "",
     sessionType: "",
-    semester: "", // 👈 FIXED: Added missing semester state
+    semester: "",
     remarks: "",
   });
   const [scores, setScores] = useState({});
@@ -83,7 +82,6 @@ export default function EvaluationPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // 👈 FIXED: Now also validates the semester
     if (
       !formData.studentId ||
       !formData.rubricId ||
@@ -97,17 +95,18 @@ export default function EvaluationPage() {
     try {
       setIsSubmitting(true);
 
+      // 🚀 FIXED: Keys MUST be the Mongo _id to pass backend validation!
       const formattedScoresMap = {};
       selectedRubric.criteria.forEach((c, index) => {
-        formattedScoresMap[c.name] = parseFloat(scores[index]) || 0;
+        formattedScoresMap[c._id] = parseFloat(scores[index]) || 0;
       });
 
       const payload = {
         studentId: formData.studentId,
         rubricId: formData.rubricId,
         sessionType: formData.sessionType,
-        semester: formData.semester, // 👈 FIXED: Included in payload
-        scores: formattedScoresMap,
+        semester: formData.semester,
+        scores: formattedScoresMap, // Now sending proper IDs!
         overallScore: parseFloat(calculateTotalScore()),
         remarks: formData.remarks,
       };
@@ -144,7 +143,7 @@ export default function EvaluationPage() {
       sessionType: "",
       semester: "",
       remarks: "",
-    }); // Reset semester
+    });
     setScores({});
   };
 
@@ -344,16 +343,30 @@ export default function EvaluationPage() {
                   Score Breakdown
                 </h4>
                 <div className="space-y-3">
+                  {/* 🚀 FIXED: Translate DB Object IDs back into Rubric Names for the Modal */}
                   {(Array.isArray(viewingEval.scores)
                     ? viewingEval.scores
-                    : Object.entries(viewingEval.scores || {}).map(
-                        ([k, v]) => ({
-                          criterionName: k,
+                    : Object.entries(viewingEval.scores || {}).map(([k, v]) => {
+                        let cName = k;
+                        let cWeight = "-";
+                        let cMax = 100;
+                        if (viewingEval.rubricId?.criteria) {
+                          const match = viewingEval.rubricId.criteria.find(
+                            (c) => c._id === k || c.name === k,
+                          );
+                          if (match) {
+                            cName = match.name;
+                            cWeight = match.weight;
+                            cMax = match.maxScore;
+                          }
+                        }
+                        return {
+                          criterionName: cName,
                           score: v,
-                          maxScore: 100,
-                          weight: "-",
-                        }),
-                      )
+                          maxScore: cMax,
+                          weight: cWeight,
+                        };
+                      })
                   ).map((scoreItem, idx) => (
                     <div
                       key={idx}
@@ -420,7 +433,6 @@ export default function EvaluationPage() {
                 onSubmit={handleSubmit}
                 className="space-y-6"
               >
-                {/* 👈 FIXED: Changed to grid-cols-2 to perfectly fit 4 fields */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50 p-5 rounded-xl border border-gray-200">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -442,7 +454,6 @@ export default function EvaluationPage() {
                       ))}
                     </select>
                   </div>
-
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
                       Session Type *
@@ -469,8 +480,6 @@ export default function EvaluationPage() {
                       <option value="Final Defense">Final Defense</option>
                     </select>
                   </div>
-
-                  {/* 👈 FIXED: The missing Semester input field! */}
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
                       Semester *
@@ -479,17 +488,13 @@ export default function EvaluationPage() {
                       type="text"
                       value={formData.semester}
                       onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          semester: e.target.value,
-                        })
+                        setFormData({ ...formData, semester: e.target.value })
                       }
                       placeholder="e.g., 2025/2026-1"
                       className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500"
                       required
                     />
                   </div>
-
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
                       Evaluation Rubric *
@@ -554,7 +559,6 @@ export default function EvaluationPage() {
                         </div>
                       </div>
                     ))}
-
                     <div className="flex justify-end pt-4">
                       <div className="bg-gray-900 text-white px-6 py-4 rounded-xl shadow-lg flex items-center gap-4">
                         <div className="text-right">
@@ -568,7 +572,6 @@ export default function EvaluationPage() {
                         </div>
                       </div>
                     </div>
-
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
                         Panel Remarks / Feedback
@@ -595,7 +598,6 @@ export default function EvaluationPage() {
                 )}
               </form>
             </div>
-
             <div className="p-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50 rounded-b-xl">
               <button
                 onClick={closeModal}
