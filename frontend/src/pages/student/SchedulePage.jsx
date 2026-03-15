@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../../contexts/AuthContext";
-import { timetableAPI } from "../../services/api";
+import api from "../../services/api"; // 👈 FIXED IMPORT
 import { useNavigate } from "react-router-dom";
 import {
   Calendar,
@@ -23,8 +23,6 @@ export default function SchedulePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [uploadingDoc, setUploadingDoc] = useState(null);
-
-  // State to track which past session is expanded
   const [expandedId, setExpandedId] = useState(null);
 
   useEffect(() => {
@@ -35,15 +33,10 @@ export default function SchedulePage() {
     try {
       setLoading(true);
       setError(null);
-
-      console.log("📅 Fetching sessions for user:", user.id);
-
-      const response = await timetableAPI.getMy();
-      console.log("✅ Timetable response:", response);
-
-      const sessionsData = response.timetables || response.sessions || [];
-      console.log(`📊 Found ${sessionsData.length} sessions`);
-
+      // 👈 FIXED AXIOS CALL
+      const response = await api.get("/timetables/my");
+      const sessionsData =
+        response.data.timetables || response.data.sessions || [];
       setSessions(sessionsData);
     } catch (error) {
       console.error("❌ Error fetching sessions:", error);
@@ -64,9 +57,10 @@ export default function SchedulePage() {
       formData.append("title", file.name);
       formData.append("description", "Student submission");
 
-      console.log("📤 Uploading document for session:", sessionId);
-      await timetableAPI.uploadDocument(sessionId, formData);
-      console.log("✅ Upload successful");
+      // 👈 FIXED UPLOAD CALL
+      await api.post(`/timetables/${sessionId}/documents`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
 
       alert("Document uploaded successfully!");
       await fetchSessions();
@@ -78,17 +72,10 @@ export default function SchedulePage() {
     }
   };
 
-  const isDeadlinePassed = (deadline) => {
-    return deadline && new Date(deadline) < new Date();
-  };
-
-  const isUpcoming = (date) => {
-    return new Date(date) >= new Date();
-  };
-
-  const toggleExpand = (id) => {
-    setExpandedId(expandedId === id ? null : id);
-  };
+  const isDeadlinePassed = (deadline) =>
+    deadline && new Date(deadline) < new Date();
+  const isUpcoming = (date) => new Date(date) >= new Date();
+  const toggleExpand = (id) => setExpandedId(expandedId === id ? null : id);
 
   if (loading) {
     return (
@@ -128,16 +115,6 @@ export default function SchedulePage() {
         </p>
       </div>
 
-      {/* Debug Info */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm">
-        <p className="text-blue-900">
-          📊 Status: Found <strong>{sessions.length}</strong> total sessions (
-          {upcomingSessions.length} upcoming, {pastSessions.length} past)
-          {sessions.length === 0 && " (No sessions scheduled yet)"}
-        </p>
-      </div>
-
-      {/* Upcoming Sessions */}
       <div>
         <h2 className="text-lg font-semibold text-gray-900 mb-4">
           Upcoming Sessions ({upcomingSessions.length})
@@ -147,152 +124,112 @@ export default function SchedulePage() {
             {upcomingSessions.map((session) => (
               <div
                 key={session._id}
-                className="bg-white rounded-lg border border-gray-200"
+                className="bg-white rounded-lg border border-gray-200 p-6"
               >
-                <div className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex-1">
-                      <h3 className="text-lg font-semibold text-gray-900">
-                        {session.title}
-                      </h3>
-                      <p className="text-sm text-gray-600 mt-1">
-                        {session.sessionType}
-                      </p>
-                    </div>
-                    {session.deadline &&
-                      !isDeadlinePassed(session.deadline) && (
-                        <div className="flex items-center gap-2 px-3 py-1 bg-orange-50 text-orange-700 rounded-lg text-sm font-medium border border-orange-200">
-                          <AlertCircle className="w-4 h-4" />
-                          Deadline:{" "}
-                          {new Date(session.deadline).toLocaleDateString()}
-                        </div>
-                      )}
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {session.title}
+                    </h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {session.sessionType}
+                    </p>
                   </div>
+                  {session.deadline && !isDeadlinePassed(session.deadline) && (
+                    <div className="flex items-center gap-2 px-3 py-1 bg-orange-50 text-orange-700 rounded-lg text-sm font-medium border border-orange-200">
+                      <AlertCircle className="w-4 h-4" />
+                      Deadline:{" "}
+                      {new Date(session.deadline).toLocaleDateString()}
+                    </div>
+                  )}
+                </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                    <div className="flex items-center gap-2 text-gray-700">
-                      <Calendar className="w-5 h-5 text-blue-600" />
-                      <span className="text-sm">
-                        {new Date(session.date).toLocaleDateString()}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-700">
-                      <Clock className="w-5 h-5 text-green-600" />
-                      <span className="text-sm">
-                        {session.startTime} - {session.endTime}
-                      </span>
-                    </div>
-                    {session.venue && (
-                      <div className="flex items-center gap-2 text-gray-700">
-                        <MapPin className="w-5 h-5 text-red-600" />
-                        <span className="text-sm">{session.venue}</span>
-                      </div>
-                    )}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <div className="flex items-center gap-2 text-gray-700">
+                    <Calendar className="w-5 h-5 text-blue-600" />
+                    <span className="text-sm">
+                      {new Date(session.date).toLocaleDateString()}
+                    </span>
                   </div>
+                  <div className="flex items-center gap-2 text-gray-700">
+                    <Clock className="w-5 h-5 text-green-600" />
+                    <span className="text-sm">
+                      {session.startTime} - {session.endTime}
+                    </span>
+                  </div>
+                  {session.venue && (
+                    <div className="flex items-center gap-2 text-gray-700">
+                      <MapPin className="w-5 h-5 text-red-600" />
+                      <span className="text-sm">{session.venue}</span>
+                    </div>
+                  )}
+                </div>
 
-                  {session.description && (
-                    <p className="text-gray-600 mb-4 text-sm">
-                      {session.description}
+                <div className="border-t border-gray-200 pt-4">
+                  <h4 className="font-semibold text-gray-900 mb-3 text-sm">
+                    Your Documents:
+                  </h4>
+                  {session.studentDocuments?.filter(
+                    (d) =>
+                      d.uploadedBy === user.id || d.uploadedBy?._id === user.id,
+                  ).length > 0 ? (
+                    <div className="space-y-2 mb-3">
+                      {session.studentDocuments
+                        .filter(
+                          (d) =>
+                            d.uploadedBy === user.id ||
+                            d.uploadedBy?._id === user.id,
+                        )
+                        .map((doc, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+                          >
+                            <div className="flex items-center gap-3">
+                              <FileText className="w-5 h-5 text-gray-600" />{" "}
+                              <p className="text-sm font-medium text-gray-900">
+                                {doc.title}
+                              </p>
+                            </div>
+                            <CheckCircle className="w-5 h-5 text-green-600" />
+                          </div>
+                        ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 mb-3">
+                      No documents uploaded yet
                     </p>
                   )}
 
-                  {session.requirements && (
-                    <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-                      <h4 className="font-semibold text-blue-900 mb-2 text-sm">
-                        Requirements:
-                      </h4>
-                      <p className="text-sm text-blue-800">
-                        {session.requirements}
-                      </p>
-                    </div>
+                  {!isDeadlinePassed(session.deadline) && (
+                    <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer transition-colors text-sm">
+                      {uploadingDoc === session._id ? (
+                        <span>Uploading...</span>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          <span>Upload Document</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        className="hidden"
+                        onChange={(e) => handleFileUpload(session._id, e)}
+                        disabled={uploadingDoc === session._id}
+                      />
+                    </label>
                   )}
-
-                  <div className="border-t border-gray-200 pt-4">
-                    <h4 className="font-semibold text-gray-900 mb-3 text-sm">
-                      Your Documents:
-                    </h4>
-                    {session.studentDocuments?.filter(
-                      (d) =>
-                        d.uploadedBy === user.id ||
-                        d.uploadedBy?._id === user.id,
-                    ).length > 0 ? (
-                      <div className="space-y-2 mb-3">
-                        {session.studentDocuments
-                          .filter(
-                            (d) =>
-                              d.uploadedBy === user.id ||
-                              d.uploadedBy?._id === user.id,
-                          )
-                          .map((doc, idx) => (
-                            <div
-                              key={idx}
-                              className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
-                            >
-                              <div className="flex items-center gap-3">
-                                <FileText className="w-5 h-5 text-gray-600" />
-                                <div>
-                                  <p className="text-sm font-medium text-gray-900">
-                                    {doc.title}
-                                  </p>
-                                  <p className="text-xs text-gray-500">
-                                    Uploaded{" "}
-                                    {new Date(
-                                      doc.uploadedAt,
-                                    ).toLocaleDateString()}
-                                  </p>
-                                </div>
-                              </div>
-                              <CheckCircle className="w-5 h-5 text-green-600" />
-                            </div>
-                          ))}
-                      </div>
-                    ) : (
-                      <p className="text-sm text-gray-500 mb-3">
-                        No documents uploaded yet
-                      </p>
-                    )}
-
-                    {!isDeadlinePassed(session.deadline) && (
-                      <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer transition-colors text-sm">
-                        {uploadingDoc === session._id ? (
-                          <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></div>
-                            <span>Uploading...</span>
-                          </>
-                        ) : (
-                          <>
-                            <Upload className="w-4 h-4" />
-                            <span>Upload Document</span>
-                          </>
-                        )}
-                        <input
-                          type="file"
-                          className="hidden"
-                          onChange={(e) => handleFileUpload(session._id, e)}
-                          disabled={uploadingDoc === session._id}
-                        />
-                      </label>
-                    )}
-                  </div>
                 </div>
               </div>
             ))}
           </div>
         ) : (
-          <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-            <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">
-              No Upcoming Sessions
-            </h3>
-            <p className="text-gray-600">
-              You don't have any upcoming sessions scheduled. Your coordinator
-              will create sessions for you.
-            </p>
-          </div>
+          <p className="text-gray-500 bg-white p-6 rounded-xl border border-gray-200 text-center">
+            No upcoming sessions scheduled.
+          </p>
         )}
       </div>
 
-      {/* 🚀 NEW: PAST SESSIONS (Expandable Accordion) */}
       {pastSessions.length > 0 && (
         <div>
           <h2 className="text-lg font-semibold text-gray-900 mb-4">
@@ -304,7 +241,6 @@ export default function SchedulePage() {
                 key={session._id}
                 className={`border-b border-gray-100 last:border-0 ${expandedId === session._id ? "bg-blue-50/50" : "bg-white"}`}
               >
-                {/* Accordion Header (Clickable) */}
                 <div
                   onClick={() => toggleExpand(session._id)}
                   className="p-5 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-colors"
@@ -330,7 +266,6 @@ export default function SchedulePage() {
                   </div>
                 </div>
 
-                {/* THE EXPANDED DETAILS PART */}
                 {expandedId === session._id && (
                   <div className="px-5 pb-5 pt-2 animate-in slide-in-from-top-2">
                     <div className="bg-white p-4 rounded-lg border border-blue-100 grid grid-cols-1 md:grid-cols-2 gap-4 shadow-sm">
@@ -363,7 +298,6 @@ export default function SchedulePage() {
                         </div>
                       </div>
                     </div>
-
                     <div className="mt-4 flex justify-end">
                       <button
                         onClick={() =>

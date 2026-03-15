@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import {
@@ -14,18 +14,21 @@ import {
   QrCode,
   UserCog,
   UserCircle,
+  Menu, // 👈 Added Menu icon for mobile
+  X, // 👈 Added X icon for closing
 } from "lucide-react";
 
 export default function PanelLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  // 👈 New state to track if mobile menu is open
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const handleLogout = () => {
     logout();
     navigate("/login");
   };
 
-  // Define navigation items with precise Role-Based Access Control
   const navItems = [
     {
       to: "/panel/dashboard",
@@ -89,27 +92,44 @@ export default function PanelLayout() {
     },
   ];
 
-  // Filter nav items based on the user's current role
   const filteredNavItems = navItems.filter(
     (item) => user && item.allowedRoles.includes(user.role),
   );
-
-  // Helper to format the role nicely for the UI (e.g., "coordinator" -> "Coordinator")
   const formatRole = (role) => {
     if (!role) return "Staff";
     return role.charAt(0).toUpperCase() + role.slice(1);
   };
 
   return (
-    <div className="flex h-screen bg-gray-100">
-      {/* Sidebar */}
-      <aside className="w-64 bg-white shadow-lg flex flex-col">
-        {/* Logo/Header */}
-        <div className="p-6 border-b border-gray-200">
-          <h1 className="text-xl font-bold text-gray-800">FSKTM Symposium</h1>
-          <p className="text-sm text-gray-600 mt-1">
-            {formatRole(user?.role)} Portal
-          </p>
+    <div className="flex h-screen bg-gray-100 overflow-hidden">
+      {/* 📱 MOBILE OVERLAY */}
+      {isSidebarOpen && (
+        <div
+          className="fixed inset-0 bg-gray-900/50 z-40 md:hidden transition-opacity"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
+      {/* 🚀 RESPONSIVE SIDEBAR */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-64 bg-white shadow-2xl md:shadow-lg flex flex-col transform transition-transform duration-300 ease-in-out md:relative md:translate-x-0 ${
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+          <div>
+            <h1 className="text-xl font-bold text-gray-800">FSKTM Symposium</h1>
+            <p className="text-sm text-gray-600 mt-1">
+              {formatRole(user?.role)} Portal
+            </p>
+          </div>
+          {/* Mobile Close Button */}
+          <button
+            className="md:hidden p-2 text-gray-500 hover:bg-gray-100 rounded-lg"
+            onClick={() => setIsSidebarOpen(false)}
+          >
+            <X className="w-5 h-5" />
+          </button>
         </div>
 
         {/* User Info */}
@@ -137,6 +157,7 @@ export default function PanelLayout() {
               <li key={item.to}>
                 <NavLink
                   to={item.to}
+                  onClick={() => setIsSidebarOpen(false)} // 👈 Auto-close on mobile click
                   className={({ isActive }) =>
                     `flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
                       isActive
@@ -165,12 +186,33 @@ export default function PanelLayout() {
         </div>
       </aside>
 
-      {/* Main Content */}
-      <main className="flex-1 overflow-auto bg-gray-50">
-        <div className="p-8">
-          <Outlet />
-        </div>
-      </main>
+      {/* Main Content Wrapper */}
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-gray-50">
+        {/* 📱 MOBILE HEADER */}
+        <header className="md:hidden bg-white shadow-sm border-b border-gray-200 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="p-2 -ml-2 text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              <Menu className="w-6 h-6" />
+            </button>
+            <h1 className="text-lg font-bold text-gray-800">
+              {formatRole(user?.role)} Portal
+            </h1>
+          </div>
+          <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-xs uppercase">
+            {user?.name?.charAt(0) || "U"}
+          </div>
+        </header>
+
+        {/* Scrollable Main Area */}
+        <main className="flex-1 overflow-auto">
+          <div className="p-4 md:p-8">
+            <Outlet />
+          </div>
+        </main>
+      </div>
     </div>
   );
 }

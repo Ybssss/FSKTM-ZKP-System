@@ -1,97 +1,101 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../../contexts/AuthContext";
-import api from "../../services/api";
+import api from "../../services/api"; // 👈 FIXED IMPORT
+import { useNavigate } from "react-router-dom";
 import {
-  TrendingUp,
-  CheckCircle,
-  BookOpen,
-  BarChart3,
   Calendar,
+  Clock,
+  MapPin,
+  Upload,
+  FileText,
+  AlertCircle,
+  CheckCircle,
+  ChevronDown,
+  ChevronUp,
+  ExternalLink,
+  Users,
 } from "lucide-react";
 
-export default function ProgressPage() {
+export default function SchedulePage() {
   const { user } = useAuth();
-  const [chartData, setChartData] = useState([]);
+  const navigate = useNavigate();
+  const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [uploadingDoc, setUploadingDoc] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
 
   useEffect(() => {
-    fetchProgressData();
+    fetchSessions();
   }, []);
 
-  const fetchProgressData = async () => {
+  const fetchSessions = async () => {
     try {
       setLoading(true);
       setError(null);
-
-      // Fetch all raw evaluations for this student
-      const res = await api.get(
-        `/evaluations/student/${user.id || user.userId || user._id}`,
-      );
-      const rawEvals = res.data.evaluations || [];
-
-      // 1. Group raw evaluations strictly by Session Type
-      const grouped = {};
-      rawEvals.forEach((ev) => {
-        const sessionName = ev.sessionType || "Unknown Session";
-        if (!grouped[sessionName]) {
-          grouped[sessionName] = {
-            sessionType: sessionName,
-            date: ev.createdAt, // Store date for sorting
-            evalCount: 0,
-            totalSum: 0,
-          };
-        }
-        // Add up the scores
-        grouped[sessionName].totalSum += ev.totalScore ?? ev.overallScore ?? 0;
-        grouped[sessionName].evalCount += 1;
-      });
-
-      // 2. Filter ONLY fully graded sessions (both panels submitted) and calculate average
-      const processedData = [];
-      Object.values(grouped).forEach((group) => {
-        if (group.evalCount >= 2) {
-          processedData.push({
-            name: group.sessionType,
-            score: parseFloat((group.totalSum / group.evalCount).toFixed(1)),
-            date: new Date(group.date),
-          });
-        }
-      });
-
-      // 3. Sort chronologically (oldest to newest)
-      processedData.sort((a, b) => a.date - b.date);
-
-      setChartData(processedData);
+      // 👈 FIXED AXIOS CALL
+      const response = await api.get("/timetables/my");
+      const sessionsData =
+        response.data.timetables || response.data.sessions || [];
+      setSessions(sessionsData);
     } catch (error) {
-      console.error("Failed to fetch progress data:", error);
-      setError("Could not load progress data. Please try again.");
+      console.error("❌ Error fetching sessions:", error);
+      setError(error.message);
     } finally {
       setLoading(false);
     }
   };
 
+  const handleFileUpload = async (sessionId, event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    try {
+      setUploadingDoc(sessionId);
+      const formData = new FormData();
+      formData.append("document", file);
+      formData.append("title", file.name);
+      formData.append("description", "Student submission");
+
+      // 👈 FIXED UPLOAD CALL
+      await api.post(`/timetables/${sessionId}/documents`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+
+      alert("Document uploaded successfully!");
+      await fetchSessions();
+    } catch (error) {
+      console.error("❌ Upload failed:", error);
+      alert("Failed to upload document: " + error.message);
+    } finally {
+      setUploadingDoc(null);
+    }
+  };
+
+  const isDeadlinePassed = (deadline) =>
+    deadline && new Date(deadline) < new Date();
+  const isUpcoming = (date) => new Date(date) >= new Date();
+  const toggleExpand = (id) => setExpandedId(expandedId === id ? null : id);
+
   if (loading) {
     return (
       <div className="flex flex-col justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500 mb-4"></div>
-        <p className="text-gray-600 font-medium">
-          Analyzing performance data...
-        </p>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+        <p className="text-gray-600">Loading schedule...</p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-4xl mx-auto">
+      <div className="bg-red-50 border border-red-200 rounded-lg p-6">
         <h3 className="text-red-900 font-semibold mb-2">
-          Error Loading Progress
+          Error Loading Schedule
         </h3>
         <p className="text-red-700">{error}</p>
         <button
-          onClick={fetchProgressData}
-          className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-bold"
+          onClick={fetchSessions}
+          className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
         >
           Retry
         </button>
@@ -99,120 +103,219 @@ export default function ProgressPage() {
     );
   }
 
+  const upcomingSessions = sessions.filter((s) => isUpcoming(s.date));
+  const pastSessions = sessions.filter((s) => !isUpcoming(s.date));
+
   return (
-    <div className="max-w-5xl mx-auto space-y-6">
-      {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-          <TrendingUp className="w-8 h-8 text-indigo-600" />
-          Academic Progress
-        </h1>
-        <p className="text-gray-600 mt-2">
-          Track your finalized, combined scores across different symposium
-          sessions.
+    <div className="space-y-6 max-w-5xl mx-auto">
+      <div>
+        <h1 className="text-2xl font-bold text-gray-900">My Schedule</h1>
+        <p className="text-gray-600 mt-1">
+          View your symposium sessions and upload required documents
         </p>
       </div>
 
-      {/* Simplified & Relevant Stat Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center gap-5">
-          <div className="p-4 bg-green-50 rounded-full text-green-600">
-            <CheckCircle className="w-8 h-8" />
-          </div>
-          <div>
-            <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">
-              Fully Graded Sessions
-            </p>
-            <p className="text-3xl font-black text-gray-900">
-              {chartData.length}
-            </p>
-          </div>
-        </div>
-
-        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center gap-5">
-          <div className="p-4 bg-indigo-50 rounded-full text-indigo-600">
-            <BookOpen className="w-8 h-8" />
-          </div>
-          <div>
-            <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">
-              Active Program
-            </p>
-            <p className="text-xl font-bold text-gray-900">
-              {user?.program || "Postgraduate Research"}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Clean Timeline Visualization (Pure Tailwind, No External Libraries!) */}
-      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-        <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-          <BarChart3 className="w-6 h-6 text-indigo-600" />
-          Performance Timeline
+      <div>
+        <h2 className="text-lg font-semibold text-gray-900 mb-4">
+          Upcoming Sessions ({upcomingSessions.length})
         </h2>
-
-        {chartData.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-gray-500 font-medium">
-              Not enough finalized data to generate a timeline.
-            </p>
-            <p className="text-sm text-gray-400 mt-1">
-              Sessions will appear here once both assigned panels have submitted
-              their marks.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {chartData.map((dataPoint, index) => {
-              const score = dataPoint.score;
-              // Determine color based on score threshold
-              const colorClass =
-                score >= 80
-                  ? "bg-green-500"
-                  : score >= 60
-                    ? "bg-indigo-500"
-                    : score >= 40
-                      ? "bg-orange-500"
-                      : "bg-red-500";
-              const textClass =
-                score >= 80
-                  ? "text-green-600"
-                  : score >= 60
-                    ? "text-indigo-600"
-                    : score >= 40
-                      ? "text-orange-600"
-                      : "text-red-600";
-
-              return (
-                <div key={index} className="relative">
-                  <div className="flex justify-between items-end mb-2">
-                    <div>
-                      <span className="font-bold text-gray-900">
-                        {dataPoint.name}
-                      </span>
-                      <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
-                        <Calendar className="w-3 h-3" />
-                        {dataPoint.date.toLocaleDateString()}
-                      </div>
+        {upcomingSessions.length > 0 ? (
+          <div className="space-y-4">
+            {upcomingSessions.map((session) => (
+              <div
+                key={session._id}
+                className="bg-white rounded-lg border border-gray-200 p-6"
+              >
+                <div className="flex items-start justify-between mb-4">
+                  <div className="flex-1">
+                    <h3 className="text-lg font-semibold text-gray-900">
+                      {session.title}
+                    </h3>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {session.sessionType}
+                    </p>
+                  </div>
+                  {session.deadline && !isDeadlinePassed(session.deadline) && (
+                    <div className="flex items-center gap-2 px-3 py-1 bg-orange-50 text-orange-700 rounded-lg text-sm font-medium border border-orange-200">
+                      <AlertCircle className="w-4 h-4" />
+                      Deadline:{" "}
+                      {new Date(session.deadline).toLocaleDateString()}
                     </div>
-                    <span className={`text-2xl font-black ${textClass}`}>
-                      {score}%
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <div className="flex items-center gap-2 text-gray-700">
+                    <Calendar className="w-5 h-5 text-blue-600" />
+                    <span className="text-sm">
+                      {new Date(session.date).toLocaleDateString()}
                     </span>
                   </div>
-
-                  {/* Tailwind Progress Bar */}
-                  <div className="w-full bg-gray-100 rounded-full h-4 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-1000 ${colorClass}`}
-                      style={{ width: `${score}%` }}
-                    />
+                  <div className="flex items-center gap-2 text-gray-700">
+                    <Clock className="w-5 h-5 text-green-600" />
+                    <span className="text-sm">
+                      {session.startTime} - {session.endTime}
+                    </span>
                   </div>
+                  {session.venue && (
+                    <div className="flex items-center gap-2 text-gray-700">
+                      <MapPin className="w-5 h-5 text-red-600" />
+                      <span className="text-sm">{session.venue}</span>
+                    </div>
+                  )}
                 </div>
-              );
-            })}
+
+                <div className="border-t border-gray-200 pt-4">
+                  <h4 className="font-semibold text-gray-900 mb-3 text-sm">
+                    Your Documents:
+                  </h4>
+                  {session.studentDocuments?.filter(
+                    (d) =>
+                      d.uploadedBy === user.id || d.uploadedBy?._id === user.id,
+                  ).length > 0 ? (
+                    <div className="space-y-2 mb-3">
+                      {session.studentDocuments
+                        .filter(
+                          (d) =>
+                            d.uploadedBy === user.id ||
+                            d.uploadedBy?._id === user.id,
+                        )
+                        .map((doc, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+                          >
+                            <div className="flex items-center gap-3">
+                              <FileText className="w-5 h-5 text-gray-600" />{" "}
+                              <p className="text-sm font-medium text-gray-900">
+                                {doc.title}
+                              </p>
+                            </div>
+                            <CheckCircle className="w-5 h-5 text-green-600" />
+                          </div>
+                        ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 mb-3">
+                      No documents uploaded yet
+                    </p>
+                  )}
+
+                  {!isDeadlinePassed(session.deadline) && (
+                    <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer transition-colors text-sm">
+                      {uploadingDoc === session._id ? (
+                        <span>Uploading...</span>
+                      ) : (
+                        <>
+                          <Upload className="w-4 h-4" />
+                          <span>Upload Document</span>
+                        </>
+                      )}
+                      <input
+                        type="file"
+                        className="hidden"
+                        onChange={(e) => handleFileUpload(session._id, e)}
+                        disabled={uploadingDoc === session._id}
+                      />
+                    </label>
+                  )}
+                </div>
+              </div>
+            ))}
           </div>
+        ) : (
+          <p className="text-gray-500 bg-white p-6 rounded-xl border border-gray-200 text-center">
+            No upcoming sessions scheduled.
+          </p>
         )}
       </div>
+
+      {pastSessions.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900 mb-4">
+            Past Sessions ({pastSessions.length})
+          </h2>
+          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+            {pastSessions.map((session) => (
+              <div
+                key={session._id}
+                className={`border-b border-gray-100 last:border-0 ${expandedId === session._id ? "bg-blue-50/50" : "bg-white"}`}
+              >
+                <div
+                  onClick={() => toggleExpand(session._id)}
+                  className="p-5 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-colors"
+                >
+                  <div>
+                    <h3 className="font-bold text-gray-900">
+                      {session.title || session.sessionType}
+                    </h3>
+                    <p className="text-sm text-gray-500 mt-1 flex items-center gap-2">
+                      <Calendar className="w-4 h-4" />{" "}
+                      {new Date(session.date).toLocaleDateString()}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-4 text-gray-500">
+                    <span className="hidden sm:block text-sm font-medium">
+                      {session.startTime}
+                    </span>
+                    {expandedId === session._id ? (
+                      <ChevronUp className="w-5 h-5 text-blue-600" />
+                    ) : (
+                      <ChevronDown className="w-5 h-5" />
+                    )}
+                  </div>
+                </div>
+
+                {expandedId === session._id && (
+                  <div className="px-5 pb-5 pt-2 animate-in slide-in-from-top-2">
+                    <div className="bg-white p-4 rounded-lg border border-blue-100 grid grid-cols-1 md:grid-cols-2 gap-4 shadow-sm">
+                      <div>
+                        <p className="text-xs font-bold text-blue-500 uppercase mb-1">
+                          Time & Location
+                        </p>
+                        <p className="text-sm text-gray-800 flex items-center gap-2">
+                          <Clock className="w-4 h-4 text-gray-400" />{" "}
+                          {session.startTime} - {session.endTime}
+                        </p>
+                        <p className="text-sm text-gray-800 flex items-center gap-2 mt-1">
+                          <MapPin className="w-4 h-4 text-gray-400" />{" "}
+                          {session.venue}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-xs font-bold text-blue-500 uppercase mb-1">
+                          Assigned Panels
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {session.panels?.map((p) => (
+                            <span
+                              key={p._id}
+                              className="text-sm font-medium bg-blue-100 text-blue-800 px-2 py-1 rounded border border-blue-200 flex items-center gap-1"
+                            >
+                              <Users className="w-3 h-3" /> {p.name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="mt-4 flex justify-end">
+                      <button
+                        onClick={() =>
+                          navigate(`/student/sessions/${session._id}`)
+                        }
+                        className="px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm"
+                      >
+                        View Full Details & Documents{" "}
+                        <ExternalLink className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

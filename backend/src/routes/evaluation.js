@@ -26,8 +26,7 @@ router.get("/student/:studentId", async (req, res) => {
 
     // 🔒 STRICT VISIBILITY RULES
     if (userRole === "student") {
-      // FIX: Safely check against all possible ID variations in the JWT Token
-      // This ensures we match whether the token uses the Mongo _id or the custom userId
+      // 👈 FIXED ID VERIFICATION: Checks all possible Token ID formats safely
       const isOwner =
         studentId === String(req.user.id) ||
         studentId === String(req.user._id) ||
@@ -40,10 +39,8 @@ router.get("/student/:studentId", async (req, res) => {
         });
       }
     } else if (userRole === "panel") {
-      // Panels can ONLY view evaluations they authored
       query.evaluatorId = req.user.id || req.user._id;
     }
-    // Admins and Coordinators bypass these restrictions and see everything for that student
 
     const evaluations = await Evaluation.find(query)
       .populate("evaluatorId", "name userId")
