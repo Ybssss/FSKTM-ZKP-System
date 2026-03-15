@@ -1,22 +1,21 @@
-import React, { useState, useEffect } from 'react';
-import { UserPlus, Trash2, Calendar, Users, AlertCircle, CheckCircle } from 'lucide-react';
-import { userAPI } from '../../services/api';
+import React, { useState, useEffect } from "react";
+import { Trash2, Calendar, Users, Search } from "lucide-react";
+import api from "../../services/api"; // ✅ Fixed Import
 
 export default function PanelAssignmentPage() {
   const [panels, setPanels] = useState([]);
   const [students, setStudents] = useState([]);
-  const [assignments, setAssignments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Updated to support two panels
-  const [formData, setFormData] = useState({
-    panel1Id: '',
-    panel2Id: '',
-    studentId: '',
-    startDate: new Date().toISOString().split('T')[0],
-    endDate: '',
-  });
+  // Search & Selection States
+  const [studentSearch, setStudentSearch] = useState("");
+  const [panelSearch, setPanelSearch] = useState("");
+  const [selectedStudentIds, setSelectedStudentIds] = useState([]);
+  const [selectedPanels, setSelectedPanels] = useState([]);
+  const [startDate, setStartDate] = useState(
+    new Date().toISOString().split("T")[0],
+  );
 
   useEffect(() => {
     loadData();
@@ -25,341 +24,284 @@ export default function PanelAssignmentPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const data = await userAPI.getAll();
-      const allUsers = data.users || [];
-
-      const panelUsers = allUsers.filter(u => u.role === 'panel');
-      const studentUsers = allUsers.filter(u => u.role === 'student');
-
-      setPanels(panelUsers);
-      setStudents(studentUsers);
-
-      // Build assignments list from student data
-      const assignmentsList = [];
-      studentUsers.forEach(student => {
-        if (student.assignedPanels && student.assignedPanels.length > 0) {
-          student.assignedPanels.forEach(assignment => {
-            const panel = allUsers.find(u => 
-              u._id === assignment.panelId || u._id === assignment.panelId?._id
-            );
-            
-            if (panel) {
-              assignmentsList.push({
-                id: `${student._id}-${panel._id}-${assignment.startDate}`,
-                panel: panel,
-                student: student,
-                startDate: assignment.startDate,
-                endDate: assignment.endDate,
-              });
-            }
-          });
-        }
-      });
-
-      setAssignments(assignmentsList);
+      const res = await api.get("/users");
+      const allUsers = res.data.users || [];
+      setPanels(allUsers.filter((u) => u.role === "panel"));
+      setStudents(allUsers.filter((u) => u.role === "student"));
     } catch (error) {
-      console.error('Error loading data:', error);
-      alert('Failed to load data');
+      alert("Failed to load data");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleAssign = async (e) => {
+  const toggleStudent = (id) => {
+    setSelectedStudentIds((prev) =>
+      prev.includes(id) ? prev.filter((s) => s !== id) : [...prev, id],
+    );
+  };
+
+  const togglePanel = (id) => {
+    if (selectedPanels.includes(id)) {
+      setSelectedPanels((prev) => prev.filter((p) => p !== id));
+    } else {
+      if (selectedPanels.length >= 2)
+        return alert("You can only select exactly 2 panels per assignment.");
+      setSelectedPanels([...selectedPanels, id]);
+    }
+  };
+
+  const handleBulkAssign = async (e) => {
     e.preventDefault();
-
-    if (!formData.panel1Id || !formData.panel2Id || !formData.studentId || !formData.startDate) {
-      alert('Please fill in all required fields');
-      return;
-    }
-
-    if (formData.panel1Id === formData.panel2Id) {
-      alert('You must select two different panel members for the student.');
-      return;
-    }
+    if (selectedStudentIds.length === 0 || selectedPanels.length !== 2) return;
 
     try {
       setSaving(true);
-
-      // Pass the two panels as an array to match our updated backend logic
-      await userAPI.assignPanel(
-        formData.studentId, 
-        [formData.panel1Id, formData.panel2Id], 
-        formData.startDate, 
-        formData.endDate || null
-      );
-
-      alert('✅ Panels assigned successfully!');
-      
-      // Reset form
-      setFormData({
-        panel1Id: '',
-        panel2Id: '',
-        studentId: '',
-        startDate: new Date().toISOString().split('T')[0],
-        endDate: '',
+      await api.post("/timetables/assign-panel", {
+        panelIds: selectedPanels,
+        studentIds: selectedStudentIds,
+        startDate,
       });
-      
+      alert("✅ Panels assigned successfully!");
+
+      // UX Feature: Remember the panel inputs for ease of bulk action, just clear students
+      setSelectedStudentIds([]);
       loadData();
     } catch (error) {
-      console.error('Error assigning panel:', error);
-      alert(error.response?.data?.message || 'Failed to assign panels');
+      alert(error.response?.data?.message || "Failed to assign panels");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleResign = async (panelId, studentId) => {
-    if (!window.confirm('Are you sure you want to resign this panel from the student?')) return;
-
+  // UX Feature: Delete relation entirely for misinputs
+  const handleDeleteRelation = async (studentId, assignedPanelsList) => {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete all panel assignments for this student?",
+      )
+    )
+      return;
     try {
-      const response = await userAPI.unassignPanel(studentId, panelId);
-      
-      if (response.success) {
-        alert('✅ Panel resigned successfully!');
-        loadData();
-      } else {
-        alert(response.message || 'Failed to resign panel');
+      // Unassign both panels mapped to this student
+      for (const ap of assignedPanelsList) {
+        const pId = ap.panelId?._id || ap.panelId;
+        await api.post("/users/unassign-panel", { studentId, panelId: pId });
       }
+      loadData();
     } catch (error) {
-      console.error('Error resigning panel:', error);
-      alert('Failed to resign panel');
+      alert("Failed to delete relations");
     }
   };
 
-  const isActive = (assignment) => {
-    if (!assignment.endDate) return true;
-    return new Date(assignment.endDate) > new Date();
-  };
+  const filteredStudents = students.filter(
+    (s) =>
+      s.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
+      (s.matricNumber &&
+        s.matricNumber.toLowerCase().includes(studentSearch.toLowerCase())),
+  );
+
+  const filteredPanels = panels.filter(
+    (p) =>
+      p.name.toLowerCase().includes(panelSearch.toLowerCase()) ||
+      (p.userId && p.userId.toLowerCase().includes(panelSearch.toLowerCase())),
+  );
+
+  // UX Feature: Group Assignments by Student so both panels show together
+  const groupedAssignments = students.filter(
+    (s) => s.assignedPanels && s.assignedPanels.length > 0,
+  );
 
   return (
-    <>
-      <div className="max-w-6xl mx-auto">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Panel Assignments</h1>
-          <p className="text-gray-600 mt-2">Assign exactly two panel members to supervise each student</p>
-        </div>
-
-        {/* Info Alert */}
-        <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
-          <div className="text-sm text-blue-800">
-            <p className="font-semibold mb-1">Strict 2-to-1 Assignment Rule</p>
-            <p>Every student must be evaluated by exactly two distinct panel members. Ensure you select two different faculty members below. Leave the end date empty for active assignments.</p>
-          </div>
-        </div>
-
-        {/* Assignment Form */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-8">
-          <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
-            <UserPlus className="w-6 h-6 text-green-600" />
-            Assign Panels to Student
-          </h2>
-
-          <form onSubmit={handleAssign} className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              
-              {/* Student Selection (Moved to top left for better UX flow) */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Select Student *
-                </label>
-                <select
-                  value={formData.studentId}
-                  onChange={(e) => setFormData({ ...formData, studentId: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 bg-gray-50"
-                  required
-                >
-                  <option value="">Choose a student...</option>
-                  {students.map((student) => (
-                    <option key={student._id} value={student._id}>
-                      {student.name} ({student.matricNumber})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Start Date */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Start Date *
-                </label>
-                <input
-                  type="date"
-                  value={formData.startDate}
-                  onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                  required
-                />
-              </div>
-
-              {/* Panel 1 Selection */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Panel Member 1 *
-                </label>
-                <select
-                  value={formData.panel1Id}
-                  onChange={(e) => setFormData({ ...formData, panel1Id: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                  required
-                >
-                  <option value="">Choose first panel...</option>
-                  {panels.map((panel) => (
-                    <option key={panel._id} value={panel._id} disabled={panel._id === formData.panel2Id}>
-                      {panel.name} ({panel.userId})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Panel 2 Selection */}
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  Panel Member 2 *
-                </label>
-                <select
-                  value={formData.panel2Id}
-                  onChange={(e) => setFormData({ ...formData, panel2Id: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500"
-                  required
-                >
-                  <option value="">Choose second panel...</option>
-                  {panels.map((panel) => (
-                    <option key={panel._id} value={panel._id} disabled={panel._id === formData.panel1Id}>
-                      {panel.name} ({panel.userId})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-            </div>
-
-            {/* Submit Button */}
-            <div className="flex justify-end border-t border-gray-100 pt-6">
-              <button
-                type="submit"
-                disabled={saving || panels.length < 2 || students.length === 0}
-                className="px-6 py-2.5 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 font-semibold shadow-sm"
-              >
-                {saving ? (
-                  <>
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Assigning Panels...
-                  </>
-                ) : (
-                  <>
-                    <UserPlus className="w-5 h-5" />
-                    Confirm 2-Panel Assignment
-                  </>
-                )}
-              </button>
-            </div>
-          </form>
-        </div>
-
-        {/* Current Assignments Table */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              <Users className="w-6 h-6 text-blue-600" />
-              Current Individual Assignments ({assignments.length})
-            </h2>
-          </div>
-
-          {loading ? (
-            <div className="p-12 text-center">
-              <div className="inline-block w-8 h-8 border-4 border-green-500 border-t-transparent rounded-full animate-spin mb-4"></div>
-              <p className="text-gray-500">Loading assignments...</p>
-            </div>
-          ) : assignments.length === 0 ? (
-            <div className="p-12 text-center">
-              <Users className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-2">No Assignments Yet</h3>
-              <p className="text-gray-600">Assign panel members to students using the form above.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 border-b border-gray-200">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Panel Member</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Student</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Start Date</th>
-                    <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
-                    <th className="px-6 py-3 text-right text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-200">
-                  {assignments.map((assignment) => (
-                    <tr key={assignment.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <p className="font-semibold text-gray-900">{assignment.panel.name}</p>
-                        <p className="text-sm text-gray-600">{assignment.panel.userId}</p>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <p className="font-semibold text-gray-900">{assignment.student.name}</p>
-                        <p className="text-sm text-gray-600">{assignment.student.matricNumber}</p>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center gap-2 text-sm text-gray-700">
-                          <Calendar className="w-4 h-4" />
-                          {new Date(assignment.startDate).toLocaleDateString('en-MY')}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        {isActive(assignment) ? (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 bg-green-100 text-green-700 rounded-full text-sm font-semibold">
-                            <CheckCircle className="w-4 h-4" /> Active
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-700 rounded-full text-sm font-semibold">
-                            Ended
-                          </span>
-                        )}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-right">
-                        {isActive(assignment) && (
-                          <button
-                            onClick={() => handleResign(assignment.panel._id, assignment.student._id)}
-                            className="inline-flex items-center gap-2 px-3 py-1 text-red-600 hover:bg-red-50 rounded-lg transition-colors text-sm"
-                            title="Resign panel"
-                          >
-                            <Trash2 className="w-4 h-4" /> Resign
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-        {/* Statistics Block */}
-        {assignments.length > 0 && (
-          <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <p className="text-sm font-semibold text-gray-600">Total Assignments</p>
-              <p className="text-3xl font-bold text-gray-900 mt-2">{assignments.length}</p>
-            </div>
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <p className="text-sm font-semibold text-gray-600">Active Assignments</p>
-              <p className="text-3xl font-bold text-green-600 mt-2">
-                {assignments.filter(a => isActive(a)).length}
-              </p>
-            </div>
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <p className="text-sm font-semibold text-gray-600">Ended Assignments</p>
-              <p className="text-3xl font-bold text-gray-600 mt-2">
-                {assignments.filter(a => !isActive(a)).length}
-              </p>
-            </div>
-          </div>
-        )}
+    <div className="max-w-7xl mx-auto space-y-6">
+      <div className="mb-4">
+        <h1 className="text-3xl font-bold text-gray-900">
+          Bulk Panel Assignments
+        </h1>
+        <p className="text-gray-600 mt-2">
+          Assign exactly two panel members to multiple students at once.
+        </p>
       </div>
-    </>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        {/* Step 1: Students */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col h-full">
+          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+            1. Select Students
+          </h2>
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-2.5 text-gray-400 w-5 h-5" />
+            <input
+              type="text"
+              placeholder="Search Student Name or Matric No..."
+              value={studentSearch}
+              onChange={(e) => setStudentSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border rounded-lg bg-gray-50"
+            />
+          </div>
+          <div className="flex-1 overflow-y-auto border rounded-lg p-2 max-h-80">
+            {filteredStudents.map((student) => (
+              <label
+                key={student._id}
+                className="flex items-center space-x-3 p-3 hover:bg-gray-100 rounded cursor-pointer border-b last:border-0"
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedStudentIds.includes(student._id)}
+                  onChange={() => toggleStudent(student._id)}
+                  className="w-4 h-4 text-indigo-600"
+                />
+                <span className="font-medium text-gray-800">
+                  {student.name}{" "}
+                  <span className="text-sm text-gray-500">
+                    ({student.matricNumber})
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+        </div>
+
+        {/* Step 2: Panels & Submit */}
+        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col h-full">
+          <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+            2. Select 2 Panels
+          </h2>
+          <div className="relative mb-4">
+            <Search className="absolute left-3 top-2.5 text-gray-400 w-5 h-5" />
+            <input
+              type="text"
+              placeholder="Search Panel Name..."
+              value={panelSearch}
+              onChange={(e) => setPanelSearch(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border rounded-lg bg-gray-50"
+            />
+          </div>
+          <div className="flex-1 overflow-y-auto border rounded-lg p-2 max-h-60 mb-6">
+            {filteredPanels.map((panel) => (
+              <label
+                key={panel._id}
+                className={`flex items-center space-x-3 p-3 hover:bg-gray-100 rounded cursor-pointer border-b last:border-0 ${selectedPanels.includes(panel._id) ? "bg-green-50" : ""}`}
+              >
+                <input
+                  type="checkbox"
+                  checked={selectedPanels.includes(panel._id)}
+                  onChange={() => togglePanel(panel._id)}
+                  className="w-4 h-4 text-green-600"
+                />
+                <span className="font-medium text-gray-800">
+                  {panel.name}{" "}
+                  <span className="text-sm text-gray-500">
+                    ({panel.userId})
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+
+          <div className="mt-auto">
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Assignment Start Date *
+            </label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="w-full p-2 border rounded-lg mb-4"
+            />
+
+            <button
+              onClick={handleBulkAssign}
+              disabled={
+                saving ||
+                selectedStudentIds.length === 0 ||
+                selectedPanels.length !== 2
+              }
+              className="w-full bg-indigo-600 text-white p-3 rounded-lg font-bold hover:bg-indigo-700 disabled:bg-gray-400 flex justify-center items-center"
+            >
+              {saving
+                ? "Assigning..."
+                : `Confirm Assignment (${selectedStudentIds.length} Students)`}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* UX Feature: Grouped Overview Table showing BOTH panels */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+          <h2 className="text-xl font-bold flex items-center gap-2">
+            <Users className="w-6 h-6 text-indigo-600" /> Grouped Assignments (
+            {groupedAssignments.length} Students)
+          </h2>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead className="bg-white text-xs uppercase text-gray-600 border-b">
+              <tr>
+                <th className="px-6 py-4 font-bold">Student</th>
+                <th className="px-6 py-4 font-bold">Assigned Panels</th>
+                <th className="px-6 py-4 font-bold">Date Assigned</th>
+                <th className="px-6 py-4 font-bold text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {groupedAssignments.map((student) => (
+                <tr key={student._id} className="hover:bg-gray-50">
+                  <td className="px-6 py-4">
+                    <p className="font-bold text-gray-900">{student.name}</p>
+                    <p className="text-sm text-gray-500">
+                      {student.matricNumber}
+                    </p>
+                  </td>
+                  <td className="px-6 py-4">
+                    {student.assignedPanels.map((ap, index) => {
+                      const pId = ap.panelId?._id || ap.panelId;
+                      const panelObj = panels.find((p) => p._id === pId);
+                      return (
+                        <div
+                          key={index}
+                          className="text-sm font-medium text-indigo-700 bg-indigo-50 inline-block px-2 py-1 rounded mr-2 mb-1 border border-indigo-100"
+                        >
+                          {panelObj ? panelObj.name : "Unknown Panel"}
+                        </div>
+                      );
+                    })}
+                  </td>
+                  <td className="px-6 py-4 text-sm text-gray-600">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-gray-400" />
+                      {new Date(
+                        student.assignedPanels[0]?.startDate,
+                      ).toLocaleDateString()}
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <button
+                      onClick={() =>
+                        handleDeleteRelation(
+                          student._id,
+                          student.assignedPanels,
+                        )
+                      }
+                      className="text-red-600 hover:bg-red-50 px-3 py-1.5 rounded-lg text-sm font-bold border border-transparent hover:border-red-200 flex items-center gap-2 ml-auto transition-all"
+                    >
+                      <Trash2 className="w-4 h-4" /> Delete Relation
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {groupedAssignments.length === 0 && (
+                <tr>
+                  <td colSpan="4" className="text-center py-8 text-gray-500">
+                    No panels have been assigned yet.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   );
 }

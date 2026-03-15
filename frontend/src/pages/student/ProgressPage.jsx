@@ -1,21 +1,19 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
-import { evaluationAPI } from '../../services/api';
-import { TrendingUp, TrendingDown, Award, Target, Calendar, BarChart3 } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { useAuth } from "../../contexts/AuthContext";
+import api from "../../services/api";
+import {
+  TrendingUp,
+  CheckCircle,
+  BookOpen,
+  BarChart3,
+  Calendar,
+} from "lucide-react";
 
 export default function ProgressPage() {
   const { user } = useAuth();
-  const [evaluations, setEvaluations] = useState([]);
+  const [chartData, setChartData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [stats, setStats] = useState({
-    overallAverage: 0,
-    highestScore: 0,
-    lowestScore: 0,
-    totalEvaluations: 0,
-    trend: 0
-  });
-  const [progressBySemester, setProgressBySemester] = useState([]);
 
   useEffect(() => {
     fetchProgressData();
@@ -25,78 +23,49 @@ export default function ProgressPage() {
     try {
       setLoading(true);
       setError(null);
-      
-      console.log('📊 Fetching progress data for user:', user.id);
-      
-      // Try to get evaluations
-      let evals = [];
-      try {
-        console.log('📡 Trying getByStudent...');
-        const response = await evaluationAPI.getByStudent(user.id);
-        console.log('✅ Response:', response);
-        evals = response.evaluations || [];
-      } catch (err) {
-        console.log('❌ getByStudent failed, trying getAll...');
-        try {
-          const response = await evaluationAPI.getAll();
-          const allEvals = response.evaluations || [];
-          evals = allEvals.filter(e => {
-            const studentId = e.studentId?._id || e.studentId;
-            return studentId === user.id;
-          });
-          console.log(`✅ Filtered ${evals.length} from ${allEvals.length} total`);
-        } catch (err2) {
-          console.error('❌ Both methods failed:', err2);
-          setError('Could not load evaluations');
-          return;
+
+      // Fetch all raw evaluations for this student
+      const res = await api.get(
+        `/evaluations/student/${user.id || user.userId || user._id}`,
+      );
+      const rawEvals = res.data.evaluations || [];
+
+      // 1. Group raw evaluations strictly by Session Type
+      const grouped = {};
+      rawEvals.forEach((ev) => {
+        const sessionName = ev.sessionType || "Unknown Session";
+        if (!grouped[sessionName]) {
+          grouped[sessionName] = {
+            sessionType: sessionName,
+            date: ev.createdAt, // Store date for sorting
+            evalCount: 0,
+            totalSum: 0,
+          };
         }
-      }
-      
-      const submittedEvals = evals.filter(e => e.status === 'submitted');
-      console.log(`✅ Found ${submittedEvals.length} submitted evaluations`);
-      
-      setEvaluations(submittedEvals);
+        // Add up the scores
+        grouped[sessionName].totalSum += ev.totalScore ?? ev.overallScore ?? 0;
+        grouped[sessionName].evalCount += 1;
+      });
 
-      if (submittedEvals.length > 0) {
-        const scores = submittedEvals.map(e => e.overallScore || 0);
-        const avg = scores.reduce((a, b) => a + b, 0) / scores.length;
-        const highest = Math.max(...scores);
-        const lowest = Math.min(...scores);
+      // 2. Filter ONLY fully graded sessions (both panels submitted) and calculate average
+      const processedData = [];
+      Object.values(grouped).forEach((group) => {
+        if (group.evalCount >= 2) {
+          processedData.push({
+            name: group.sessionType,
+            score: parseFloat((group.totalSum / group.evalCount).toFixed(1)),
+            date: new Date(group.date),
+          });
+        }
+      });
 
-        const mid = Math.floor(submittedEvals.length / 2);
-        const firstHalf = submittedEvals.slice(0, mid);
-        const secondHalf = submittedEvals.slice(mid);
-        
-        const firstAvg = firstHalf.length > 0 ? firstHalf.reduce((sum, e) => sum + (e.overallScore || 0), 0) / firstHalf.length : 0;
-        const secondAvg = secondHalf.length > 0 ? secondHalf.reduce((sum, e) => sum + (e.overallScore || 0), 0) / secondHalf.length : 0;
-        const trend = secondAvg - firstAvg;
+      // 3. Sort chronologically (oldest to newest)
+      processedData.sort((a, b) => a.date - b.date);
 
-        setStats({
-          overallAverage: avg.toFixed(2),
-          highestScore: highest.toFixed(2),
-          lowestScore: lowest.toFixed(2),
-          totalEvaluations: submittedEvals.length,
-          trend: trend.toFixed(2)
-        });
-
-        const semesterGroups = {};
-        submittedEvals.forEach(e => {
-          if (!semesterGroups[e.semester]) semesterGroups[e.semester] = [];
-          semesterGroups[e.semester].push(e.overallScore || 0);
-        });
-
-        const semesterProgress = Object.keys(semesterGroups).map(semester => ({
-          semester,
-          average: (semesterGroups[semester].reduce((a, b) => a + b, 0) / semesterGroups[semester].length).toFixed(2),
-          count: semesterGroups[semester].length
-        }));
-
-        console.log('📈 Progress by semester:', semesterProgress);
-        setProgressBySemester(semesterProgress);
-      }
+      setChartData(processedData);
     } catch (error) {
-      console.error('❌ Error fetching progress data:', error);
-      setError(error.message);
+      console.error("Failed to fetch progress data:", error);
+      setError("Could not load progress data. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -105,20 +74,24 @@ export default function ProgressPage() {
   if (loading) {
     return (
       <div className="flex flex-col justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
-        <p className="text-gray-600">Loading progress data...</p>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500 mb-4"></div>
+        <p className="text-gray-600 font-medium">
+          Analyzing performance data...
+        </p>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-        <h3 className="text-red-900 font-semibold mb-2">Error Loading Progress</h3>
+      <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-4xl mx-auto">
+        <h3 className="text-red-900 font-semibold mb-2">
+          Error Loading Progress
+        </h3>
         <p className="text-red-700">{error}</p>
-        <button 
+        <button
           onClick={fetchProgressData}
-          className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-bold"
         >
           Retry
         </button>
@@ -127,152 +100,119 @@ export default function ProgressPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">My Progress</h1>
-        <p className="text-gray-600 mt-1">Track your academic performance over time</p>
-      </div>
-
-      {/* Debug Info */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 text-sm">
-        <p className="text-blue-900">
-          📊 Status: Analyzing <strong>{evaluations.length}</strong> submitted evaluations
-          {evaluations.length === 0 && ' (No evaluations to analyze yet)'}
+    <div className="max-w-5xl mx-auto space-y-6">
+      {/* Header */}
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+          <TrendingUp className="w-8 h-8 text-indigo-600" />
+          Academic Progress
+        </h1>
+        <p className="text-gray-600 mt-2">
+          Track your finalized, combined scores across different symposium
+          sessions.
         </p>
       </div>
 
-      {evaluations.length > 0 ? (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-3 bg-green-50 rounded-lg">
-                  <Award className="w-6 h-6 text-green-600" />
-                </div>
-              </div>
-              <div className="text-2xl font-bold text-gray-900">{stats.overallAverage}%</div>
-              <div className="text-sm text-gray-600 mt-1">Overall Average</div>
-            </div>
-
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-3 bg-blue-50 rounded-lg">
-                  <Target className="w-6 h-6 text-blue-600" />
-                </div>
-              </div>
-              <div className="text-2xl font-bold text-gray-900">{stats.highestScore}%</div>
-              <div className="text-sm text-gray-600 mt-1">Highest Score</div>
-            </div>
-
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="p-3 bg-purple-50 rounded-lg">
-                  <BarChart3 className="w-6 h-6 text-purple-600" />
-                </div>
-              </div>
-              <div className="text-2xl font-bold text-gray-900">{stats.totalEvaluations}</div>
-              <div className="text-sm text-gray-600 mt-1">Total Evaluations</div>
-            </div>
-
-            <div className="bg-white rounded-lg border border-gray-200 p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className={`p-3 rounded-lg ${parseFloat(stats.trend) >= 0 ? 'bg-green-50' : 'bg-red-50'}`}>
-                  {parseFloat(stats.trend) >= 0 ? (
-                    <TrendingUp className="w-6 h-6 text-green-600" />
-                  ) : (
-                    <TrendingDown className="w-6 h-6 text-red-600" />
-                  )}
-                </div>
-              </div>
-              <div className={`text-2xl font-bold ${parseFloat(stats.trend) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                {parseFloat(stats.trend) >= 0 ? '+' : ''}{stats.trend}%
-              </div>
-              <div className="text-sm text-gray-600 mt-1">Performance Trend</div>
-            </div>
+      {/* Simplified & Relevant Stat Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center gap-5">
+          <div className="p-4 bg-green-50 rounded-full text-green-600">
+            <CheckCircle className="w-8 h-8" />
           </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-6 flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-blue-600" />
-              Progress by Semester
-            </h2>
-            {progressBySemester.length > 0 ? (
-              <div className="space-y-4">
-                {progressBySemester.map((sem, index) => {
-                  const percentage = parseFloat(sem.average);
-                  return (
-                    <div key={index}>
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-sm font-medium text-gray-700">{sem.semester}</span>
-                        <span className="text-sm font-bold text-gray-900">{sem.average}%</span>
-                      </div>
-                      <div className="w-full bg-gray-200 rounded-full h-3">
-                        <div
-                          className={`h-3 rounded-full transition-all ${
-                            percentage >= 80 ? 'bg-green-500' : percentage >= 60 ? 'bg-blue-500' : percentage >= 40 ? 'bg-orange-500' : 'bg-red-500'
-                          }`}
-                          style={{ width: `${percentage}%` }}
-                        />
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">{sem.count} evaluation{sem.count > 1 ? 's' : ''}</p>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-center text-gray-500 py-8">No semester data available</p>
-            )}
+          <div>
+            <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">
+              Fully Graded Sessions
+            </p>
+            <p className="text-3xl font-black text-gray-900">
+              {chartData.length}
+            </p>
           </div>
-
-          <div className="bg-white rounded-lg border border-gray-200 p-6">
-            <h2 className="text-lg font-semibold text-gray-900 mb-6">Recent Performance</h2>
-            <div className="space-y-3">
-              {evaluations.slice(0, 5).map((evaluation) => (
-                <div key={evaluation._id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg hover:border-blue-300 transition-colors">
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-gray-900">{evaluation.sessionType}</h3>
-                    <p className="text-sm text-gray-500 mt-1">{evaluation.semester}</p>
-                  </div>
-                  <div className="text-right">
-                    <div className={`text-2xl font-bold ${
-                      evaluation.overallScore >= 80 ? 'text-green-600' :
-                      evaluation.overallScore >= 60 ? 'text-blue-600' :
-                      'text-orange-600'
-                    }`}>
-                      {evaluation.overallScore?.toFixed(1)}%
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      {new Date(evaluation.createdAt).toLocaleDateString()}
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {parseFloat(stats.trend) > 0 && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">Performance Insights</h2>
-              <div className="space-y-3">
-                <div className="flex items-start gap-3">
-                  <TrendingUp className="w-5 h-5 text-green-600 mt-1 flex-shrink-0" />
-                  <p className="text-sm text-gray-700">
-                    Great job! Your performance has improved by <strong>{stats.trend}%</strong> over time.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
-        </>
-      ) : (
-        <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-          <BarChart3 className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">No Progress Data Yet</h3>
-          <p className="text-gray-600">
-            Progress tracking requires at least one submitted evaluation. Your panel members will create evaluations after each session.
-          </p>
         </div>
-      )}
+
+        <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm flex items-center gap-5">
+          <div className="p-4 bg-indigo-50 rounded-full text-indigo-600">
+            <BookOpen className="w-8 h-8" />
+          </div>
+          <div>
+            <p className="text-sm font-bold text-gray-500 uppercase tracking-wider">
+              Active Program
+            </p>
+            <p className="text-xl font-bold text-gray-900">
+              {user?.program || "Postgraduate Research"}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* Clean Timeline Visualization (Pure Tailwind, No External Libraries!) */}
+      <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+        <h2 className="text-xl font-bold text-gray-900 mb-6 flex items-center gap-2">
+          <BarChart3 className="w-6 h-6 text-indigo-600" />
+          Performance Timeline
+        </h2>
+
+        {chartData.length === 0 ? (
+          <div className="text-center py-16">
+            <p className="text-gray-500 font-medium">
+              Not enough finalized data to generate a timeline.
+            </p>
+            <p className="text-sm text-gray-400 mt-1">
+              Sessions will appear here once both assigned panels have submitted
+              their marks.
+            </p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {chartData.map((dataPoint, index) => {
+              const score = dataPoint.score;
+              // Determine color based on score threshold
+              const colorClass =
+                score >= 80
+                  ? "bg-green-500"
+                  : score >= 60
+                    ? "bg-indigo-500"
+                    : score >= 40
+                      ? "bg-orange-500"
+                      : "bg-red-500";
+              const textClass =
+                score >= 80
+                  ? "text-green-600"
+                  : score >= 60
+                    ? "text-indigo-600"
+                    : score >= 40
+                      ? "text-orange-600"
+                      : "text-red-600";
+
+              return (
+                <div key={index} className="relative">
+                  <div className="flex justify-between items-end mb-2">
+                    <div>
+                      <span className="font-bold text-gray-900">
+                        {dataPoint.name}
+                      </span>
+                      <div className="flex items-center gap-1 text-xs text-gray-500 mt-1">
+                        <Calendar className="w-3 h-3" />
+                        {dataPoint.date.toLocaleDateString()}
+                      </div>
+                    </div>
+                    <span className={`text-2xl font-black ${textClass}`}>
+                      {score}%
+                    </span>
+                  </div>
+
+                  {/* Tailwind Progress Bar */}
+                  <div className="w-full bg-gray-100 rounded-full h-4 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-1000 ${colorClass}`}
+                      style={{ width: `${score}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

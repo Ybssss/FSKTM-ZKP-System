@@ -23,7 +23,6 @@ import EditEvaluationPage from "./pages/panel/EditEvaluationPage";
 import RubricPage from "./pages/panel/RubricPage";
 import UsersPage from "./pages/panel/UsersPage";
 import HistoricalFeedbackPage from "./pages/panel/HistoricalFeedbackPage";
-import QRCodePage from "./pages/panel/QRCodePage";
 import TimetableManagementPage from "./pages/panel/TimetableManagementPage";
 import SessionDetailPage from "./pages/panel/SessionDetailPage";
 import PanelAssignmentPage from "./pages/panel/PanelAssignmentPage";
@@ -86,7 +85,6 @@ function App() {
             <Route path="sessions" element={<TimetableManagementPage />} />
             <Route path="sessions/:id" element={<SessionDetailPage />} />
             <Route path="attendance" element={<PanelAttendancePage />} />
-            <Route path="qr-generator" element={<QRCodePage />} />
             <Route path="users" element={<UsersPage />} />
             <Route path="assignments" element={<PanelAssignmentPage />} />
             {/* Shared Tools for Staff */}
@@ -110,6 +108,8 @@ function App() {
             <Route path="rubrics" element={<StudentRubrics />} />
             <Route path="progress" element={<ProgressPage />} />
             <Route path="schedule" element={<SchedulePage />} />
+            <Route path="schedule/:id" element={<SessionDetailPage />} />
+            <Route path="sessions/:id" element={<SessionDetailPage />} />
             <Route path="sessions" element={<SchedulePage />} />
             <Route path="attendance" element={<AttendancePage />} />
             <Route path="profile" element={<StudentProfile />} />

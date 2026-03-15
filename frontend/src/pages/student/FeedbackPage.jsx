@@ -1,331 +1,312 @@
-import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
-import { evaluationAPI } from '../../services/api';
-import { 
-  FileText, 
-  Search, 
-  ChevronDown, 
-  ChevronUp, 
-  Award, 
-  MessageSquare, 
-  Calendar, 
-  User 
-} from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import { useAuth } from "../../contexts/AuthContext";
+import api from "../../services/api";
+import {
+  ClipboardCheck,
+  Users,
+  Calendar,
+  Award,
+  MessageSquare,
+  Hourglass,
+  BarChart3,
+} from "lucide-react";
 
 export default function FeedbackPage() {
   const { user } = useAuth();
-  const [evaluations, setEvaluations] = useState([]);
-  const [filteredEvaluations, setFilteredEvaluations] = useState([]);
+  const [groupedEvaluations, setGroupedEvaluations] = useState([]);
+  const [pendingCount, setPendingCount] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedSemester, setSelectedSemester] = useState('all');
-  const [selectedSessionType, setSelectedSessionType] = useState('all');
-  const [expandedEval, setExpandedEval] = useState(null);
-  const [semesters, setSemesters] = useState([]);
-  const [sessionTypes, setSessionTypes] = useState([]);
 
   useEffect(() => {
-    fetchEvaluations();
+    fetchMyEvaluations();
   }, []);
 
-  useEffect(() => {
-    filterEvaluations();
-  }, [searchTerm, selectedSemester, selectedSessionType, evaluations]);
-
-  const fetchEvaluations = async () => {
+  const fetchMyEvaluations = async () => {
     try {
       setLoading(true);
-      setError(null);
-      
-      let evals = [];
-      try {
-        const response = await evaluationAPI.getByStudent(user.id);
-        evals = response.evaluations || [];
-      } catch (err) {
-        try {
-          const response = await evaluationAPI.getAll();
-          const allEvals = response.evaluations || [];
-          evals = allEvals.filter(e => {
-            const studentId = e.studentId?._id || e.studentId;
-            return studentId === user.id;
-          });
-        } catch (err2) {
-          console.error('Error fetching evaluations:', err2);
-          setError('Could not load evaluations');
-          return;
+      const res = await api.get(
+        `/evaluations/student/${user.id || user.userId || user._id}`,
+      );
+      const rawEvals = res.data.evaluations || [];
+
+      // 1. Group raw evaluations by Session Type
+      const grouped = {};
+      rawEvals.forEach((ev) => {
+        if (!grouped[ev.sessionType]) {
+          grouped[ev.sessionType] = {
+            sessionType: ev.sessionType,
+            date: ev.createdAt,
+            evalCount: 0,
+            totalSum: 0,
+            panels: [],
+            remarks: [],
+            criteriaScores: {}, // New: Track subcategory scores
+            rubricName: ev.rubricId?.name || "Standard Rubric",
+          };
         }
-      }
-      
-      const submittedEvals = evals.filter(e => e.status === 'submitted');
-      setEvaluations(submittedEvals);
-      
-      const uniqueSemesters = [...new Set(submittedEvals.map(e => e.semester).filter(Boolean))];
-      const uniqueSessionTypes = [...new Set(submittedEvals.map(e => e.sessionType).filter(Boolean))];
-      
-      setSemesters(uniqueSemesters);
-      setSessionTypes(uniqueSessionTypes);
-      
+
+        const group = grouped[ev.sessionType];
+
+        // Add to Overall Score
+        group.totalSum += ev.totalScore ?? ev.overallScore ?? 0;
+        group.evalCount += 1;
+
+        // Grab Panel Name & Remarks
+        const panelName =
+          ev.evaluatorId?.name || ev.panelId?.name || "Unknown Panel";
+        if (!group.panels.includes(panelName)) group.panels.push(panelName);
+        if (ev.remarks)
+          group.remarks.push({ panel: panelName, text: ev.remarks });
+
+        // 2. Add to Subcategory (Criteria) Scores
+        if (Array.isArray(ev.scores)) {
+          ev.scores.forEach((s) => {
+            if (!group.criteriaScores[s.criterionName]) {
+              group.criteriaScores[s.criterionName] = {
+                sum: 0,
+                count: 0,
+                weight: s.weight,
+                maxScore: s.maxScore,
+              };
+            }
+            group.criteriaScores[s.criterionName].sum +=
+              parseFloat(s.score) || 0;
+            group.criteriaScores[s.criterionName].count += 1;
+          });
+        } else if (typeof ev.scores === "object") {
+          // Handle old Map object data
+          Object.entries(ev.scores).forEach(([name, val]) => {
+            if (!group.criteriaScores[name]) {
+              group.criteriaScores[name] = {
+                sum: 0,
+                count: 0,
+                weight: "-",
+                maxScore: 100,
+              };
+            }
+            group.criteriaScores[name].sum += parseFloat(val) || 0;
+            group.criteriaScores[name].count += 1;
+          });
+        }
+      });
+
+      // 3. Filter completed vs pending, and calculate final averages
+      const completed = [];
+      let pending = 0;
+
+      Object.values(grouped).forEach((group) => {
+        // STRICT RULE: Only show if 2 panels have graded!
+        if (group.evalCount >= 2) {
+          // Calculate average for each subcategory
+          const averagedCriteria = Object.entries(group.criteriaScores).map(
+            ([name, data]) => ({
+              name,
+              average: (data.sum / data.count).toFixed(1),
+              weight: data.weight,
+              maxScore: data.maxScore,
+            }),
+          );
+
+          completed.push({
+            ...group,
+            finalAverage: (group.totalSum / group.evalCount).toFixed(1),
+            averagedCriteria,
+          });
+        } else {
+          // If only 1 panel has graded, it is pending
+          pending += 1;
+        }
+      });
+
+      // Sort completed by newest date
+      completed.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+      setGroupedEvaluations(completed);
+      setPendingCount(pending);
     } catch (error) {
-      console.error('Error in fetchEvaluations:', error);
-      setError(error.message);
+      console.error("Failed to fetch evaluations:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  const filterEvaluations = () => {
-    let filtered = [...evaluations];
-
-    if (searchTerm) {
-      filtered = filtered.filter(e =>
-        e.sessionType?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        e.semester?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        e.evaluatorId?.name?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
-    }
-
-    if (selectedSemester !== 'all') {
-      filtered = filtered.filter(e => e.semester === selectedSemester);
-    }
-
-    if (selectedSessionType !== 'all') {
-      filtered = filtered.filter(e => e.sessionType === selectedSessionType);
-    }
-
-    setFilteredEvaluations(filtered);
-  };
-
-  const toggleExpand = (evalId) => {
-    setExpandedEval(expandedEval === evalId ? null : evalId);
-  };
-
-  const getScoreColor = (score) => {
-    if (score >= 80) return 'text-green-600 bg-green-50';
-    if (score >= 60) return 'text-blue-600 bg-blue-50';
-    if (score >= 40) return 'text-orange-600 bg-orange-50';
-    return 'text-red-600 bg-red-50';
-  };
-
-  const getScoreBadge = (score) => {
-    if (score >= 80) return { text: 'Excellent', color: 'bg-green-500' };
-    if (score >= 60) return { text: 'Good', color: 'bg-blue-500' };
-    if (score >= 40) return { text: 'Satisfactory', color: 'bg-orange-500' };
-    return { text: 'Needs Improvement', color: 'bg-red-500' };
-  };
-
-  // Get criterion name from rubric or use ID as fallback
-  const getCriterionName = (evaluation, criterionId) => {
-    // Try to find the criterion name from rubric
-    if (evaluation.rubricId?.criteria) {
-      const criterion = evaluation.rubricId.criteria.find(c => 
-        c._id === criterionId || c._id?.toString() === criterionId
-      );
-      if (criterion) return criterion.name;
-    }
-    
-    // Fallback: return a cleaned version of the ID
-    return `Criterion ${criterionId.slice(-4)}`;
-  };
-
   if (loading) {
     return (
-      <div className="flex flex-col justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
-        <p className="text-gray-600">Loading evaluations...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-        <h3 className="text-red-900 font-semibold mb-2">Error Loading Evaluations</h3>
-        <p className="text-red-700">{error}</p>
-        <button 
-          onClick={fetchEvaluations}
-          className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
-        >
-          Retry
-        </button>
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">My Feedback</h1>
-        <p className="text-gray-600 mt-1">View all your evaluation feedback and scores</p>
+    <div className="max-w-5xl mx-auto space-y-6">
+      <div className="mb-8">
+        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+          <Award className="w-8 h-8 text-indigo-600" />
+          My Official Results
+        </h1>
+        <p className="text-gray-600 mt-2">
+          View your finalized evaluation scores. Results are only published once
+          both assigned panels have submitted their marks.
+        </p>
       </div>
 
-      {evaluations.length > 0 && (
-        <div className="bg-white rounded-lg border border-gray-200 p-6">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            <div className="md:col-span-2">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Search</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-                <input
-                  type="text"
-                  placeholder="Search evaluations..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Semester</label>
-              <select
-                value={selectedSemester}
-                onChange={(e) => setSelectedSemester(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="all">All Semesters</option>
-                {semesters.map(sem => (
-                  <option key={sem} value={sem}>{sem}</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Session Type</label>
-              <select
-                value={selectedSessionType}
-                onChange={(e) => setSelectedSessionType(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="all">All Types</option>
-                {sessionTypes.map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-            </div>
+      {/* PENDING NOTIFICATION */}
+      {pendingCount > 0 && (
+        <div className="bg-orange-50 border border-orange-200 rounded-xl p-5 flex items-center gap-4 shadow-sm">
+          <div className="p-3 bg-orange-100 rounded-full text-orange-600">
+            <Hourglass className="w-6 h-6 animate-pulse" />
           </div>
-
-          <div className="mt-4 text-sm text-gray-600">
-            Showing {filteredEvaluations.length} of {evaluations.length} evaluations
+          <div>
+            <h3 className="font-bold text-orange-900 text-lg">
+              Results Pending Publication
+            </h3>
+            <p className="text-orange-800 text-sm">
+              You have {pendingCount} session(s) currently being processed.
+              Marks will be revealed here automatically once the second panel
+              completes their evaluation.
+            </p>
           </div>
         </div>
       )}
 
-      <div className="space-y-4">
-        {filteredEvaluations.length > 0 ? (
-          filteredEvaluations.map((evaluation) => {
-            const isExpanded = expandedEval === evaluation._id;
-            const scoreBadge = getScoreBadge(evaluation.overallScore);
-
-            return (
-              <div key={evaluation._id} className="bg-white rounded-lg border border-gray-200">
-                <div className="p-6 cursor-pointer" onClick={() => toggleExpand(evaluation._id)}>
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className="text-lg font-semibold text-gray-900">{evaluation.sessionType}</h3>
-                        <span className={`px-3 py-1 rounded-full text-xs font-semibold text-white ${scoreBadge.color}`}>
-                          {scoreBadge.text}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-6 mt-3 text-sm text-gray-600">
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-4 h-4" />
-                          {evaluation.semester}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <User className="w-4 h-4" />
-                          {evaluation.evaluatorId?.name || 'Panel Member'}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Calendar className="w-4 h-4" />
-                          {new Date(evaluation.createdAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <div className={`text-3xl font-bold ${getScoreColor(evaluation.overallScore).split(' ')[0]}`}>
-                          {evaluation.overallScore?.toFixed(1) || 0}%
-                        </div>
-                        <div className="text-sm text-gray-500">Overall</div>
-                      </div>
-                      {isExpanded ? (
-                        <ChevronUp className="w-6 h-6 text-gray-400" />
-                      ) : (
-                        <ChevronDown className="w-6 h-6 text-gray-400" />
-                      )}
-                    </div>
+      {/* NO RESULTS AT ALL */}
+      {groupedEvaluations.length === 0 ? (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+          <ClipboardCheck className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900">
+            No Finalized Results Yet
+          </h3>
+          <p className="text-gray-500">
+            Your results will appear here once grading is fully completed.
+          </p>
+        </div>
+      ) : (
+        /* PUBLISHED RESULTS */
+        <div className="space-y-8">
+          {groupedEvaluations.map((result, idx) => (
+            <div
+              key={idx}
+              className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden"
+            >
+              {/* Top Header: Final Average */}
+              <div className="bg-gradient-to-r from-indigo-600 to-purple-600 p-6 text-white flex flex-col md:flex-row justify-between items-center gap-6">
+                <div>
+                  <span className="inline-block px-3 py-1 bg-white/20 rounded-full text-xs font-bold tracking-wider uppercase mb-2">
+                    {result.rubricName}
+                  </span>
+                  <h2 className="text-2xl font-bold">{result.sessionType}</h2>
+                  <div className="flex items-center gap-2 text-indigo-100 mt-2 text-sm font-medium">
+                    <Calendar className="w-4 h-4" /> Published on{" "}
+                    {new Date(result.date).toLocaleDateString()}
                   </div>
                 </div>
 
-                {isExpanded && (
-                  <div className="border-t border-gray-200 p-6 bg-gray-50">
-                    {evaluation.scores && Object.keys(evaluation.scores).length > 0 && (
-                      <div className="mb-6">
-                        <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                          <Award className="w-5 h-5 text-blue-600" />
-                          Score Breakdown
-                        </h4>
-                        <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
-                          {Object.entries(evaluation.scores).map(([criterionId, score]) => (
-                            <div key={criterionId} className="flex items-center justify-between">
-                              <span className="text-sm text-gray-700">
-                                {getCriterionName(evaluation, criterionId)}
-                              </span>
-                              <span className={`px-3 py-1 rounded-lg text-sm font-semibold ${getScoreColor(score)}`}>
-                                {score}
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
+                <div className="bg-white text-indigo-900 px-8 py-5 rounded-2xl text-center shadow-xl min-w-[180px]">
+                  <p className="text-xs font-bold uppercase tracking-wider mb-1 text-indigo-500">
+                    Combined Final Score
+                  </p>
+                  <p className="text-5xl font-black">{result.finalAverage}%</p>
+                  <p className="text-xs font-medium text-gray-400 mt-1">
+                    Averaged from {result.evalCount} Panels
+                  </p>
+                </div>
+              </div>
 
-                    <div className="space-y-4">
-                      <h4 className="font-semibold text-gray-900 flex items-center gap-2">
-                        <MessageSquare className="w-5 h-5 text-blue-600" />
-                        Feedback Comments
-                      </h4>
-
-                      {evaluation.strengths && (
-                        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
-                          <h5 className="font-semibold text-green-900 mb-2">Strengths</h5>
-                          <p className="text-sm text-green-800 whitespace-pre-wrap">{evaluation.strengths}</p>
+              <div className="p-6 lg:p-8 grid grid-cols-1 lg:grid-cols-3 gap-8">
+                {/* Left Column: Subcategory Averages */}
+                <div className="lg:col-span-2 space-y-6">
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4 border-b pb-2">
+                      <BarChart3 className="w-5 h-5 text-indigo-600" />
+                      Averaged Criteria Breakdown
+                    </h3>
+                    <div className="space-y-3">
+                      {result.averagedCriteria.map((crit, i) => (
+                        <div
+                          key={i}
+                          className="flex justify-between items-center p-4 bg-gray-50 rounded-xl border border-gray-100"
+                        >
+                          <div>
+                            <p className="font-bold text-gray-800 capitalize">
+                              {crit.name.replace(/_/g, " ")}
+                            </p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              Weight: {crit.weight}
+                              {crit.weight !== "-" ? "%" : ""}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <span className="text-xl font-black text-indigo-700">
+                              {crit.average}
+                            </span>
+                            <span className="text-sm font-medium text-gray-500">
+                              {" "}
+                              / {crit.maxScore}
+                            </span>
+                          </div>
                         </div>
-                      )}
-
-                      {evaluation.weaknesses && (
-                        <div className="bg-orange-50 border border-orange-200 rounded-lg p-4">
-                          <h5 className="font-semibold text-orange-900 mb-2">Areas for Improvement</h5>
-                          <p className="text-sm text-orange-800 whitespace-pre-wrap">{evaluation.weaknesses}</p>
-                        </div>
-                      )}
-
-                      {evaluation.recommendations && (
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                          <h5 className="font-semibold text-blue-900 mb-2">Recommendations</h5>
-                          <p className="text-sm text-blue-800 whitespace-pre-wrap">{evaluation.recommendations}</p>
-                        </div>
-                      )}
+                      ))}
                     </div>
                   </div>
-                )}
+
+                  <div>
+                    <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4 border-b pb-2">
+                      <MessageSquare className="w-5 h-5 text-indigo-600" />
+                      Panel Remarks
+                    </h3>
+                    {result.remarks.length > 0 ? (
+                      <div className="space-y-4">
+                        {result.remarks.map((rem, i) => (
+                          <div
+                            key={i}
+                            className="bg-indigo-50/50 p-4 rounded-xl border border-indigo-100"
+                          >
+                            <p className="text-xs font-bold text-indigo-700 mb-2 uppercase tracking-wider">
+                              Comment from {rem.panel}
+                            </p>
+                            <p className="text-gray-700 leading-relaxed">
+                              "{rem.text}"
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-gray-500 italic bg-gray-50 p-4 rounded-xl">
+                        No additional remarks were provided.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Column: Panels Involved */}
+                <div className="lg:col-span-1">
+                  <div className="bg-gray-50 rounded-xl p-6 border border-gray-200 sticky top-6">
+                    <h3 className="font-bold text-gray-900 flex items-center gap-2 mb-4">
+                      <Users className="w-5 h-5 text-indigo-600" /> Evaluated By
+                    </h3>
+                    <ul className="space-y-3">
+                      {result.panels.map((panel, i) => (
+                        <li
+                          key={i}
+                          className="flex items-center gap-3 bg-white p-3 rounded-lg border border-gray-100 shadow-sm"
+                        >
+                          <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-sm">
+                            {panel.charAt(0)}
+                          </div>
+                          <span className="text-gray-800 font-medium">
+                            {panel}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
               </div>
-            );
-          })
-        ) : (
-          <div className="bg-white rounded-lg border border-gray-200 p-12 text-center">
-            <FileText className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <h3 className="text-lg font-semibold text-gray-900 mb-2">No Evaluations Found</h3>
-            <p className="text-gray-600">
-              {evaluations.length === 0
-                ? "You haven't received any evaluations yet. Your panel members will submit evaluations after each session."
-                : "No evaluations match your filters. Try adjusting your search criteria."}
-            </p>
-          </div>
-        )}
-      </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
