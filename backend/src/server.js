@@ -15,7 +15,7 @@ app.use(express.urlencoded({ extended: true }));
 // Allow requests from all for now to prevent deployment blocks)
 app.use(
   cors({
-    origin: "*",
+    origin: ["https://fsktm-zkp-system.vercel.app", "http://localhost:5173"],
     credentials: true,
   }),
 );
