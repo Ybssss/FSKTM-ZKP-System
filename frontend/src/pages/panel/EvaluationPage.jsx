@@ -31,6 +31,7 @@ export default function EvaluationPage() {
     studentId: "",
     rubricId: "",
     sessionType: "",
+    semester: "", // 👈 FIXED: Added missing semester state
     remarks: "",
   });
   const [scores, setScores] = useState({});
@@ -82,15 +83,20 @@ export default function EvaluationPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.studentId || !formData.rubricId || !formData.sessionType) {
-      alert("Please fill in all required fields.");
+    // 👈 FIXED: Now also validates the semester
+    if (
+      !formData.studentId ||
+      !formData.rubricId ||
+      !formData.sessionType ||
+      !formData.semester
+    ) {
+      alert("Please fill in all required fields, including the Semester.");
       return;
     }
 
     try {
       setIsSubmitting(true);
 
-      // Convert scores to a Map Object to satisfy Mongoose Schema
       const formattedScoresMap = {};
       selectedRubric.criteria.forEach((c, index) => {
         formattedScoresMap[c.name] = parseFloat(scores[index]) || 0;
@@ -100,8 +106,9 @@ export default function EvaluationPage() {
         studentId: formData.studentId,
         rubricId: formData.rubricId,
         sessionType: formData.sessionType,
-        scores: formattedScoresMap, // Send as Map {}
-        overallScore: parseFloat(calculateTotalScore()), // Send as overallScore
+        semester: formData.semester, // 👈 FIXED: Included in payload
+        scores: formattedScoresMap,
+        overallScore: parseFloat(calculateTotalScore()),
         remarks: formData.remarks,
       };
 
@@ -131,7 +138,13 @@ export default function EvaluationPage() {
   const closeModal = () => {
     setShowModal(false);
     setViewingEval(null);
-    setFormData({ studentId: "", rubricId: "", sessionType: "", remarks: "" });
+    setFormData({
+      studentId: "",
+      rubricId: "",
+      sessionType: "",
+      semester: "",
+      remarks: "",
+    }); // Reset semester
     setScores({});
   };
 
@@ -142,7 +155,6 @@ export default function EvaluationPage() {
     return "text-red-600 bg-red-50 border-red-200";
   };
 
-  // 🚀 NEW FEATURE: CALCULATE COMBINED AVERAGE
   const getCombinedAverage = () => {
     if (!viewingEval) return null;
     const relatedEvals = evaluations.filter(
@@ -150,7 +162,7 @@ export default function EvaluationPage() {
         e.studentId?._id === viewingEval.studentId?._id &&
         e.sessionType === viewingEval.sessionType,
     );
-    if (relatedEvals.length <= 1) return null; // No combined score if only 1 panel has marked
+    if (relatedEvals.length <= 1) return null;
 
     const sum = relatedEvals.reduce(
       (acc, curr) => acc + (curr.totalScore ?? curr.overallScore ?? 0),
@@ -199,6 +211,7 @@ export default function EvaluationPage() {
                 <tr>
                   <th className="p-4">Student</th>
                   <th className="p-4">Session Type</th>
+                  <th className="p-4">Semester</th>
                   <th className="p-4">Panel</th>
                   <th className="p-4 text-center">Score</th>
                   <th className="p-4 text-right">Actions</th>
@@ -218,11 +231,13 @@ export default function EvaluationPage() {
                         {ev.sessionType}
                       </span>
                     </td>
+                    <td className="p-4 text-sm font-medium text-gray-600">
+                      {ev.semester}
+                    </td>
                     <td className="p-4 text-sm font-medium">
                       {ev.evaluatorId?.name || ev.panelId?.name}
                     </td>
                     <td className="p-4 text-center">
-                      {/* FIX: Handled the fallback between totalScore and overallScore! */}
                       <div
                         className={`inline-flex px-3 py-1 rounded-lg border font-bold text-sm ${getScoreColor(ev.totalScore ?? ev.overallScore)}`}
                       >
@@ -267,7 +282,6 @@ export default function EvaluationPage() {
             </div>
 
             <div className="p-6 overflow-y-auto flex-1 space-y-6">
-              {/* 🚀 COMBINED AVERAGE UI */}
               {getCombinedAverage() && (
                 <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-6 text-white flex items-center justify-between shadow-md">
                   <div className="flex items-center gap-4">
@@ -301,6 +315,9 @@ export default function EvaluationPage() {
                   </p>
                   <p className="text-sm text-gray-600 mt-2">
                     <strong>Session:</strong> {viewingEval.sessionType}
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    <strong>Semester:</strong> {viewingEval.semester}
                   </p>
                   <p className="text-sm text-gray-600">
                     <strong>Panel:</strong>{" "}
@@ -380,7 +397,7 @@ export default function EvaluationPage() {
         </div>
       )}
 
-      {/* KEEP YOUR EXISTING CREATE EVALUATION MODAL FORM DOWN HERE */}
+      {/* CREATE EVALUATION MODAL FORM */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
@@ -403,8 +420,8 @@ export default function EvaluationPage() {
                 onSubmit={handleSubmit}
                 className="space-y-6"
               >
-                {/* Meta Information */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-gray-50 p-5 rounded-xl border border-gray-200">
+                {/* 👈 FIXED: Changed to grid-cols-2 to perfectly fit 4 fields */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50 p-5 rounded-xl border border-gray-200">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
                       Select Student *
@@ -451,6 +468,26 @@ export default function EvaluationPage() {
                       </option>
                       <option value="Final Defense">Final Defense</option>
                     </select>
+                  </div>
+
+                  {/* 👈 FIXED: The missing Semester input field! */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">
+                      Semester *
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.semester}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          semester: e.target.value,
+                        })
+                      }
+                      placeholder="e.g., 2025/2026-1"
+                      className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500"
+                      required
+                    />
                   </div>
 
                   <div>
