@@ -12,9 +12,6 @@ const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// CORS configuration
-const cors = require("cors");
-
 // Allow requests from all for now to prevent deployment blocks)
 app.use(
   cors({
