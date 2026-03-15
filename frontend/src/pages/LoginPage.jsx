@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import zkp from "../utils/zkp";
+import api from "../services/api"; // 👈 NEW: Using your dynamic API service!
 import { Shield, Smartphone, AlertCircle, Monitor, Lock } from "lucide-react";
 import DevicePairingModal from "../components/DevicePairingModal";
 
@@ -33,16 +34,12 @@ export default function LoginPage() {
       console.log("🔐 Starting login for:", userIdToUse);
 
       try {
-        const checkResponse = await fetch(
-          "http://localhost:5000/api/auth/check-registration",
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ userId: userIdToUse }),
-          },
-        );
+        // 👈 FIXED: Uses dynamic Render/Vercel URL instead of localhost
+        const checkResponse = await api.post("/auth/check-registration", {
+          userId: userIdToUse,
+        });
 
-        const checkData = await checkResponse.json();
+        const checkData = checkResponse.data;
 
         if (!checkData.userExists) {
           setError(
@@ -90,7 +87,6 @@ export default function LoginPage() {
 
       console.log("✅ Login successful!");
 
-      // ✅ UPDATED: Added superadmin and supervisor
       if (result.user.role === "student") {
         navigate("/student/dashboard");
       } else if (
