@@ -29,11 +29,15 @@ export default function FeedbackPage() {
       );
       const rawEvals = res.data.evaluations || [];
 
+      // 1. Group raw evaluations strictly by Session Type AND Semester
       const grouped = {};
       rawEvals.forEach((ev) => {
-        if (!grouped[ev.sessionType]) {
-          grouped[ev.sessionType] = {
+        const groupKey = `${ev.sessionType}_${ev.semester}`; // 👈 FIXED: Groups by both!
+
+        if (!grouped[groupKey]) {
+          grouped[groupKey] = {
             sessionType: ev.sessionType,
+            semester: ev.semester || "Unknown",
             date: ev.createdAt,
             evalCount: 0,
             totalSum: 0,
@@ -43,7 +47,8 @@ export default function FeedbackPage() {
             rubricName: ev.rubricId?.name || "Standard Rubric",
           };
         }
-        const group = grouped[ev.sessionType];
+
+        const group = grouped[groupKey];
         group.totalSum += ev.totalScore ?? ev.overallScore ?? 0;
         group.evalCount += 1;
 
@@ -179,6 +184,9 @@ export default function FeedbackPage() {
                     {result.rubricName}
                   </span>
                   <h2 className="text-2xl font-bold">{result.sessionType}</h2>
+                  <p className="text-indigo-200 text-sm font-medium mt-1">
+                    {result.semester}
+                  </p>
                 </div>
                 <div className="bg-white text-indigo-900 px-8 py-5 rounded-2xl text-center shadow-xl min-w-[180px]">
                   <p className="text-xs font-bold uppercase tracking-wider mb-1 text-indigo-500">

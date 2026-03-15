@@ -30,13 +30,20 @@ export default function EvaluationPage() {
     studentId: "",
     rubricId: "",
     sessionType: "",
-    semester: "",
     remarks: "",
   });
   const [scores, setScores] = useState({});
 
+  const [academicYear, setAcademicYear] = useState("");
+  const [semesterNum, setSemesterNum] = useState("1");
+
   useEffect(() => {
     loadData();
+    // Auto-calculate Year (If it's past August, it's Year/Year+1. Otherwise Year-1/Year)
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    setAcademicYear(month >= 8 ? `${year}/${year + 1}` : `${year - 1}/${year}`);
   }, []);
 
   const loadData = async () => {
@@ -82,20 +89,14 @@ export default function EvaluationPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    if (
-      !formData.studentId ||
-      !formData.rubricId ||
-      !formData.sessionType ||
-      !formData.semester
-    ) {
-      alert("Please fill in all required fields, including the Semester.");
+    if (!formData.studentId || !formData.rubricId || !formData.sessionType) {
+      alert("Please fill in all required fields.");
       return;
     }
 
     try {
       setIsSubmitting(true);
 
-      // 🚀 FIXED: Keys MUST be the Mongo _id to pass backend validation!
       const formattedScoresMap = {};
       selectedRubric.criteria.forEach((c, index) => {
         formattedScoresMap[c._id] = parseFloat(scores[index]) || 0;
@@ -105,19 +106,17 @@ export default function EvaluationPage() {
         studentId: formData.studentId,
         rubricId: formData.rubricId,
         sessionType: formData.sessionType,
-        semester: formData.semester,
-        scores: formattedScoresMap, // Now sending proper IDs!
+        semester: `${academicYear} Semester ${semesterNum}`, // 👈 Auto-formats to "2026/2027 Semester 2"
+        scores: formattedScoresMap,
         overallScore: parseFloat(calculateTotalScore()),
         remarks: formData.remarks,
       };
 
       await evaluationAPI.create(payload);
-
       alert("✅ Evaluation submitted successfully!");
       closeModal();
       loadData();
     } catch (error) {
-      console.error("Error submitting evaluation:", error);
       alert(error.response?.data?.message || "Failed to submit evaluation");
     } finally {
       setIsSubmitting(false);
@@ -484,16 +483,21 @@ export default function EvaluationPage() {
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
                       Semester *
                     </label>
-                    <input
-                      type="text"
-                      value={formData.semester}
-                      onChange={(e) =>
-                        setFormData({ ...formData, semester: e.target.value })
-                      }
-                      placeholder="e.g., 2025/2026-1"
-                      className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500"
-                      required
-                    />
+                    <div className="flex items-center gap-2">
+                      <span className="px-3 py-2.5 bg-gray-100 border border-gray-300 rounded-lg text-gray-600 font-medium">
+                        {academicYear}
+                      </span>
+                      <select
+                        value={semesterNum}
+                        onChange={(e) => setSemesterNum(e.target.value)}
+                        className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500"
+                        required
+                      >
+                        <option value="1">Semester 1</option>
+                        <option value="2">Semester 2</option>
+                        <option value="3">Semester 3</option>
+                      </select>
+                    </div>
                   </div>
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -584,7 +588,6 @@ export default function EvaluationPage() {
                         className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500"
                         rows="3"
                         placeholder="Provide overall feedback..."
-                        required
                       />
                     </div>
                   </div>
