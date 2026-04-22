@@ -7,7 +7,7 @@ const cors = require("cors");
 
 // Initialize express app
 const app = express();
-
+const expertiseRoutes = require("./routes/expertiseRoutes");
 // Middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -67,7 +67,7 @@ app.use("/api/feedback", feedbackRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/qr", qrRoutes);
 app.use("/api/analytics", analyticsRoutes); // ← NEW: Register analytics route
-
+app.use("/api", expertiseRoutes);
 // Root route
 app.get("/", (req, res) => {
   res.json({

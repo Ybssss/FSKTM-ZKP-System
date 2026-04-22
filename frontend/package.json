@@ -13,8 +13,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@simplewebauthn/browser": "^13.3.0",
     "@yudiel/react-qr-scanner": "^2.5.1",
-    "axios": "^1.13.2",
+    "axios": "^1.15.1",
     "crypto-js": "^4.2.0",
     "elliptic": "^6.6.1",
     "jspdf": "^3.0.4",

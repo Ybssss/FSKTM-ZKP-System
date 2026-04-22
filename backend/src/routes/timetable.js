@@ -42,6 +42,95 @@ router.delete(
 router.post("/:id/notes", requireRole("panel", "admin"), addPanelNotes);
 
 // ==========================================
+// EXPERTISE & PANEL MATCHING ROUTES
+// ==========================================
+const expertiseService = require("../services/expertiseService");
+
+// Get expertise for a specific panel
+router.get("/expertise/:userId", requireRole("admin"), async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const expertise = await expertiseService.fetchUserExpertise(userId);
+
+    res.json({
+      success: true,
+      userId,
+      expertise,
+      count: expertise.length,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error fetching expertise",
+      error: error.message,
+    });
+  }
+});
+
+// Get panel recommendations for a student based on research title
+router.post("/match-expertise", requireRole("admin"), async (req, res) => {
+  try {
+    const { researchTitle, studentId } = req.body;
+
+    if (!researchTitle) {
+      return res.status(400).json({
+        success: false,
+        message: "Research title is required",
+      });
+    }
+
+    // Get all panels
+    const User = require("../models/User");
+    const panels = await User.find({ role: "panel" }).select("userId name");
+
+    // Fetch expertise for each panel
+    const panelsWithExpertise = await Promise.all(
+      panels.map(async (panel) => {
+        const expertise = await expertiseService.fetchUserExpertise(
+          panel.userId,
+        );
+        return {
+          ...panel.toObject(),
+          expertise,
+        };
+      }),
+    );
+
+    // Get recommendations
+    const recommendations = expertiseService.getPanelRecommendations(
+      researchTitle,
+      panelsWithExpertise,
+    );
+
+    // Filter out student's supervisor if provided
+    let filteredRecommendations = recommendations;
+    if (studentId) {
+      const student = await User.findById(studentId).populate("supervisorId");
+      if (student && student.supervisorId) {
+        filteredRecommendations = recommendations.filter(
+          (rec) =>
+            rec.panelId.toString() !== student.supervisorId._id.toString(),
+        );
+      }
+    }
+
+    res.json({
+      success: true,
+      researchTitle,
+      recommendations: filteredRecommendations,
+      totalPanels: panels.length,
+      matchedPanels: filteredRecommendations.length,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Error matching expertise",
+      error: error.message,
+    });
+  }
+});
+
+// ==========================================
 // SCHEDULING & ADMIN ROUTES (STRICT)
 // ==========================================
 // Only Admins can create, update, or delete sessions

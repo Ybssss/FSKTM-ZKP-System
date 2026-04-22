@@ -1,6 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { Trash2, Calendar, Users, Search } from "lucide-react";
-import api from "../../services/api"; // ✅ Fixed Import
+import {
+  Trash2,
+  Calendar,
+  Users,
+  Search,
+  Lightbulb,
+  Target,
+  AlertTriangle,
+} from "lucide-react";
+import { timetableAPI, userAPI } from "../../services/api"; // ✅ Fixed Import
 
 export default function PanelAssignmentPage() {
   const [panels, setPanels] = useState([]);
@@ -17,6 +25,13 @@ export default function PanelAssignmentPage() {
     new Date().toISOString().split("T")[0],
   );
 
+  // Expertise Matching States
+  const [researchTitle, setResearchTitle] = useState("");
+  const [recommendations, setRecommendations] = useState([]);
+  const [matchingExpertise, setMatchingExpertise] = useState(false);
+  const [selectedStudentForMatching, setSelectedStudentForMatching] =
+    useState(null);
+
   useEffect(() => {
     loadData();
   }, []);
@@ -24,7 +39,7 @@ export default function PanelAssignmentPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const res = await api.get("/users");
+      const res = await userAPI.getAll();
       const allUsers = res.data.users || [];
       setPanels(allUsers.filter((u) => u.role === "panel"));
       setStudents(allUsers.filter((u) => u.role === "student"));
@@ -57,7 +72,7 @@ export default function PanelAssignmentPage() {
 
     try {
       setSaving(true);
-      await api.post("/timetables/assign-panel", {
+      await timetableAPI.create({
         panelIds: selectedPanels,
         studentIds: selectedStudentIds,
         startDate,
@@ -74,6 +89,37 @@ export default function PanelAssignmentPage() {
     }
   };
 
+  // Expertise Matching Function
+  const handleExpertiseMatching = async () => {
+    if (!researchTitle.trim()) {
+      alert("Please enter a research title");
+      return;
+    }
+
+    try {
+      setMatchingExpertise(true);
+      setRecommendations([]);
+
+      const response = await timetableAPI.matchExpertise(
+        researchTitle.trim(),
+        selectedStudentForMatching,
+      );
+
+      setRecommendations(response.recommendations || []);
+    } catch (error) {
+      alert(
+        "Failed to match expertise: " +
+          (error.response?.data?.message || error.message),
+      );
+    } finally {
+      setMatchingExpertise(false);
+    }
+  };
+
+  const selectRecommendedPanels = (panelIds) => {
+    setSelectedPanels(panelIds);
+  };
+
   // UX Feature: Delete relation entirely for misinputs
   const handleDeleteRelation = async (studentId, assignedPanelsList) => {
     if (
@@ -86,7 +132,7 @@ export default function PanelAssignmentPage() {
       // Unassign both panels mapped to this student
       for (const ap of assignedPanelsList) {
         const pId = ap.panelId?._id || ap.panelId;
-        await api.post("/users/unassign-panel", { studentId, panelId: pId });
+        await userAPI.unassignPanel(studentId, pId);
       }
       loadData();
     } catch (error) {
@@ -121,6 +167,144 @@ export default function PanelAssignmentPage() {
         <p className="text-gray-600 mt-2">
           Assign exactly two panel members to multiple students at once.
         </p>
+      </div>
+
+      {/* Expertise Matching Section */}
+      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200 mb-8">
+        <div className="flex items-center gap-3 mb-4">
+          <Lightbulb className="w-6 h-6 text-blue-600" />
+          <h2 className="text-xl font-bold text-gray-900">
+            AI-Powered Panel Matching
+          </h2>
+        </div>
+        <p className="text-gray-600 mb-4">
+          Enter a student's research title to get expert panel recommendations
+          based on their expertise from UTHM Community profiles.
+        </p>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Research Title *
+            </label>
+            <input
+              type="text"
+              value={researchTitle}
+              onChange={(e) => setResearchTitle(e.target.value)}
+              placeholder="e.g., Zero-Knowledge Proof Authentication System for Academic Evaluation"
+              className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold text-gray-700 mb-2">
+              Student (Optional - for conflict checking)
+            </label>
+            <select
+              value={selectedStudentForMatching || ""}
+              onChange={(e) =>
+                setSelectedStudentForMatching(e.target.value || null)
+              }
+              className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            >
+              <option value="">
+                Select student to avoid supervisor conflict
+              </option>
+              {students.map((student) => (
+                <option key={student._id} value={student._id}>
+                  {student.name} ({student.matricNumber})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        <button
+          onClick={handleExpertiseMatching}
+          disabled={matchingExpertise || !researchTitle.trim()}
+          className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-400 flex items-center gap-2"
+        >
+          {matchingExpertise ? (
+            <>
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              Matching Expertise...
+            </>
+          ) : (
+            <>
+              <Target className="w-4 h-4" />
+              Find Expert Panels
+            </>
+          )}
+        </button>
+
+        {/* Recommendations Display */}
+        {recommendations.length > 0 && (
+          <div className="mt-6 bg-white rounded-lg p-4 border border-blue-200">
+            <h3 className="text-lg font-semibold text-gray-900 mb-3 flex items-center gap-2">
+              <Target className="w-5 h-5 text-green-600" />
+              Recommended Panels ({recommendations.length})
+            </h3>
+            <div className="space-y-3">
+              {recommendations.slice(0, 4).map((rec, index) => (
+                <div
+                  key={rec.panelId}
+                  className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
+                >
+                  <div className="flex-1">
+                    <div className="flex items-center gap-3">
+                      <span className="text-sm font-bold text-blue-600 bg-blue-100 px-2 py-1 rounded">
+                        #{index + 1}
+                      </span>
+                      <div>
+                        <p className="font-semibold text-gray-900">
+                          {rec.name}
+                        </p>
+                        <p className="text-sm text-gray-600">
+                          Match Score: {rec.match.score}%
+                        </p>
+                      </div>
+                    </div>
+                    {rec.match.matches.length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1">
+                        {rec.match.matches.slice(0, 3).map((match, i) => (
+                          <span
+                            key={i}
+                            className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded"
+                          >
+                            {match.term}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => selectRecommendedPanels([rec.panelId])}
+                    className="text-blue-600 hover:bg-blue-50 px-3 py-1 rounded text-sm font-medium"
+                  >
+                    Select This Panel
+                  </button>
+                </div>
+              ))}
+            </div>
+            {recommendations.length >= 2 && (
+              <div className="mt-4 flex gap-2">
+                <button
+                  onClick={() =>
+                    selectRecommendedPanels(
+                      recommendations.slice(0, 2).map((r) => r.panelId),
+                    )
+                  }
+                  className="bg-green-600 text-white px-4 py-2 rounded-lg font-semibold hover:bg-green-700 text-sm"
+                >
+                  Select Top 2 Panels
+                </button>
+                <div className="text-xs text-gray-500 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  System automatically prevents supervisor conflicts
+                </div>
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">

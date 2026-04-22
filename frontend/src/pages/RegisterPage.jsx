@@ -78,7 +78,7 @@ export default function RegisterPage() {
                 placeholder="e.g., ADM001, STU001"
                 required
                 disabled={loading}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 disabled:bg-gray-100 uppercase"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 disabled:bg-gray-100"
               />
             </div>
 

@@ -136,9 +136,9 @@ exports.getEvaluations = async (req, res) => {
 exports.getEvaluationById = async (req, res) => {
   try {
     const evaluation = await Evaluation.findById(req.params.id)
-      .populate("studentId", "name userId matricNumber program researchTitle")
-      .populate("evaluatorId", "name userId email")
-      .populate("rubricId", "name description criteria");
+      .populate("studentId", "name matricNumber")
+      .populate("evaluatorId", "name")
+      .populate("rubricId"); // 👈 This MUST be populated to see criteria names/max scores
 
     if (!evaluation) {
       return res
@@ -256,5 +256,23 @@ exports.deleteEvaluation = async (req, res) => {
       message: "Error deleting evaluation",
       error: error.message,
     });
+  }
+};
+
+exports.searchHistoricalComments = async (req, res) => {
+  try {
+    const { searchQuery, studentId } = req.query;
+
+    const results = await Evaluation.find({
+      studentId: studentId,
+      $text: { $search: searchQuery },
+    })
+      .sort({ score: { $meta: "textScore" } }) // Sorts by best match
+      .populate("sessionId", "semester sessionType")
+      .populate("panelId", "name");
+
+    res.status(200).json({ results });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 };

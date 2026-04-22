@@ -53,11 +53,12 @@ export const authAPI = {
     const response = await api.post("/auth/challenge", { userId });
     return response.data;
   },
-  verify: async (userId, proof, trustDevice) => {
+  verify: async (userId, proof, trustDevice, deviceId) => {
     const response = await api.post("/auth/verify", {
       userId,
       proof,
       trustDevice,
+      deviceId,
     });
     return response.data;
   },
@@ -91,16 +92,6 @@ export const authAPI = {
   },
   adminGetUserDevices: async (userId) => {
     const response = await api.get(`/auth/admin/user-devices/${userId}`);
-    return response.data;
-  },
-  // UPDATED: Now accepts a unique client-side deviceId
-  verify: async (userId, proof, trustDevice, deviceId) => {
-    const response = await api.post("/auth/verify", {
-      userId,
-      proof,
-      trustDevice,
-      deviceId,
-    });
     return response.data;
   },
   //Secure Device Pairing endpoints
@@ -292,6 +283,18 @@ export const timetableAPI = {
       `/timetables/${sessionId}/notes`,
       notesData,
     );
+    return response.data;
+  },
+  // Expertise matching endpoints
+  getExpertise: async (userId) => {
+    const response = await api.get(`/timetables/expertise/${userId}`);
+    return response.data;
+  },
+  matchExpertise: async (researchTitle, studentId) => {
+    const response = await api.post("/timetables/match-expertise", {
+      researchTitle,
+      studentId,
+    });
     return response.data;
   },
 };

@@ -127,6 +127,9 @@ export default function DeviceManagementPage() {
   };
 
   const getDeviceIcon = (deviceName) => {
+    if (!deviceName || typeof deviceName !== "string") {
+      return <Monitor className="w-5 h-5" />;
+    }
     if (
       deviceName.includes("Android") ||
       deviceName.includes("iOS") ||

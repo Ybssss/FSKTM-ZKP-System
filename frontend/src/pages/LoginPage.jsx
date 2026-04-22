@@ -140,13 +140,13 @@ export default function LoginPage() {
               type="text"
               value={userId}
               onChange={(e) => {
-                setUserId(e.target.value.toUpperCase());
+                setUserId(e.target.value);
                 setError("");
               }}
               placeholder="Enter your user ID (e.g., STU001, ADMIN001)"
               required
               disabled={loading}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 uppercase"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
             />
           </div>
 

@@ -252,12 +252,10 @@ exports.getMyTimetable = async (req, res) => {
     if (req.user.role === "student") query.students = { $in: [myId] };
     else if (req.user.role === "panel") query.panels = { $in: [myId] };
     else
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: "Only panels and students have personal timetables.",
-        });
+      return res.status(403).json({
+        success: false,
+        message: "Only panels and students have personal timetables.",
+      });
 
     const timetables = await Timetable.find(query)
       .populate("panels", "name userId")
@@ -267,13 +265,11 @@ exports.getMyTimetable = async (req, res) => {
 
     res.json({ success: true, count: timetables.length, timetables });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Error fetching timetable",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Error fetching timetable",
+      error: error.message,
+    });
   }
 };
 
@@ -316,13 +312,11 @@ exports.getTimetableById = async (req, res) => {
 
     res.json({ success: true, timetable });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Error fetching timetable",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Error fetching timetable",
+      error: error.message,
+    });
   }
 };
 
@@ -354,6 +348,21 @@ exports.assignPanelToStudent = async (req, res) => {
     for (const sId of studentIds) {
       const student = await User.findById(sId);
       if (!student || student.role !== "student") continue;
+
+      // Check for conflict of interest - prevent assigning student's supervisor
+      const supervisorId = student.supervisorId?.toString();
+      const conflictingPanels = panelIds.filter(
+        (panelId) => panelId.toString() === supervisorId,
+      );
+
+      if (conflictingPanels.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message: `Conflict of interest: Cannot assign ${student.name}'s supervisor as an evaluator. Please select different panels.`,
+          student: student.name,
+          supervisorConflict: true,
+        });
+      }
 
       for (const panelId of panelIds) {
         const panel = await User.findById(panelId);

@@ -1,343 +1,500 @@
-const crypto = require('crypto');
-const jwt = require('jsonwebtoken');
-const User = require('../models/User');
-const { logActivity } = require('../utils/logger');
-const { ec: EC } = require('elliptic'); // ✅ ADDED TRUE ELLIPTIC CURVE
+// src/controllers/authController.js
+const { plonk } = require("snarkjs");
+const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
+const { ec: EC } = require("elliptic");
+const jwt = require("jsonwebtoken");
+const User = require("../models/User"); // Ensure this path is correct
+const zkpService = require("../services/zkpService");
 
-// Initialize the secp256k1 Elliptic Curve for verification
-const ec = new EC('secp256k1');
+const EC_INSTANCE = new EC("secp256k1");
+const vkeyPath =
+  process.env.ZKP_VERIFICATION_KEY_PATH ||
+  path.join(__dirname, "../../zkp/keys/login_verification_key.json");
 
-// Helper: Generate device ID from user agent and IP
-const generateDeviceId = (userAgent, ipAddress) => {
-  const data = `${userAgent}-${ipAddress}`;
-  return crypto.createHash('sha256').update(data).digest('hex').substring(0, 16);
+let verificationKey = null;
+const loadVerificationKey = () => {
+  if (verificationKey) return verificationKey;
+
+  if (!fs.existsSync(vkeyPath)) {
+    throw new Error(
+      `ZKP verification key not found at ${vkeyPath}. Set ZKP_VERIFICATION_KEY_PATH or add the key file to the project.`,
+    );
+  }
+
+  verificationKey = require(vkeyPath);
+  return verificationKey;
 };
 
-// Helper: Parse user agent to device name
-const parseDeviceName = (userAgent) => {
-  let browser = 'Unknown Browser';
-  let os = 'Unknown OS';
-  if (userAgent.includes('Chrome')) browser = 'Chrome';
-  else if (userAgent.includes('Firefox')) browser = 'Firefox';
-  else if (userAgent.includes('Safari')) browser = 'Safari';
-  else if (userAgent.includes('Edge')) browser = 'Edge';
-  if (userAgent.includes('Windows')) os = 'Windows';
-  else if (userAgent.includes('Mac')) os = 'macOS';
-  else if (userAgent.includes('Linux')) os = 'Linux';
-  else if (userAgent.includes('Android')) os = 'Android';
-  else if (userAgent.includes('iPhone') || userAgent.includes('iPad')) os = 'iOS';
-  return `${browser} on ${os}`;
-};
-
-// ==========================================
-// REGISTRATION & VERIFICATION
-// ==========================================
-
-exports.checkRegistration = async (req, res) => {
+const verifySchnorrProof = (proof, challenge, publicKeyHex) => {
   try {
-    const { userId } = req.body;
-    if (!userId) return res.status(400).json({ success: false, message: 'User ID is required' });
+    if (!proof || !challenge || !publicKeyHex) return false;
 
-    const user = await User.findOne({ userId: userId.toString() });
-    if (!user) return res.json({ success: true, userExists: false, registered: false, message: 'User not found. Contact admin.' });
+    const parsedProof = typeof proof === "string" ? JSON.parse(proof) : proof;
+    const { R, s } = parsedProof;
+    if (!R || !s) return false;
 
-    const isRegistered = user.zkpRegistered && !!user.zkpPublicKey;
-    
-    res.json({ 
-      success: true, 
-      userExists: true, 
-      registered: isRegistered, 
-      requiresCode: !!user.registrationCode,
-      message: isRegistered ? 'Registered' : 'Not registered' 
-    });
+    const publicKey = EC_INSTANCE.keyFromPublic(publicKeyHex, "hex");
+    const R_point = EC_INSTANCE.curve.decodePoint(R, "hex");
+
+    const hInput = publicKeyHex + R + challenge;
+    const hHex = crypto.createHash("sha256").update(hInput).digest("hex");
+    const hBN = EC_INSTANCE.keyFromPrivate(hHex, "hex").getPrivate();
+    const sBN = EC_INSTANCE.keyFromPrivate(s, "hex").getPrivate();
+
+    const left = EC_INSTANCE.g.mul(sBN);
+    const right = R_point.add(publicKey.getPublic().mul(hBN));
+
+    return left.eq(right);
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to check registration status', error: error.message });
+    console.error("Schnorr proof verification error:", error);
+    return false;
   }
 };
 
+const JWT_SECRET = process.env.JWT_SECRET || "your-fallback-secret-key";
+
+// 1. ZKP REGISTRATION CONTROLLER
 exports.registerZKP = async (req, res) => {
   try {
     const { userId, publicKey, registrationCode } = req.body;
-    if (!userId || !publicKey) return res.status(400).json({ success: false, message: 'User ID and public key are required' });
+    if (!userId || !publicKey || !registrationCode) {
+      return res.status(400).json({
+        success: false,
+        message: "userId, publicKey, and registrationCode are required.",
+      });
+    }
 
-    const user = await User.findOne({ userId: userId.toString() });
-    if (!user) return res.status(404).json({ success: false, message: 'User not found.' });
-    if (user.zkpRegistered) return res.status(400).json({ success: false, message: 'User already registered' });
+    const user = await User.findOne({ userId });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
+    }
 
-    if (user.registrationCode) {
-      if (!registrationCode || user.registrationCode !== registrationCode) {
-        if(logActivity) await logActivity(user._id, 'REGISTRATION_FAILED', `Invalid registration code attempt`, req);
-        return res.status(401).json({ success: false, message: 'Invalid Registration Code. Please check with the Admin.' });
-      }
+    if (user.zkpRegistered) {
+      return res.status(400).json({
+        success: false,
+        message: "This user already has a registered ZKP identity.",
+      });
+    }
+
+    if (!user.registrationCode || user.registrationCode !== registrationCode) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid registration code.",
+      });
     }
 
     user.zkpPublicKey = publicKey;
     user.zkpRegistered = true;
-    user.registrationCode = null; 
+    user.registrationCode = null;
     await user.save();
 
-    if(logActivity) await logActivity(user._id, 'USER_REGISTERED', `Successfully registered ZKP Identity bound to device`, req);
-
-    res.json({ success: true, message: 'ZKP identity registered successfully' });
+    res.json({
+      success: true,
+      message: "ZKP registration completed successfully.",
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Registration failed', error: error.message });
+    console.error("🔴 ZKP Registration Error:", error.message);
+    console.error("🔴 Error Stack:", error.stack);
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: error.message || "An internal server error occurred.",
+      });
   }
 };
 
-exports.generateChallenge = async (req, res) => {
+exports.checkRegistration = async (req, res) => {
   try {
     const { userId } = req.body;
-    if (!userId) return res.status(400).json({ success: false, message: 'User ID is required' });
+    if (!userId) {
+      return res
+        .status(400)
+        .json({ success: false, message: "userId is required." });
+    }
 
-    const user = await User.findOne({ userId: userId.toString() });
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-    if (!user.zkpRegistered || !user.zkpPublicKey) return res.status(403).json({ success: false, message: 'Not registered for ZKP' });
+    const user = await User.findOne({ userId });
+    if (!user) {
+      return res.json({ success: true, userExists: false, registered: false });
+    }
 
-    const challengeValue = crypto.randomBytes(32).toString('hex');
-    user.zkpChallenge = challengeValue;
-    user.zkpChallengeExpiry = new Date(Date.now() + 5 * 60 * 1000); // 5 mins
-    await user.save();
-
-    res.json({ success: true, challenge: challengeValue, expiresAt: user.zkpChallengeExpiry });
+    res.json({
+      success: true,
+      userExists: true,
+      registered: !!user.zkpRegistered,
+      role: user.role,
+      name: user.name,
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Error generating challenge', error: error.message });
+    console.error("Check Registration Error:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "An internal server error occurred." });
   }
 };
 
-exports.verifyProof = async (req, res) => {
+exports.generateRegistrationChallenge = async (req, res) => {
+  res.status(501).json({
+    success: false,
+    message: "Registration challenge endpoint is not implemented.",
+  });
+};
+
+exports.verifyRegistration = async (req, res) => {
+  res.status(501).json({
+    success: false,
+    message: "Registration verification endpoint is not implemented.",
+  });
+};
+
+exports.generateLoginChallenge = async (req, res) => {
   try {
-    const { userId, proof, trustDevice, deviceId: clientDeviceId } = req.body;
-    const userAgent = req.headers['user-agent'] || 'Unknown';
-    const ipAddress = req.ip || req.connection.remoteAddress || 'Unknown';
-
-    // ✅ NEW: Expecting { R, s } from the frontend
-    if (!userId || !proof || !proof.R || !proof.s) {
-      return res.status(400).json({ success: false, message: 'Invalid mathematical proof format.' });
+    const { userId } = req.body;
+    if (!userId) {
+      return res
+        .status(400)
+        .json({ success: false, message: "userId is required." });
     }
 
-    const user = await User.findOne({ userId: userId.toString() });
-    if (!user || !user.zkpChallenge || new Date() > user.zkpChallengeExpiry) {
-      return res.status(400).json({ success: false, message: 'Invalid or expired challenge' });
+    const user = await User.findOne({ userId });
+    if (!user || !user.zkpRegistered) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found or not registered." });
     }
 
-    // ==========================================
-    // REAL SCHNORR ZKP VERIFICATION
-    // ==========================================
-    let isValid = false;
-    try {
-      // 1. Reconstruct the mathematical challenge scalar (h)
-      const h_input = user.zkpPublicKey + proof.R + user.zkpChallenge;
-      const h_hex = crypto.createHash('sha256').update(h_input).digest('hex');
-      const h_bn = ec.keyFromPrivate(h_hex).getPrivate(); // Convert Hex to BigNumber
+    const challenge = zkpService.generateChallenge();
+    user.zkpChallenge = challenge;
+    user.zkpChallengeExpiry = new Date(
+      Date.now() + (parseInt(process.env.ZKP_CHALLENGE_EXPIRY, 10) || 300000),
+    );
+    await user.save();
 
-      // 2. Set up the Elliptic Curve Points
-      const s_bn = ec.keyFromPrivate(proof.s).getPrivate();
-      const sG = ec.g.mul(s_bn); // Left side of equation: s * G
+    res.json({ success: true, challenge, expiresAt: user.zkpChallengeExpiry });
+  } catch (error) {
+    console.error("Generate Login Challenge Error:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "An internal server error occurred." });
+  }
+};
 
-      const Y = ec.keyFromPublic(user.zkpPublicKey, 'hex').getPublic(); // User's Public Key
-      const R_point = ec.keyFromPublic(proof.R, 'hex').getPublic();     // Commitment (R)
-      
-      // 3. Right side of equation: R + (h * Y)
-      const hY = Y.mul(h_bn);
-      const R_plus_hY = R_point.add(hY);
-
-      // 4. Verification Check: Does s * G == R + (h * Y)?
-      isValid = sG.eq(R_plus_hY);
-    } catch (mathError) {
-      console.error('❌ ZKP Math Verification Error:', mathError);
-      isValid = false;
+exports.verifyDeviceProof = async (req, res) => {
+  try {
+    const { userId, proof, trustDevice = false, deviceId } = req.body;
+    if (!userId || !proof) {
+      return res
+        .status(400)
+        .json({ success: false, message: "userId and proof are required." });
     }
 
-    if (!isValid) return res.status(401).json({ success: false, message: 'Cryptographic proof verification failed.' });
+    const user = await User.findOne({ userId });
+    if (!user || !user.zkpRegistered || !user.zkpPublicKey) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found or not registered." });
+    }
 
-    const deviceId = clientDeviceId || generateDeviceId(userAgent, ipAddress);
-    
-    if (typeof user.addDevice === 'function') {
-      user.addDevice({ deviceId, deviceName: parseDeviceName(userAgent), userAgent, ipAddress, trustStatus: trustDevice || false });
+    if (
+      !user.zkpChallenge ||
+      !user.zkpChallengeExpiry ||
+      new Date() > user.zkpChallengeExpiry
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Challenge expired or missing. Request a new challenge.",
+      });
+    }
+
+    const valid = verifySchnorrProof(
+      proof,
+      user.zkpChallenge,
+      user.zkpPublicKey,
+    );
+    if (!valid) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid ZKP proof." });
+    }
+
+    const finalDeviceId =
+      deviceId || `dev_${Math.random().toString(36).substring(2, 15)}`;
+    const existingDevice = user.authenticatedDevices.find(
+      (d) => d.deviceId === finalDeviceId,
+    );
+    if (existingDevice) {
+      existingDevice.isActive = true;
+      existingDevice.trusted = trustDevice;
+      existingDevice.lastSeen = new Date();
+    } else {
+      user.authenticatedDevices.push({
+        deviceId: finalDeviceId,
+        isActive: true,
+        trusted: trustDevice,
+        createdAt: new Date(),
+        lastSeen: new Date(),
+      });
     }
 
     user.zkpChallenge = null;
     user.zkpChallengeExpiry = null;
-    user.lastLogin = new Date();
     await user.save();
 
-    if(logActivity) await logActivity(user._id, 'LOGIN_SUCCESS', `Logged in from ${parseDeviceName(userAgent)}`, req);
-
     const token = jwt.sign(
-      { userId: user._id, role: user.role, deviceId },
-      process.env.JWT_SECRET || 'your-secret-key-change-this',
-      { expiresIn: '7d' }
+      {
+        userId: user._id,
+        role: user.role,
+        name: user.name,
+        deviceId: finalDeviceId,
+      },
+      JWT_SECRET,
+      { expiresIn: "8h" },
     );
 
     res.json({
-      success: true, token,
-      user: { id: user._id, userId: user.userId, name: user.name, role: user.role }
+      success: true,
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        role: user.role,
+        userId: user.userId,
+      },
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Verification failed', error: error.message });
+    console.error("Verify Device Proof Error:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "An internal server error occurred." });
   }
 };
 
-// ==========================================
-// SECURE DEVICE PAIRING (QR & NO-CAMERA SYNC)
-// ==========================================
+exports.loginWithZKP = exports.verifyDeviceProof;
 
 exports.requestPairingCode = async (req, res) => {
   try {
     const { userId, tempPublicKeyBase64 } = req.body;
+    if (!userId || !tempPublicKeyBase64) {
+      return res.status(400).json({
+        success: false,
+        message: "userId and tempPublicKeyBase64 are required.",
+      });
+    }
+
     const user = await User.findOne({ userId });
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
+    }
 
     const pairingCode = Math.floor(100000 + Math.random() * 900000).toString();
     user.zkpPairingCode = pairingCode;
-    user.zkpTempPublicKey = tempPublicKeyBase64 || null; 
-    user.zkpPairingExpiry = new Date(Date.now() + 3 * 60 * 1000); 
-    user.zkpEncryptedPayload = null;
+    user.zkpPairingTempPublicKey = tempPublicKeyBase64;
+    user.zkpPairingPayload = null;
+    user.zkpPairingExpiresAt = new Date(Date.now() + 15 * 60 * 1000);
     await user.save();
 
-    if(logActivity) await logActivity(user._id, 'DEVICE_SYNC_REQUESTED', `Requested pairing code to sync to a new device`, req);
-
-    res.json({ success: true, pairingCode, expiresAt: user.zkpPairingExpiry });
+    res.json({
+      success: true,
+      pairingCode,
+      expiresAt: user.zkpPairingExpiresAt,
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Error generating code', error: error.message });
+    console.error("Request Pairing Code Error:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "An internal server error occurred." });
   }
 };
 
 exports.getTempPublicKey = async (req, res) => {
   try {
     const { pairingCode } = req.body;
-    const user = await User.findById(req.user.id); 
-
-    if (user.zkpPairingCode !== pairingCode || new Date() > user.zkpPairingExpiry) {
-      return res.status(400).json({ success: false, message: 'Invalid or expired 6-digit code' });
+    if (!pairingCode) {
+      return res
+        .status(400)
+        .json({ success: false, message: "pairingCode is required." });
     }
 
-    if (!user.zkpTempPublicKey) {
-      return res.status(400).json({ success: false, message: 'The requesting device did not provide a secure key.' });
+    const user = await User.findOne({ zkpPairingCode: pairingCode });
+    if (!user || !user.zkpPairingTempPublicKey) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Pairing session not found." });
     }
 
-    res.json({ success: true, tempPublicKeyBase64: user.zkpTempPublicKey });
+    if (!user.zkpPairingExpiresAt || new Date() > user.zkpPairingExpiresAt) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Pairing session expired." });
+    }
+
+    res.json({
+      success: true,
+      tempPublicKeyBase64: user.zkpPairingTempPublicKey,
+      expiresAt: user.zkpChallengeExpiry,
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to fetch pairing key', error: error.message });
+    console.error("Get Temp Public Key Error:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "An internal server error occurred." });
   }
 };
 
 exports.submitEncryptedKey = async (req, res) => {
   try {
     const { pairingCode, encryptedPayload } = req.body;
-    const user = await User.findById(req.user.id);
-
-    if (user.zkpPairingCode !== pairingCode || new Date() > user.zkpPairingExpiry) {
-      return res.status(400).json({ success: false, message: 'Invalid or expired code' });
+    if (!pairingCode || !encryptedPayload) {
+      return res.status(400).json({
+        success: false,
+        message: "pairingCode and encryptedPayload are required.",
+      });
     }
 
-    user.zkpEncryptedPayload = encryptedPayload;
+    const user = await User.findOne({ zkpPairingCode: pairingCode });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Pairing session not found." });
+    }
+
+    user.zkpPairingPayload = encryptedPayload;
     await user.save();
-    
-    if(logActivity) await logActivity(user._id, 'DEVICE_SYNC_SUBMITTED', `Securely encrypted and transferred private keys`, req);
-    
-    res.json({ success: true, message: 'Key transferred securely' });
+
+    res.json({
+      success: true,
+      message: "Encrypted key submitted successfully.",
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Error submitting key', error: error.message });
+    console.error("Submit Encrypted Key Error:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "An internal server error occurred." });
   }
 };
 
 exports.pollEncryptedKey = async (req, res) => {
   try {
     const { userId, pairingCode } = req.body;
-    const user = await User.findOne({ userId });
-
-    if (!user || user.zkpPairingCode !== pairingCode || new Date() > user.zkpPairingExpiry) {
-      return res.status(400).json({ success: false, message: 'Invalid or expired session' });
+    if (!userId || !pairingCode) {
+      return res.status(400).json({
+        success: false,
+        message: "userId and pairingCode are required.",
+      });
     }
 
-    if (!user.zkpEncryptedPayload) {
-      return res.status(202).json({ success: true, status: 'waiting' });
+    const user = await User.findOne({
+      userId,
+      zkpPairingCode: pairingCode,
+    });
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Pairing session not found." });
     }
 
-    const payload = user.zkpEncryptedPayload;
-    
+    if (!user.zkpPairingExpiresAt || new Date() > user.zkpPairingExpiresAt) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Pairing session expired." });
+    }
+
+    if (!user.zkpPairingPayload) {
+      return res.json({ success: true, status: "waiting" });
+    }
+
+    const payload = user.zkpPairingPayload;
     user.zkpPairingCode = null;
-    user.zkpPairingExpiry = null;
-    user.zkpEncryptedPayload = null;
-    user.zkpTempPublicKey = null; 
+    user.zkpPairingTempPublicKey = null;
+    user.zkpPairingPayload = null;
+    user.zkpChallengeExpiry = null;
     await user.save();
 
-    if(logActivity) await logActivity(user._id, 'DEVICE_SYNC_COMPLETED', `Successfully synced keys to a new device`, req);
-
-    res.json({ success: true, status: 'complete', encryptedPayload: payload });
+    return res.json({
+      success: true,
+      status: "complete",
+      encryptedPayload: payload,
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Error polling key', error: error.message });
+    console.error("Poll Encrypted Key Error:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "An internal server error occurred." });
   }
 };
 
-// ==========================================
-// UTILITIES & USER MANAGEMENT
-// ==========================================
-
 exports.getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('-zkpChallenge -zkpChallengeExpiry -zkpPublicKey -zkpPairingCode -zkpEncryptedPayload -zkpTempPublicKey');
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    const user = await User.findById(req.user.id).select(
+      "name role userId email",
+    );
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
     res.json({ success: true, user });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Error fetching user', error: error.message });
+    console.error("Get Me Error:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "An internal server error occurred." });
   }
 };
 
 exports.getMyDevices = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id);
-    const devices = (user.authenticatedDevices || []).map(device => ({
-      deviceId: device.deviceId, deviceName: device.deviceName, trustStatus: device.trustStatus, lastLogin: device.lastLogin, isActive: device.isActive
-    }));
-    res.json({ success: true, devices });
+    const user = await User.findById(req.user.id).select(
+      "authenticatedDevices",
+    );
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
+    res.json({ success: true, devices: user.authenticatedDevices || [] });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to get devices', error: error.message });
+    console.error("Get My Devices Error:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "An internal server error occurred." });
   }
 };
 
 exports.removeDevice = async (req, res) => {
   try {
+    const { deviceId } = req.params;
     const user = await User.findById(req.user.id);
-    if (typeof user.removeDevice === 'function') {
-      user.removeDevice(req.params.deviceId);
-      await user.save();
-    }
-    if(logActivity) await logActivity(user._id, 'DEVICE_REMOVED', `Revoked access for a device`, req);
-    res.json({ success: true, message: 'Device removed' });
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found." });
+
+    user.authenticatedDevices = user.authenticatedDevices.filter(
+      (d) => d.deviceId !== deviceId,
+    );
+    await user.save();
+
+    res.json({ success: true, message: "Device removed successfully." });
   } catch (error) {
-    res.status(500).json({ success: false, message: 'Failed to remove device', error: error.message });
+    console.error("Remove Device Error:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "An internal server error occurred." });
   }
 };
 
 exports.updateKeys = async (req, res) => {
-  try {
-    const { zkpPublicKey } = req.body;
-    if (!zkpPublicKey) return res.status(400).json({ success: false, message: 'ZKP public key is required' });
-
-    const user = await User.findById(req.user.id);
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
-
-    user.zkpPublicKey = zkpPublicKey;
-    user.zkpChallenge = null; 
-    await user.save();
-
-    if(logActivity) await logActivity(user._id, 'KEYS_UPDATED', `Updated cryptographic keys`, req);
-
-    res.json({ success: true, message: 'ZKP keys updated successfully' });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Error updating keys', error: error.message });
-  }
+  res.status(501).json({
+    success: false,
+    message: "Key update endpoint is not implemented.",
+  });
 };
 
 exports.verifyAuth = async (req, res) => {
-  try {
-    res.json({
-      success: true, authenticated: true,
-      user: { id: req.user._id, userId: req.user.userId, name: req.user.name, role: req.user.role }
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: 'Error verifying authentication' });
-  }
+  res.json({ success: true, message: "Token is valid.", user: req.user });
 };
