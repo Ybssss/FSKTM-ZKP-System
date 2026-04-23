@@ -46,20 +46,32 @@ export const AuthProvider = ({ children }) => {
         throw new Error("No cryptographic keys found for this device.");
       }
 
-      // Check for existing device ID, or create a new one
       let deviceId = localStorage.getItem("zkp_device_id");
       if (!deviceId) {
         deviceId = "dev_" + Math.random().toString(36).substring(2, 15);
+        localStorage.setItem("zkp_device_id", deviceId);
       }
 
       console.log("📝 Requesting challenge...");
       const challengeResponse = await authAPI.getChallenge(userId);
 
       console.log("🔑 Generating Proof using zkp.js...");
+      // X-RAY: We capture exactly what zkp.js spits out
       const proofObject = await zkp.generateProof(
         userId,
         challengeResponse.challenge,
       );
+      console.log("📦 SHAPE OF GENERATED PROOF:", proofObject);
+
+      if (typeof proofObject === "string") {
+        console.error(
+          "🚨 ALERT: zkp.js generated a string! Your browser is still running the old RSA/HMAC code!",
+        );
+      } else if (proofObject.R && proofObject.s) {
+        console.log(
+          "✅ SUCCESS: zkp.js generated a valid Elliptic Curve { R, s } object!",
+        );
+      }
 
       console.log("🔍 Verifying proof with server...");
       const verifyResponse = await authAPI.verify(
@@ -72,14 +84,8 @@ export const AuthProvider = ({ children }) => {
       if (!verifyResponse.success)
         throw new Error(verifyResponse.message || "Authentication failed");
 
-      // Save the exact device ID the server verified/created
-      localStorage.setItem(
-        "zkp_device_id",
-        verifyResponse.user.deviceId || deviceId,
-      );
       localStorage.setItem("token", verifyResponse.token);
       localStorage.setItem("user", JSON.stringify(verifyResponse.user));
-
       setUser(verifyResponse.user);
 
       return { success: true, user: verifyResponse.user };
@@ -118,23 +124,10 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = () => {
-    let userId = user?.userId;
-    if (!userId) {
-      const storedUser = localStorage.getItem("user");
-      if (storedUser) userId = JSON.parse(storedUser).userId;
-    }
-
+    const userId = user?.userId;
     const trustDevice =
       localStorage.getItem(`zkp_trust_device_${userId}`) === "true";
-
-    // If it is a temporary/untrusted session (like a public lab computer)
-    if (!trustDevice && userId) {
-      console.log("Wiping temporary ZKP keys and device trace...");
-      zkp.deleteKeys(userId); // They must pair again!
-      localStorage.removeItem("zkp_device_id"); // Destroy the device trace
-    }
-
-    // Standard session cleanup
+    if (!trustDevice && userId) zkp.deleteKeys(userId);
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     setUser(null);

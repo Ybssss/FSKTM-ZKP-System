@@ -204,6 +204,10 @@ class ZKPAuth {
 
     return new TextDecoder().decode(decryptedPayload);
   }
+
+  async decryptPayload(privateKey, encryptedPackageString) {
+    return await this.decryptSyncKey(encryptedPackageString, privateKey);
+  }
 }
 
 export default new ZKPAuth();

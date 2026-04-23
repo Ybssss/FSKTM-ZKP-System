@@ -7,8 +7,8 @@ const path = require("path");
 const User = require("../models/User");
 const Session = require("../models/Session");
 const Evaluation = require("../models/Evaluation");
-const Timetable = require("../models/Timetable");
 
+// Load environment variables dynamically
 const envPath = path.join(__dirname, "../../.env");
 dotenv.config({ path: envPath });
 
@@ -17,222 +17,368 @@ const MONGO_URI = process.env.MONGO_URI;
 if (!MONGO_URI) {
   console.error(`FATAL ERROR: MONGO_URI is undefined.`);
   console.error(`We looked for the .env file exactly here: ${envPath}`);
-  console.error(
-    `Please ensure the file is named exactly '.env' and NOT 'env.txt' or '.env.txt'`,
-  );
   process.exit(1);
 }
 
 const seedDatabase = async () => {
   try {
-    console.log("Connecting to MongoDB Atlas...");
-    await mongoose.connect(MONGO_URI);
-    console.log("Database connected successfully.");
+    console.log("🔌 Connecting to MongoDB Atlas...");
+    await mongoose.connect(MONGO_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    console.log("✅ Database connected successfully.\n");
 
     // 1. Clean the database
-    console.log("Cleaning old data from collections...");
+    console.log("🧹 Cleaning old data from collections...");
     await Evaluation.deleteMany({});
     await Session.deleteMany({});
     await User.deleteMany({});
-    await Timetable.deleteMany({});
-    console.log("Old data cleaned.");
+    console.log("✅ Old data cleaned.\n");
 
-    // 2. Create Users (Admins, Panels, Students)
-    console.log("Seeding new users...");
+    // 2. Create Real FSKTM Users
+    console.log(
+      "👨‍🏫 Seeding real FSKTM UTHM staff from community.uthm.edu.my...",
+    );
+
     const usersData = [
-      // Admins & Superadmin
+      // === ADMINS ===
       {
-        userId: "superadmin",
-        name: "Prof. Dr. Head of Graduate Studies",
-        email: "superadmin@uthm.edu.my",
-        role: "superadmin",
-        registrationCode: "REG-SUPERADMIN",
-      },
-      {
-        userId: "samihah",
-        name: "Dr. Samihah Binti Che Dalim",
+        userId: "admin_samihah",
+        name: "Dr. CHE SAMIHAH BINTI CHE DALIM",
         email: "samihah@uthm.edu.my",
         role: "admin",
-        expertiseTags: ["Multimedia", "HCI", "User Experience"],
-        registrationCode: "REG-SAMIH",
+        registrationCode: "123456",
+        expertiseTags: [
+          "Multimedia",
+          "Human-Computer Interaction (HCI)",
+          "AR/VR",
+        ],
       },
       {
-        userId: "registrar",
-        name: "En. Registrar FSKTM",
-        email: "registrar@uthm.edu.my",
+        userId: "admin_pendaftar",
+        name: "En. Pendaftar FSKTM",
+        email: "pendaftar.fsktm@uthm.edu.my",
         role: "admin",
-        registrationCode: "REG-REGISTRAR",
+        registrationCode: "123456",
       },
 
-      // Panels
+      // === REAL FSKTM PANELS (Jabatan Kejuruteraan Perisian) ===
       {
-        userId: "ahmad",
-        name: "Prof. Dr. Ahmad",
-        email: "ahmad@uthm.edu.my",
+        userId: "stf_abdsamad",
+        name: "PROF. Dr. ABD SAMAD BIN HASAN BASARI",
+        email: "abdsamad@uthm.edu.my",
         role: "panel",
-        expertiseTags: [
-          "AI",
-          "Machine Learning",
-          "Data Science",
-          "Network Traffic",
-        ],
-        registrationCode: "REG-AHMAD",
-      },
-      {
-        userId: "kamal",
-        name: "Dr. Kamal",
-        email: "kamal@uthm.edu.my",
-        role: "panel",
+        registrationCode: "123456",
         expertiseTags: [
           "Software Engineering",
-          "ZKP",
-          "Cryptography",
-          "Authentication",
+          "Optimization",
+          "Artificial Intelligence",
         ],
-        registrationCode: "REG-KAMAL",
+      },
+      {
+        userId: "stf_abdullahm",
+        name: "Dr. ABDULLAH ABDURAHMAN MOHAMED AHMED",
+        email: "abdullahm@uthm.edu.my",
+        role: "panel",
+        registrationCode: "123456",
+        expertiseTags: [
+          "Software Engineering",
+          "Data Mining",
+          "Machine Learning",
+        ],
+      },
+      {
+        userId: "stf_azizulr",
+        name: "PROF. MADYA Ts. Dr. AZIZUL AZHAR BIN RAMLI",
+        email: "azizulr@uthm.edu.my",
+        role: "panel",
+        registrationCode: "123456",
+        expertiseTags: ["Software Engineering", "Data Analytics", "IoT"],
       },
 
-      // Students (Will assign supervisors below)
+      // === REAL FSKTM PANELS (Jabatan Keselamatan Maklumat dan Teknologi Web) ===
       {
-        userId: "ali",
-        matricNumber: "AI123456",
-        name: "Ali Bin Abu",
+        userId: "stf_tajudin",
+        name: "Ts. AHMAD TAJUDIN BIN BAHARIN",
+        email: "tajudin@uthm.edu.my",
+        role: "panel",
+        registrationCode: "123456",
+        expertiseTags: [
+          "Information Security",
+          "Web Technology",
+          "Cybersecurity",
+        ],
+      },
+      {
+        userId: "stf_feresa",
+        name: "Dr. CIK FERESA BINTI MOHD FOOZY",
+        email: "feresa@uthm.edu.my",
+        role: "panel",
+        registrationCode: "123456",
+        expertiseTags: [
+          "Information Security",
+          "Network Security",
+          "Cryptography",
+        ],
+      },
+      {
+        userId: "stf_deden",
+        name: "Ts. Dr. DEDEN WITARSYAH",
+        email: "deden@uthm.edu.my",
+        role: "panel",
+        registrationCode: "123456",
+        expertiseTags: [
+          "Cybersecurity",
+          "Web Application Security",
+          "Database Security",
+        ],
+      },
+      {
+        userId: "stf_firkhan",
+        name: "Dr. FIRKHAN ALI BIN HAMID ALI",
+        email: "firkhan@uthm.edu.my",
+        role: "panel",
+        registrationCode: "123456",
+        expertiseTags: [
+          "Information Security",
+          "Malware Analysis",
+          "Digital Forensics",
+        ],
+      },
+      {
+        userId: "stf_hairuln",
+        name: "PROF. Ts. Dr. HAIRULNIZAM BIN MAHDIN",
+        email: "hairuln@uthm.edu.my",
+        role: "panel",
+        registrationCode: "123456",
+        expertiseTags: ["Information Security", "Big Data", "Cloud Computing"],
+      },
+      {
+        userId: "stf_hana",
+        name: "PUAN HANAYANTI BINTI HAFIT",
+        email: "hana@uthm.edu.my",
+        role: "panel",
+        registrationCode: "123456",
+        expertiseTags: ["Web Technology", "Database", "E-Commerce"],
+      },
+      {
+        userId: "stf_rahmi",
+        name: "PROF. MADYA Ts. Dr. ISREDZA RAHMI BINTI A HAMID",
+        email: "rahmi@uthm.edu.my",
+        role: "panel",
+        registrationCode: "123456",
+        expertiseTags: [
+          "Information Security",
+          "Network Security",
+          "Steganography",
+        ],
+      },
+      {
+        userId: "stf_malik",
+        name: "PROF. MADYA Dr. KAMARUDDIN MALIK BIN MOHAMAD",
+        email: "malik@uthm.edu.my",
+        role: "panel",
+        registrationCode: "123456",
+        expertiseTags: [
+          "Network Security",
+          "Wireless Sensor Networks",
+          "IoT Security",
+        ],
+      },
+
+      // === REAL FSKTM PANELS (Jabatan Multimedia) ===
+      {
+        userId: "stf_ezak",
+        name: "Dr. EZAK FADZRIN BIN AHMAD SHAUBARI",
+        email: "ezak@uthm.edu.my",
+        role: "panel",
+        registrationCode: "123456",
+        expertiseTags: ["Multimedia System", "Computer Vision", "Animation"],
+      },
+      {
+        userId: "stf_azizanis",
+        name: "ENCIK AZIZAN BIN ISMAIL",
+        email: "azizanis@uthm.edu.my",
+        role: "panel",
+        registrationCode: "123456",
+        expertiseTags: ["Multimedia", "Digital Media", "Graphic Design"],
+      },
+
+      // === STUDENTS ===
+      {
+        userId: "AW240001",
+        name: "Muhammad Ali Bin Abu Bakar",
         email: "ali@student.uthm.edu.my",
         role: "student",
-        registrationCode: "REG-ALI",
+        registrationCode: "123456",
       },
       {
-        userId: "siti",
-        matricNumber: "AI654321",
-        name: "Siti Nurhaliza",
+        userId: "AW240002",
+        name: "Siti Nuraisyah Binti Abdullah",
         email: "siti@student.uthm.edu.my",
         role: "student",
-        registrationCode: "REG-SITI",
+        registrationCode: "123456",
+      },
+      {
+        userId: "AW240003",
+        name: "Chong Wei Ming",
+        email: "chong@student.uthm.edu.my",
+        role: "student",
+        registrationCode: "123456",
       },
     ];
+
     const createdUsers = await User.create(usersData);
 
-    // Get references to specific users for relationships
-    const drSamihah = createdUsers.find(
-      (u) => u.email === "samihah@uthm.edu.my",
-    );
-    const profAhmad = createdUsers.find((u) => u.email === "ahmad@uthm.edu.my");
-    const drKamal = createdUsers.find((u) => u.email === "kamal@uthm.edu.my");
-    let ali = createdUsers.find((u) => u.email === "ali@student.uthm.edu.my");
-    let siti = createdUsers.find((u) => u.email === "siti@student.uthm.edu.my");
+    // Helper function to find user ID by email
+    const getUserId = (email) =>
+      createdUsers.find((u) => u.email === email)._id;
 
-    // Assign Supervisors to Students
-    ali.supervisorId = profAhmad._id;
-    siti.supervisorId = drKamal._id;
+    // Assign Supervisors to Students based on matching expertise
+    const ali = createdUsers.find((u) => u.email === "ali@student.uthm.edu.my");
+    const siti = createdUsers.find(
+      (u) => u.email === "siti@student.uthm.edu.my",
+    );
+    const chong = createdUsers.find(
+      (u) => u.email === "chong@student.uthm.edu.my",
+    );
+
+    ali.supervisorId = getUserId("abdsamad@uthm.edu.my"); // Ali's supervisor is Prof Abd Samad
+    siti.supervisorId = getUserId("feresa@uthm.edu.my"); // Siti's supervisor is Dr Feresa
+    chong.supervisorId = getUserId("samihah@uthm.edu.my"); // Chong's supervisor is Dr Samihah
+
     await ali.save();
     await siti.save();
+    await chong.save();
 
-    console.log(`${createdUsers.length} users seeded.`);
+    console.log(`✅ ${createdUsers.length} FSKTM staff and students seeded.\n`);
 
     // 3. Create Evaluation Sessions
-    console.log("Seeding new sessions...");
+    console.log("📅 Seeding Evaluation Sessions...");
     const sessionsData = [
-      // A) A completed session from last semester for historical search testing
+      // Session 1: PROPOSAL_DEFENSE (Completed session in the past for Historical Search)
       {
         studentId: ali._id,
         sessionType: "PROPOSAL_DEFENSE",
         semester: "Semester 2, 2024/2025",
-        panel1Id: drSamihah._id,
-        panel2Id: drKamal._id,
+        panel1Id: getUserId("azizulr@uthm.edu.my"), // Ensuring no conflict of interest
+        panel2Id: getUserId("abdullahm@uthm.edu.my"),
       },
-      // B) A newly scheduled session for this semester to show on the dashboard
+      // Session 2: UPGRADING (Currently active session)
       {
         studentId: siti._id,
         sessionType: "UPGRADING",
         semester: "Semester 1, 2025/2026",
-        panel1Id: drSamihah._id,
-        panel2Id: profAhmad._id,
+        panel1Id: getUserId("hairuln@uthm.edu.my"),
+        panel2Id: getUserId("malik@uthm.edu.my"),
+        supervisorEndorsed: true, // Required by UTHM Upgrading form
+      },
+      // Session 3: PRE_VIVA (Upcoming session)
+      {
+        studentId: chong._id,
+        sessionType: "PRE_VIVA",
+        semester: "Semester 1, 2025/2026",
+        panel1Id: getUserId("ezak@uthm.edu.my"),
+        panel2Id: getUserId("azizanis@uthm.edu.my"),
       },
     ];
     const createdSessions = await Session.create(sessionsData);
-    const historicalSession = createdSessions.find((s) =>
-      s.studentId.equals(ali._id),
-    );
+    console.log(`✅ ${createdSessions.length} sessions seeded.\n`);
 
-    console.log(`${createdSessions.length} sessions seeded.`);
+    // 4. Create Historical Evaluations (Mapped exactly to the UTHM 13-Criteria PDF Forms)
+    console.log("📋 Seeding exact UTHM Rubric evaluations (Criteria A-M)...");
 
-    // 3.5. Create Timetable Entries for Upcoming Sessions
-    console.log("Seeding timetable entries for upcoming sessions...");
-    const now = new Date();
-    const futureDate1 = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // 7 days from now
-    const futureDate2 = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000); // 14 days from now
+    const aliSession = createdSessions[0]; // Proposal Defense Session
 
-    const timetableData = [
-      {
-        sessionType: "PROPOSAL_DEFENSE",
-        title: "Proposal Defense - Ali Bin Abu",
-        description: "Research proposal defense for AI project",
-        date: futureDate1,
-        startTime: "10:00",
-        endTime: "12:00",
-        venue: "Conference Room A, FSKTM",
-        students: [ali._id],
-        panels: [drSamihah._id, drKamal._id],
-        createdBy: drSamihah._id,
-      },
-      {
-        sessionType: "UPGRADING",
-        title: "Upgrading Evaluation - Siti Nurhaliza",
-        description: "Master to PhD upgrading evaluation",
-        date: futureDate2,
-        startTime: "14:00",
-        endTime: "16:00",
-        venue: "Seminar Hall B, FSKTM",
-        students: [siti._id],
-        panels: [drSamihah._id, profAhmad._id],
-        createdBy: drSamihah._id,
-      },
-    ];
-    const createdTimetables = await Timetable.create(timetableData);
-    console.log(`${createdTimetables.length} timetable entries seeded.`);
-
-    // 4. Create Historical Evaluations for the completed session
-    console.log("Seeding historical evaluations for search testing...");
+    // The PDF Evaluation Rubric maps: 4=Exemplary, 3=Proficient, 2=Satisfactory, 1=Foundational, 0=Novice
     const evaluationsData = [
       {
-        sessionId: historicalSession._id,
-        panelId: drSamihah._id,
+        sessionId: aliSession._id,
         studentId: ali._id,
-        evaluatorId: drSamihah._id,
-        semester: "Semester 2, 2024/2025",
-        sessionType: "PROPOSAL_DEFENSE",
-        rubricScores: { crit_a: 3, crit_b: 4, crit_c: 3, crit_d: 4 },
-        totalMarks: 87.5,
+        evaluatorId: getUserId("azizulr@uthm.edu.my"),
+        semester: aliSession.semester,
+        sessionType: aliSession.sessionType,
+        scores: {
+          crit_a_title: 4, // Criteria A: PROPOSED RESEARCH TITLE
+          crit_b_exec_summary: 3, // Criteria B: EXECUTIVE SUMMARY
+          crit_c_problem_statement: 4, // Criteria C: PROBLEM STATEMENT & SIGNIFICANCE
+          crit_d_objective: 3, // Criteria D: OBJECTIVE OF STUDY
+          crit_e_literature: 2, // Criteria E: LITERATURE REVIEW
+          crit_f_methodology: 3, // Criteria F: METHODOLOGY
+          crit_g_preliminary_results: 4, // Criteria G: PRELIMINARY RESULTS
+          crit_h_method_reliability: 3, // Criteria H: METHOD RELIABILITY, VALIDITY AND ETHICS
+          crit_i_organization: 3, // Criteria I: ORGANIZATION OF IDEAS
+          crit_j_language: 2, // Criteria J: LANGUAGE AND WRITING STYLE
+          crit_k_references: 4, // Criteria K: REFERENCES AND CITATION
+          crit_l_presentation: 3, // Criteria L: ORAL PRESENTATION SKILLS
+          crit_m_deliberative: 3, // Criteria M: DELIBERATIVE ORAL EVALUATION
+        },
+        totalMarks: 78.84, // (41 marks / 52 max marks) * 100 = 78.84% -> PASS WITH MAJOR AMENDMENT
+        strengths:
+          "The problem statement is well-defined and contextually grounded.",
+        weaknesses:
+          "Literature review is highly descriptive rather than analytical. Some key authors are underrepresented.",
+        recommendations:
+          "Enhance the critical analysis in the literature review section.",
         overallComments:
-          "The literature review is comprehensive and well-structured. The proposed abstract clearly outlines the research scope. Good work.",
+          "Overall a good proposal. The candidate effectively applies appropriate tools and methods to analyse data. However, the literature review shows minimal interpretation with limited engagement with literature. Methodology issues must be addressed before proceeding.",
       },
       {
-        sessionId: historicalSession._id,
-        panelId: drKamal._id,
+        sessionId: aliSession._id,
         studentId: ali._id,
-        evaluatorId: drKamal._id,
-        semester: "Semester 2, 2024/2025",
-        sessionType: "PROPOSAL_DEFENSE",
-        rubricScores: { crit_a: 4, crit_b: 3, crit_c: 2, crit_d: 2 },
-        totalMarks: 68.75,
+        evaluatorId: getUserId("abdullahm@uthm.edu.my"),
+        semester: aliSession.semester,
+        sessionType: aliSession.sessionType,
+        scores: {
+          crit_a_title: 3,
+          crit_b_exec_summary: 3,
+          crit_c_problem_statement: 3,
+          crit_d_objective: 2,
+          crit_e_literature: 2,
+          crit_f_methodology: 2, // Satisfactory
+          crit_g_preliminary_results: 3,
+          crit_h_method_reliability: 3,
+          crit_i_organization: 3,
+          crit_j_language: 3,
+          crit_k_references: 3,
+          crit_l_presentation: 4,
+          crit_m_deliberative: 3,
+        },
+        totalMarks: 71.15, // (37 marks / 52 max marks) * 100 = 71.15% -> PASS WITH MAJOR AMENDMENT
+        strengths:
+          "Candidate presented a very good deliberative oral evaluation.",
+        weaknesses:
+          "Methodology reported outlines basic research procedures with only moderate alignment to objectives.",
+        recommendations:
+          "Revisit the connection between the methods and the research objectives.",
         overallComments:
-          "Your methodology section has some issues regarding the selection of cryptographic algorithms. The problem statement is strong, but the proposed methodology issues need refinement.",
+          "The methodology reported outlines the basic research procedures with moderate alignment to the objectives. Justification is present but limited. Practical application and problem-solving elements are evident but underdeveloped. Acceptable for the level of the academic programme enrolled, though improvement is needed.",
       },
     ];
-    await Evaluation.create(evaluationsData);
-    console.log(`${evaluationsData.length} historical evaluations seeded.`);
 
-    console.log("\n✅ Database seeded successfully!");
-    console.log("You can now test the system with the following users:");
-    createdUsers.forEach((u) =>
-      console.log(`- ${u.role}: ${u.name} (${u.email})`),
+    await Evaluation.create(evaluationsData);
+    console.log(`✅ Historical evaluations seeded successfully.\n`);
+
+    console.log("🎉==============================================🎉");
+    console.log("✅ DATABASE SEEDING COMPLETED SUCCESSFULLY! ✅");
+    console.log("🎉==============================================🎉");
+    console.log("\nYou can now test your system using these credentials:");
+    console.log("--------------------------------------------------");
+    console.log("ADMIN LOGIN: samihah@uthm.edu.my");
+    console.log("PANEL LOGIN 1 (Evaluator): azizulr@uthm.edu.my");
+    console.log("PANEL LOGIN 2 (Evaluator): abdullahm@uthm.edu.my");
+    console.log("PANEL LOGIN 3 (Ali's Supervisor): abdsamad@uthm.edu.my");
+    console.log("--------------------------------------------------");
+    console.log(
+      'Search Keyword Test: Log in as Admin and search "methodology issues" to find the historical comment!',
     );
   } catch (error) {
     console.error("❌ Error seeding database:", error);
     process.exit(1);
   } finally {
     await mongoose.connection.close();
-    console.log("Database connection closed.");
+    console.log("\nDatabase connection closed.");
   }
 };
 

@@ -56,18 +56,17 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
-    authenticatedDevices: {
-      type: [
-        {
-          deviceId: String,
-          isActive: { type: Boolean, default: true },
-          trusted: { type: Boolean, default: false },
-          createdAt: { type: Date, default: Date.now },
-          lastSeen: { type: Date, default: Date.now },
-        },
-      ],
-      default: [],
-    },
+    authenticatedDevices: [
+      {
+        deviceId: String,
+        deviceName: String, // e.g., "Chrome on Windows"
+        ipAddress: String,
+        isActive: { type: Boolean, default: true },
+        trusted: { type: Boolean, default: false },
+        lastLogin: { type: Date, default: Date.now },
+        createdAt: { type: Date, default: Date.now },
+      },
+    ],
     zkpIdentityCommitment: {
       type: String,
       default: null,

@@ -99,12 +99,10 @@ exports.registerZKP = async (req, res) => {
   } catch (error) {
     console.error("🔴 ZKP Registration Error:", error.message);
     console.error("🔴 Error Stack:", error.stack);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: error.message || "An internal server error occurred.",
-      });
+    res.status(500).json({
+      success: false,
+      message: error.message || "An internal server error occurred.",
+    });
   }
 };
 
@@ -221,22 +219,49 @@ exports.verifyDeviceProof = async (req, res) => {
         .json({ success: false, message: "Invalid ZKP proof." });
     }
 
+    const userAgent = req.headers["user-agent"] || "";
+    let browser = "Unknown Browser";
+    let os = "Unknown OS";
+
+    if (userAgent.includes("Firefox")) browser = "Firefox";
+    else if (userAgent.includes("Chrome")) browser = "Chrome";
+    else if (userAgent.includes("Safari")) browser = "Safari";
+    else if (userAgent.includes("Edge")) browser = "Edge";
+
+    if (userAgent.includes("Windows")) os = "Windows";
+    else if (userAgent.includes("Mac")) os = "MacOS";
+    else if (userAgent.includes("Linux")) os = "Linux";
+    else if (userAgent.includes("Android")) os = "Android";
+    else if (userAgent.includes("iPhone") || userAgent.includes("iPad"))
+      os = "iOS";
+
+    const deviceName = `${browser} on ${os}`;
+    const ipAddress =
+      req.headers["x-forwarded-for"] ||
+      req.socket?.remoteAddress ||
+      "Unknown IP";
+
     const finalDeviceId =
       deviceId || `dev_${Math.random().toString(36).substring(2, 15)}`;
     const existingDevice = user.authenticatedDevices.find(
       (d) => d.deviceId === finalDeviceId,
     );
+
     if (existingDevice) {
       existingDevice.isActive = true;
       existingDevice.trusted = trustDevice;
-      existingDevice.lastSeen = new Date();
+      existingDevice.lastLogin = new Date();
+      existingDevice.ipAddress = ipAddress;
+      existingDevice.deviceName = deviceName;
     } else {
       user.authenticatedDevices.push({
         deviceId: finalDeviceId,
+        deviceName: deviceName,
+        ipAddress: ipAddress,
         isActive: true,
         trusted: trustDevice,
+        lastLogin: new Date(),
         createdAt: new Date(),
-        lastSeen: new Date(),
       });
     }
 
@@ -263,6 +288,8 @@ exports.verifyDeviceProof = async (req, res) => {
         name: user.name,
         role: user.role,
         userId: user.userId,
+        deviceId: finalDeviceId,
+        trusted: trustDevice,
       },
     });
   } catch (error) {
