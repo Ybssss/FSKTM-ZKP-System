@@ -1,275 +1,101 @@
+// src/controllers/evaluationController.js
 const Evaluation = require("../models/Evaluation");
-const Rubric = require("../models/Rubric");
-const User = require("../models/User");
+const Session = require("../models/Session");
+const { calculateUTHMGrade } = require("../utils/gradeCalculator");
 
-// @desc    Create evaluation
-// @route   POST /api/evaluations
-// @access  Private (Admin/Panel)
-exports.createEvaluation = async (req, res) => {
+// ==========================================
+// 1. GET ALL EVALUATIONS
+// ==========================================
+exports.getAllEvaluations = async (req, res) => {
   try {
-    const {
-      studentId,
-      rubricId,
-      semester,
-      sessionType,
-      scores,
-      strengths,
-      weaknesses,
-      recommendations,
-      overallComments,
-      overallScore,
-      remarks, // Added remarks support
-    } = req.body;
+    const userId = req.user._id || req.user.id || req.user.userId;
+    const role = req.user.role;
 
-    if (!studentId || !rubricId || !semester || !scores) {
-      return res.status(400).json({
-        success: false,
-        message: "Please provide all required fields",
-      });
-    }
-
-    // 🚀 NEW: PREVENT DUPLICATE SUBMISSIONS
-    const existingEvaluation = await Evaluation.findOne({
-      studentId,
-      evaluatorId: req.user.id, // The current lecturer
-      sessionType,
-      semester,
-    });
-
-    if (existingEvaluation) {
-      return res.status(400).json({
-        success: false,
-        message: `You have already evaluated this student for ${sessionType} in ${semester}. Please edit your existing record in Historical Feedback instead of creating a new one.`,
-      });
-    }
-
-    const rubric = await Rubric.findById(rubricId);
-    if (!rubric)
-      return res
-        .status(404)
-        .json({ success: false, message: "Rubric not found" });
-
-    const criteriaIds = rubric.criteria.map((c) => c._id.toString());
-    const scoreKeys = Object.keys(scores);
-
-    const missingCriteria = criteriaIds.filter((id) => !scoreKeys.includes(id));
-    if (missingCriteria.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Please provide scores for all criteria",
-        missingCriteria,
-      });
-    }
-
-    const student = await User.findById(studentId);
-    if (!student || student.role !== "student") {
-      return res
-        .status(404)
-        .json({ success: false, message: "Student not found" });
-    }
-
-    const evaluation = await Evaluation.create({
-      studentId,
-      evaluatorId: req.user.id,
-      rubricId,
-      semester,
-      sessionType,
-      scores,
-      overallScore: overallScore || 0,
-      strengths,
-      weaknesses,
-      recommendations,
-      overallComments: overallComments || remarks, // Save remarks
-      status: "submitted",
-    });
-
-    await evaluation.populate([
-      { path: "studentId", select: "name userId matricNumber program" },
-      { path: "evaluatorId", select: "name userId" },
-      { path: "rubricId", select: "name criteria" },
-    ]);
-
-    res.status(201).json({ success: true, evaluation });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Error creating evaluation",
-      error: error.message,
-    });
-  }
-};
-
-// @desc    Get all evaluations (Handles dashboard lists)
-// @route   GET /api/evaluations
-// @access  Private
-exports.getEvaluations = async (req, res) => {
-  try {
     let query = {};
-
-    if (req.user.role === "student") {
-      query.studentId = req.user.id;
-    } else if (["panel", "coordinator"].includes(req.user.role)) {
-      query.evaluatorId = req.user.id;
-    }
-    // Admin and Coordinator leave query as {} to see everything
+    if (role === "panel") query = { evaluatorId: userId };
+    else if (role === "student") query = { studentId: userId };
 
     const evaluations = await Evaluation.find(query)
-      .populate("studentId", "name userId matricNumber program researchTitle")
-      .populate("evaluatorId", "name userId")
+      .populate("studentId", "name email")
+      .populate("evaluatorId", "name email")
+      .populate("sessionId", "semester sessionType")
       .populate("rubricId", "name criteria")
       .sort({ createdAt: -1 });
 
-    res.json({ success: true, count: evaluations.length, evaluations });
+    res.status(200).json({ success: true, data: evaluations });
   } catch (error) {
-    console.error("❌ Get evaluations error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error fetching evaluations",
-      error: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Get evaluation by ID
-// @route   GET /api/evaluations/:id
-// @access  Private
-exports.getEvaluationById = async (req, res) => {
+// ==========================================
+// 2. SUBMIT EVALUATION
+// ==========================================
+exports.submitEvaluation = async (req, res) => {
   try {
-    const evaluation = await Evaluation.findById(req.params.id)
-      .populate("studentId", "name matricNumber")
-      .populate("evaluatorId", "name")
-      .populate("rubricId"); // 👈 This MUST be populated to see criteria names/max scores
+    const { sessionId } = req.body;
+    const evaluatorId = req.user._id || req.user.id || req.user.userId;
+
+    // Find the Pending Evaluation that was created by the Admin
+    const evaluation = await Evaluation.findOne({ sessionId, evaluatorId });
 
     if (!evaluation) {
       return res
         .status(404)
-        .json({ success: false, message: "Evaluation not found" });
+        .json({ error: "Pending evaluation not found for this session." });
     }
 
-    // 🔒 STRICT RULE CHECKING
-    if (req.user.role === "student") {
-      if (evaluation.studentId._id.toString() !== req.user.id.toString()) {
-        return res.status(403).json({
-          success: false,
-          message: "Access denied: You can only view your own evaluations.",
-        });
-      }
-    } else if (["panel", "coordinator"].includes(req.user.role)) {
-      if (evaluation.evaluatorId._id.toString() !== req.user.id.toString()) {
-        return res.status(403).json({
-          success: false,
-          message: "Access denied: You can only view evaluations you created.",
-        });
-      }
-    }
-    // Admin and Coordinator bypass these checks and can view any ID
-
-    res.json({ success: true, evaluation });
-  } catch (error) {
-    console.error("❌ Get evaluation error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error fetching evaluation",
-      error: error.message,
-    });
-  }
-};
-
-// @desc    Update evaluation
-// @route   PUT /api/evaluations/:id
-// @access  Private (Admin/Panel)
-exports.updateEvaluation = async (req, res) => {
-  try {
-    let evaluation = await Evaluation.findById(req.params.id);
-
-    if (!evaluation) {
+    if (evaluation.status === "COMPLETED") {
       return res
-        .status(404)
-        .json({ success: false, message: "Evaluation not found" });
+        .status(400)
+        .json({ error: "You have already submitted this evaluation." });
     }
 
-    // Check if user can edit (admin can edit any, panel can only edit own)
-    if (
-      ["panel", "coordinator"].includes(req.user.role) &&
-      evaluation.evaluatorId.toString() !== req.user.id.toString()
-    ) {
-      return res.status(403).json({
-        success: false,
-        message: "You can only edit your own evaluations",
+    // Update with the submitted data based on session type
+    if (evaluation.sessionType === "PROGRESS_ASSESSMENT") {
+      evaluation.summaryOfProgress = req.body.summaryOfProgress;
+      evaluation.commentsForImprovement = req.body.commentsForImprovement;
+      evaluation.overallSuggestions = req.body.overallSuggestions;
+    } else {
+      evaluation.scores = req.body.scores;
+      evaluation.totalMarks = req.body.totalMarks;
+      evaluation.overallComments = req.body.overallComments;
+    }
+
+    // Mark as COMPLETED
+    evaluation.status = "COMPLETED";
+    await evaluation.save();
+
+    res
+      .status(200)
+      .json({
+        success: true,
+        message: "Evaluation submitted successfully.",
+        data: evaluation,
       });
-    }
-
-    // Coordinators and Students cannot edit
-    if (["student"].includes(req.user.role)) {
-      return res.status(403).json({
-        success: false,
-        message: "Your role is not authorized to edit evaluations.",
-      });
-    }
-
-    evaluation = await Evaluation.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    })
-      .populate("studentId", "name userId matricNumber")
-      .populate("evaluatorId", "name userId")
-      .populate("rubricId", "name criteria");
-
-    res.json({ success: true, evaluation });
   } catch (error) {
-    console.error("❌ Update evaluation error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error updating evaluation",
-      error: error.message,
-    });
+    res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// @desc    Delete evaluation
-// @route   DELETE /api/evaluations/:id
-// @access  Private (Admin Only)
-exports.deleteEvaluation = async (req, res) => {
-  try {
-    const evaluation = await Evaluation.findById(req.params.id);
-
-    if (!evaluation) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Evaluation not found" });
-    }
-
-    // STRICT ROLE CHECK (Reinforcing the router middleware)
-    if (req.user.role !== "admin") {
-      return res.status(403).json({
-        success: false,
-        message: "Only administrators can delete evaluations.",
-      });
-    }
-
-    await evaluation.deleteOne();
-    res.json({ success: true, message: "Evaluation deleted successfully" });
-  } catch (error) {
-    console.error("❌ Delete evaluation error:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error deleting evaluation",
-      error: error.message,
-    });
-  }
-};
-
+// ==========================================
+// 3. SEARCH HISTORICAL COMMENTS (Dr. Samihah's Feature)
+// ==========================================
 exports.searchHistoricalComments = async (req, res) => {
   try {
-    const { searchQuery, studentId } = req.query;
+    const { searchQuery } = req.query;
 
+    if (!searchQuery) {
+      return res.status(400).json({ error: "Search query is required" });
+    }
+
+    // MongoDB Full-Text Search across historical evaluations
     const results = await Evaluation.find({
-      studentId: studentId,
       $text: { $search: searchQuery },
     })
       .sort({ score: { $meta: "textScore" } }) // Sorts by best match
       .populate("sessionId", "semester sessionType")
-      .populate("panelId", "name");
+      .populate("evaluatorId", "name"); // Fetch panel's name
 
     res.status(200).json({ results });
   } catch (error) {

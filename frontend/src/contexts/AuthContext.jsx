@@ -92,14 +92,12 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log("🔐 Starting ZKP registration...");
 
+      // 1. Generate keys IN MEMORY first (Do not save to localStorage yet!)
       console.log("📝 Generating cryptographic keys...");
       const keyPair = await zkp.generateKeyPair();
-      console.log("📦 SHAPE OF GENERATED KEYS:", keyPair);
-
-      await zkp.storePrivateKey(userId, keyPair.privateKey);
-
       const publicKey = await zkp.exportPublicKey(keyPair.publicKey);
 
+      // 2. Send the public key to the backend FIRST
       console.log("🌐 Registering with server...");
       const response = await authAPI.register(
         userId,
@@ -107,9 +105,14 @@ export const AuthProvider = ({ children }) => {
         registrationCode,
       );
 
+      // 3. If the backend rejects it (e.g., "User already registered")
       if (!response.success) {
+        // We throw an error and STOP. The old key in localStorage is safely preserved!
         throw new Error(response.message || "Registration failed");
       }
+
+      // 4. 🔴 THE FIX: ONLY save the private key locally IF the server succeeded
+      await zkp.storePrivateKey(userId, keyPair.privateKey);
 
       return { success: true };
     } catch (error) {

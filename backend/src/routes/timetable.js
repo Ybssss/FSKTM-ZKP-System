@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const { authenticateToken, requireRole } = require("../middleware/auth");
+const evaluationController = require("../controllers/evaluationController");
 const {
   createTimetable,
   getTimetables,
@@ -26,7 +27,7 @@ router.use(authenticateToken);
 router.get("/", getTimetables); // Controller should filter based on role involvement
 router.get("/my", getMyTimetable); // For Students and Panels to see their assigned sessions
 router.get("/:id", getTimetableById);
-
+router.post("/bulk", authenticateToken, sessionController.createBulkSessions);
 // ==========================================
 // DOCUMENT & NOTES ROUTES
 // ==========================================
@@ -139,6 +140,19 @@ router.put("/:id", requireRole("admin"), updateTimetable);
 router.delete("/:id", requireRole("admin"), deleteTimetable);
 router.post("/bulk", requireRole("admin"), createBulkTimetables);
 
+// Panel Assignment (Admin only) - Maps 2 panels to 1 student
+router.post(
+  "/submit",
+  authenticateToken,
+  evaluationController.submitEvaluation,
+);
+router.get(
+  "/search",
+  authenticateToken,
+  evaluationController.searchHistoricalComments,
+);
+
+router.get("/", authenticateToken, evaluationController.getAllEvaluations);
 // Panel Assignment (Admin only) - Maps 2 panels to 1 student
 router.post("/assign-panel", requireRole("admin"), assignPanelToStudent);
 

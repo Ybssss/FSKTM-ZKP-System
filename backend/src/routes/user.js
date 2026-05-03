@@ -2,7 +2,9 @@ const express = require("express");
 const router = express.Router();
 const { authenticateToken } = require("../middleware/auth");
 const User = require("../models/User");
+const userController = require("../controllers/userController");
 
+router.get("/assignments", authenticateToken, userController.getAssignments);
 router.use(authenticateToken);
 
 // ==========================================
@@ -25,13 +27,11 @@ router.get("/assignments", async (req, res) => {
 
     res.json({ success: true, students, panels });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Failed to fetch assignments",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch assignments",
+      error: error.message,
+    });
   }
 });
 
@@ -40,12 +40,10 @@ router.get("/my-students", async (req, res) => {
   try {
     const myId = req.user.id || req.user.userId || req.user._id;
     if (req.user.role !== "panel" && req.user.role !== "admin") {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: "Only panels can view assigned students",
-        });
+      return res.status(403).json({
+        success: false,
+        message: "Only panels can view assigned students",
+      });
     }
     const panel = await User.findById(myId)
       .populate(
@@ -75,13 +73,11 @@ router.get("/", async (req, res) => {
       .sort({ createdAt: -1 });
     res.json({ success: true, users });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Failed to fetch users",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch users",
+      error: error.message,
+    });
   }
 });
 
@@ -97,13 +93,11 @@ router.get("/:id", async (req, res) => {
         .json({ success: false, message: "User not found" });
     res.json({ success: true, user });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Failed to fetch user",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch user",
+      error: error.message,
+    });
   }
 });
 
@@ -137,13 +131,11 @@ router.post("/", async (req, res) => {
       .status(201)
       .json({ success: true, message: "User created", user, registrationCode });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Failed to create user",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Failed to create user",
+      error: error.message,
+    });
   }
 });
 
@@ -252,13 +244,11 @@ router.post("/assign-panel", async (req, res) => {
     await student.save();
     res.json({ success: true, message: "Panels assigned successfully" });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Failed to assign panel",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Failed to assign panel",
+      error: error.message,
+    });
   }
 });
 

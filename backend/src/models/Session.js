@@ -1,4 +1,3 @@
-// src/models/Session.js
 const mongoose = require("mongoose");
 
 const sessionSchema = new mongoose.Schema(
@@ -8,15 +7,19 @@ const sessionSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
+
     sessionType: {
       type: String,
-      enum: ["MILESTONE", "PROPOSAL_DEFENSE", "UPGRADING", "PRE_VIVA"],
+      enum: ["PROGRESS_ASSESSMENT", "PROPOSAL_DEFENSE", "PRE_VIVA"],
       required: true,
     },
-    semester: {
-      type: String,
-      required: true,
-    }, // e.g., "Semester 1, 2025/2026"
+
+    semester: { type: String, required: true },
+
+    // 🔴 ADDED DATE, TIME, AND VENUE FOR THE DASHBOARD
+    date: { type: Date, required: true },
+    time: { type: String, required: true }, // e.g., "10:00 AM"
+    venue: { type: String, default: "Online / Webex" },
 
     panel1Id: {
       type: mongoose.Schema.Types.ObjectId,
@@ -28,11 +31,6 @@ const sessionSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-
-    supervisorEndorsed: {
-      type: Boolean,
-      default: false,
-    }, // Required specifically for the UPGRADING form
   },
   { timestamps: true },
 );

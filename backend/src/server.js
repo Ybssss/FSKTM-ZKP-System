@@ -4,7 +4,10 @@ require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-
+const sessionController = require("./controllers/sessionController");
+const evaluationController = require("./controllers/evaluationController");
+const { getAssignments } = require("./controllers/userController"); // or authController
+const { authenticateToken } = require("./middleware/auth");
 // Initialize express app
 const app = express();
 const expertiseRoutes = require("./routes/expertiseRoutes");
@@ -56,7 +59,6 @@ const feedbackRoutes = require("./routes/feedback");
 const attendanceRoutes = require("./routes/attendance");
 const qrRoutes = require("./routes/qr");
 const analyticsRoutes = require("./routes/analytics"); // ← NEW: Analytics route
-
 // Register routes
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
@@ -67,6 +69,7 @@ app.use("/api/feedback", feedbackRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/qr", qrRoutes);
 app.use("/api/analytics", analyticsRoutes); // ← NEW: Register analytics route
+app.use("/api/rubrics", rubricRoutes);
 app.use("/api", expertiseRoutes);
 // Root route
 app.get("/", (req, res) => {
@@ -150,5 +153,32 @@ process.on("SIGINT", () => {
     });
   });
 });
+
+// 1. Timetables / Sessions
+app.post(
+  "/api/timetables/create",
+  authenticateToken,
+  sessionController.createSession,
+);
+app.get(
+  "/api/timetables/my",
+  authenticateToken,
+  sessionController.getMySessions,
+);
+
+// 2. Evaluations
+app.get(
+  "/api/evaluations",
+  authenticateToken,
+  evaluationController.getAllEvaluations,
+);
+app.post(
+  "/api/evaluations/submit",
+  authenticateToken,
+  evaluationController.submitEvaluation,
+);
+
+// 3. Users / Assignments (Fixes the 500 error!)
+app.get("/api/users/assignments", authenticateToken, getAssignments);
 
 module.exports = app;

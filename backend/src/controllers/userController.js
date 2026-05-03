@@ -29,12 +29,10 @@ exports.createUser = async (req, res) => {
     const creatorRole = req.user.role;
 
     if (creatorRole === "admin" && ["superadmin", "admin"].includes(role)) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: "Admins cannot create other Admins.",
-        });
+      return res.status(403).json({
+        success: false,
+        message: "Admins cannot create other Admins.",
+      });
     }
     if (creatorRole !== "superadmin" && creatorRole !== "admin") {
       return res
@@ -78,22 +76,18 @@ exports.createUser = async (req, res) => {
         req,
       );
 
-    res
-      .status(201)
-      .json({
-        success: true,
-        message: "User created successfully",
-        user: newUser,
-        registrationCode,
-      });
+    res.status(201).json({
+      success: true,
+      message: "User created successfully",
+      user: newUser,
+      registrationCode,
+    });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Failed to create user",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Failed to create user",
+      error: error.message,
+    });
   }
 };
 
@@ -145,5 +139,30 @@ exports.resetZkpRegistration = async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ success: false, message: "Failed to reset user." });
+  }
+};
+
+exports.getAssignments = async (req, res) => {
+  try {
+    // Safely fetch students and populate their supervisor's name
+    const students = await User.find({ role: "student" })
+      .select(
+        "name email userId matricNumber program researchTitle supervisorId",
+      )
+      .populate("supervisorId", "name email");
+
+    // Safely fetch panels
+    const panels = await User.find({ role: "panel" }).select(
+      "name email userId expertiseTags",
+    );
+
+    res.status(200).json({
+      success: true,
+      students: students || [],
+      panels: panels || [],
+    });
+  } catch (error) {
+    console.error("🔥 Get Assignments Error:", error);
+    res.status(500).json({ success: false, message: error.message });
   }
 };

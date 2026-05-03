@@ -1,69 +1,56 @@
 import React, { useState, useEffect } from "react";
 import {
   ClipboardCheck,
-  Plus,
   Eye,
-  Trash2,
   X,
-  AlertCircle,
   Calculator,
   CheckCircle2,
-  Users,
+  FileText,
+  AlertCircle,
 } from "lucide-react";
-import { evaluationAPI, userAPI, rubricAPI } from "../../services/api";
+import api from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
+
+const SCALE = [
+  { label: "Exemplary", value: 4 },
+  { label: "Proficient", value: 3 },
+  { label: "Satisfactory", value: 2 },
+  { label: "Foundational", value: 1 },
+  { label: "Novice", value: 0 },
+];
 
 export default function EvaluationPage() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
-  const isPanel = user?.role === "panel";
+  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
 
   const [evaluations, setEvaluations] = useState([]);
-  const [students, setStudents] = useState([]);
-  const [rubrics, setRubrics] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [viewingEval, setViewingEval] = useState(null);
+
+  // Modal State
+  const [selectedEval, setSelectedEval] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const [formData, setFormData] = useState({
-    studentId: "",
-    rubricId: "",
-    sessionType: "",
-    remarks: "",
-  });
+  // Form State (Scored Rubric)
   const [scores, setScores] = useState({});
+  const [overallComments, setOverallComments] = useState("");
 
-  const [academicYear, setAcademicYear] = useState("");
-  const [semesterNum, setSemesterNum] = useState("1");
+  // Form State (Progress Assessment)
+  const [progressData, setProgressData] = useState({
+    summaryOfProgress: "",
+    commentsForImprovement: "",
+    overallSuggestions: "",
+  });
 
   useEffect(() => {
-    loadData();
-    // Auto-calculate Year (If it's past August, it's Year/Year+1. Otherwise Year-1/Year)
-    const now = new Date();
-    const year = now.getFullYear();
-    const month = now.getMonth() + 1;
-    setAcademicYear(month >= 8 ? `${year}/${year + 1}` : `${year - 1}/${year}`);
+    loadEvaluations();
   }, []);
 
-  const loadData = async () => {
+  const loadEvaluations = async () => {
     try {
       setLoading(true);
-      const evalsResponse = await evaluationAPI.getAll();
-      setEvaluations(evalsResponse.evaluations || evalsResponse || []);
-
-      const rubricsResponse = await rubricAPI.getAll();
-      setRubrics((rubricsResponse.rubrics || []).filter((r) => r.isActive));
-
-      if (isPanel) {
-        const studentsData = await userAPI.getMyStudents();
-        setStudents(studentsData.students || []);
-      } else if (isAdmin) {
-        const usersData = await userAPI.getAll();
-        setStudents(
-          (usersData.users || usersData).filter((u) => u.role === "student"),
-        );
-      }
+      // Calls the GET /api/evaluations route we built
+      const res = await api.get("/evaluations");
+      setEvaluations(res.data.data || []);
     } catch (error) {
       console.error("Error loading evaluation data:", error);
     } finally {
@@ -71,102 +58,107 @@ export default function EvaluationPage() {
     }
   };
 
-  const selectedRubric = rubrics.find((r) => r._id === formData.rubricId);
-
+  // Math: Calculate percentage based on (Total Earned / Max Possible) * 100
   const calculateTotalScore = () => {
-    if (!selectedRubric) return 0;
-    let total = 0;
-    selectedRubric.criteria.forEach((criterion, index) => {
-      const scoreGiven = parseFloat(scores[index]) || 0;
-      total += (scoreGiven / criterion.maxScore) * criterion.weight;
-    });
-    return total.toFixed(2);
+    if (!selectedEval?.rubricId?.criteria) return 0;
+    const totalEarned = Object.values(scores).reduce((a, b) => a + b, 0);
+    const maxPossible = selectedEval.rubricId.criteria.length * 4; // 4 is Exemplary
+    return maxPossible > 0 ? ((totalEarned / maxPossible) * 100).toFixed(2) : 0;
   };
 
-  const handleScoreChange = (index, value) =>
-    setScores((prev) => ({ ...prev, [index]: value }));
+  const handleScoreChange = (criteriaKey, value) => {
+    setScores((prev) => ({ ...prev, [criteriaKey]: value }));
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
-    if (!formData.studentId || !formData.rubricId || !formData.sessionType) {
-      alert("Please fill in all required fields.");
-      return;
-    }
+    setIsSubmitting(true);
 
     try {
-      setIsSubmitting(true);
+      const isScored =
+        selectedEval.sessionType === "PROPOSAL_DEFENSE" ||
+        selectedEval.sessionType === "PRE_VIVA";
 
-      const formattedScoresMap = {};
-      selectedRubric.criteria.forEach((c, index) => {
-        formattedScoresMap[c._id] = parseFloat(scores[index]) || 0;
-      });
+      // Validation for Scored Rubrics
+      if (isScored) {
+        const criteriaCount = selectedEval.rubricId?.criteria?.length || 0;
+        if (Object.keys(scores).length < criteriaCount) {
+          alert("Please provide a score for ALL criteria before submitting.");
+          setIsSubmitting(false);
+          return;
+        }
+      }
 
       const payload = {
-        studentId: formData.studentId,
-        rubricId: formData.rubricId,
-        sessionType: formData.sessionType,
-        semester: `${academicYear} Semester ${semesterNum}`, // 👈 Auto-formats to "2026/2027 Semester 2"
-        scores: formattedScoresMap,
-        overallScore: parseFloat(calculateTotalScore()),
-        remarks: formData.remarks,
+        sessionId: selectedEval.sessionId._id,
+        sessionType: selectedEval.sessionType,
       };
 
-      await evaluationAPI.create(payload);
+      if (isScored) {
+        payload.scores = scores;
+        payload.totalMarks = parseFloat(calculateTotalScore());
+        payload.overallComments = overallComments;
+      } else {
+        payload.summaryOfProgress = progressData.summaryOfProgress;
+        payload.commentsForImprovement = progressData.commentsForImprovement;
+        payload.overallSuggestions = progressData.overallSuggestions;
+      }
+
+      // Calls the POST /api/evaluations/submit route we built
+      await api.post("/evaluations/submit", payload);
+
       alert("✅ Evaluation submitted successfully!");
       closeModal();
-      loadData();
+      loadEvaluations(); // Refresh the list
     } catch (error) {
-      alert(error.response?.data?.message || "Failed to submit evaluation");
+      alert(
+        error.response?.data?.error ||
+          error.response?.data?.message ||
+          "Failed to submit evaluation",
+      );
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Delete this evaluation record?")) return;
-    try {
-      await evaluationAPI.delete(id);
-      loadData();
-    } catch (error) {
-      alert("Failed to delete");
+  const openEvaluationModal = (ev) => {
+    setSelectedEval(ev);
+    // Pre-fill state if it's already COMPLETED
+    if (ev.status === "COMPLETED") {
+      if (ev.sessionType === "PROGRESS_ASSESSMENT") {
+        setProgressData({
+          summaryOfProgress: ev.summaryOfProgress,
+          commentsForImprovement: ev.commentsForImprovement,
+          overallSuggestions: ev.overallSuggestions,
+        });
+      } else {
+        setScores(ev.scores || {});
+        setOverallComments(ev.overallComments || "");
+      }
+    } else {
+      // Reset state for new PENDING evaluations
+      setScores({});
+      setOverallComments("");
+      setProgressData({
+        summaryOfProgress: "",
+        commentsForImprovement: "",
+        overallSuggestions: "",
+      });
     }
   };
 
   const closeModal = () => {
-    setShowModal(false);
-    setViewingEval(null);
-    setFormData({
-      studentId: "",
-      rubricId: "",
-      sessionType: "",
-      semester: "",
-      remarks: "",
-    });
+    setSelectedEval(null);
     setScores({});
+    setOverallComments("");
   };
 
   const getScoreColor = (score) => {
-    if (score >= 80) return "text-green-600 bg-green-50 border-green-200";
-    if (score >= 60) return "text-blue-600 bg-blue-50 border-blue-200";
-    if (score >= 40) return "text-orange-600 bg-orange-50 border-orange-200";
-    return "text-red-600 bg-red-50 border-red-200";
-  };
-
-  const getCombinedAverage = () => {
-    if (!viewingEval) return null;
-    const relatedEvals = evaluations.filter(
-      (e) =>
-        e.studentId?._id === viewingEval.studentId?._id &&
-        e.sessionType === viewingEval.sessionType,
-    );
-    if (relatedEvals.length <= 1) return null;
-
-    const sum = relatedEvals.reduce(
-      (acc, curr) => acc + (curr.totalScore ?? curr.overallScore ?? 0),
-      0,
-    );
-    return (sum / relatedEvals.length).toFixed(1);
+    if (score >= 90) return "text-green-700 bg-green-100 border-green-300"; // Pass w/o Amendment
+    if (score >= 80) return "text-blue-700 bg-blue-100 border-blue-300"; // Pass Minor
+    if (score >= 65) return "text-yellow-700 bg-yellow-100 border-yellow-300"; // Pass Major
+    if (score >= 50) return "text-orange-700 bg-orange-100 border-orange-300"; // Re-evaluation
+    return "text-red-700 bg-red-100 border-red-300"; // Fail
   };
 
   return (
@@ -174,23 +166,15 @@ export default function EvaluationPage() {
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-            <ClipboardCheck className="w-8 h-8 text-indigo-600" /> Student
-            Evaluations
+            <ClipboardCheck className="w-8 h-8 text-indigo-600" /> Pending &
+            Completed Evaluations
           </h1>
           <p className="text-gray-600 mt-2">
-            {isPanel
-              ? "Evaluate your assigned students."
-              : "Manage system-wide student evaluations."}
+            {isAdmin
+              ? "Monitor system-wide evaluations."
+              : "Complete your assigned panel evaluations here."}
           </p>
         </div>
-        {(isPanel || isAdmin) && (
-          <button
-            onClick={() => setShowModal(true)}
-            className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 font-semibold"
-          >
-            <Plus className="w-5 h-5" /> New Evaluation
-          </button>
-        )}
       </div>
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -200,7 +184,7 @@ export default function EvaluationPage() {
           </div>
         ) : evaluations.length === 0 ? (
           <div className="p-12 text-center text-gray-500">
-            No evaluations found.
+            No evaluations assigned to you yet.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -210,55 +194,69 @@ export default function EvaluationPage() {
                   <th className="p-4">Student</th>
                   <th className="p-4">Session Type</th>
                   <th className="p-4">Semester</th>
-                  <th className="p-4">Panel</th>
+                  {isAdmin && <th className="p-4">Evaluator</th>}
+                  <th className="p-4 text-center">Status</th>
                   <th className="p-4 text-center">Score</th>
-                  <th className="p-4 text-right">Actions</th>
+                  <th className="p-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {evaluations.map((ev) => (
                   <tr key={ev._id} className="hover:bg-gray-50">
                     <td className="p-4">
-                      <p className="font-semibold">{ev.studentId?.name}</p>
-                      <p className="text-xs text-gray-500">
-                        {ev.studentId?.matricNumber}
+                      <p className="font-semibold">
+                        {ev.studentId?.name || "Unknown Student"}
                       </p>
                     </td>
                     <td className="p-4">
-                      <span className="px-3 py-1 bg-gray-100 rounded-full text-xs font-semibold">
-                        {ev.sessionType}
+                      <span className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-bold">
+                        {ev.sessionType?.replace("_", " ")}
                       </span>
                     </td>
-                    <td className="p-4 text-sm font-medium text-gray-600">
-                      {ev.semester}
-                    </td>
-                    <td className="p-4 text-sm font-medium">
-                      {ev.evaluatorId?.name || ev.panelId?.name}
-                    </td>
+                    <td className="p-4 text-sm text-gray-600">{ev.semester}</td>
+                    {isAdmin && (
+                      <td className="p-4 text-sm text-gray-600">
+                        {ev.evaluatorId?.name}
+                      </td>
+                    )}
+
                     <td className="p-4 text-center">
-                      <div
-                        className={`inline-flex px-3 py-1 rounded-lg border font-bold text-sm ${getScoreColor(ev.totalScore ?? ev.overallScore)}`}
+                      <span
+                        className={`px-3 py-1 rounded-full text-xs font-bold ${ev.status === "COMPLETED" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}
                       >
-                        {(ev.totalScore ?? ev.overallScore) !== undefined
-                          ? `${(ev.totalScore ?? ev.overallScore).toFixed(1)}%`
-                          : "N/A"}
-                      </div>
+                        {ev.status}
+                      </span>
                     </td>
+
+                    <td className="p-4 text-center">
+                      {ev.sessionType === "PROGRESS_ASSESSMENT" ? (
+                        <span className="text-gray-400 text-xs italic">
+                          Text Only
+                        </span>
+                      ) : ev.status === "COMPLETED" ? (
+                        <div
+                          className={`inline-flex px-3 py-1 rounded-lg border font-bold text-sm ${getScoreColor(ev.totalMarks)}`}
+                        >
+                          {ev.totalMarks?.toFixed(2)}%
+                        </div>
+                      ) : (
+                        <span className="text-gray-400 text-xs">--</span>
+                      )}
+                    </td>
+
                     <td className="p-4 text-right">
                       <button
-                        onClick={() => setViewingEval(ev)}
-                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded"
+                        onClick={() => openEvaluationModal(ev)}
+                        className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${
+                          ev.status === "PENDING" && !isAdmin
+                            ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                        }`}
                       >
-                        <Eye className="w-5 h-5" />
+                        {ev.status === "PENDING" && !isAdmin
+                          ? "Evaluate Now"
+                          : "View Report"}
                       </button>
-                      {isAdmin && (
-                        <button
-                          onClick={() => handleDelete(ev._id)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded"
-                        >
-                          <Trash2 className="w-5 h-5" />
-                        </button>
-                      )}
                     </td>
                   </tr>
                 ))}
@@ -268,155 +266,20 @@ export default function EvaluationPage() {
         )}
       </div>
 
-      {/* VIEW EVALUATION MODAL */}
-      {viewingEval && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col">
-            <div className="px-6 py-4 border-b border-gray-100 flex justify-between">
-              <h2 className="text-xl font-bold">Evaluation Report</h2>
-              <button onClick={closeModal}>
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            <div className="p-6 overflow-y-auto flex-1 space-y-6">
-              {getCombinedAverage() && (
-                <div className="bg-gradient-to-r from-indigo-600 to-purple-600 rounded-xl p-6 text-white flex items-center justify-between shadow-md">
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 bg-white/20 rounded-full">
-                      <Users className="w-8 h-8" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-lg">
-                        Combined Final Result
-                      </h3>
-                      <p className="text-indigo-100 text-sm">
-                        Average of both panels for {viewingEval.sessionType}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-4xl font-black">
-                      {getCombinedAverage()}%
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              <div className="flex justify-between items-start bg-gray-50 p-5 rounded-xl border border-gray-200">
-                <div>
-                  <h3 className="text-lg font-bold text-gray-900">
-                    {viewingEval.studentId?.name}
-                  </h3>
-                  <p className="text-sm text-gray-600">
-                    Matric: {viewingEval.studentId?.matricNumber}
-                  </p>
-                  <p className="text-sm text-gray-600 mt-2">
-                    <strong>Session:</strong> {viewingEval.sessionType}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    <strong>Semester:</strong> {viewingEval.semester}
-                  </p>
-                  <p className="text-sm text-gray-600">
-                    <strong>Panel:</strong>{" "}
-                    {viewingEval.evaluatorId?.name || viewingEval.panelId?.name}
-                  </p>
-                </div>
-                <div
-                  className={`px-4 py-3 rounded-xl border-2 text-center min-w-[120px] ${getScoreColor(viewingEval.totalScore ?? viewingEval.overallScore)}`}
-                >
-                  <p className="text-xs font-bold uppercase mb-1">
-                    Individual Score
-                  </p>
-                  <p className="text-3xl font-black">
-                    {(
-                      viewingEval.totalScore ?? viewingEval.overallScore
-                    )?.toFixed(1)}
-                    %
-                  </p>
-                </div>
-              </div>
-
-              <div>
-                <h4 className="font-bold text-gray-800 mb-3 border-b pb-2">
-                  Score Breakdown
-                </h4>
-                <div className="space-y-3">
-                  {/* 🚀 FIXED: Translate DB Object IDs back into Rubric Names for the Modal */}
-                  {(Array.isArray(viewingEval.scores)
-                    ? viewingEval.scores
-                    : Object.entries(viewingEval.scores || {}).map(([k, v]) => {
-                        let cName = k;
-                        let cWeight = "-";
-                        let cMax = 100;
-                        if (viewingEval.rubricId?.criteria) {
-                          const match = viewingEval.rubricId.criteria.find(
-                            (c) => c._id === k || c.name === k,
-                          );
-                          if (match) {
-                            cName = match.name;
-                            cWeight = match.weight;
-                            cMax = match.maxScore;
-                          }
-                        }
-                        return {
-                          criterionName: cName,
-                          score: v,
-                          maxScore: cMax,
-                          weight: cWeight,
-                        };
-                      })
-                  ).map((scoreItem, idx) => (
-                    <div
-                      key={idx}
-                      className="flex justify-between p-3 border rounded-lg"
-                    >
-                      <div>
-                        <p className="font-semibold capitalize">
-                          {scoreItem.criterionName?.replace(/_/g, " ")}
-                        </p>
-                        <p className="text-xs text-gray-500">
-                          Weight: {scoreItem.weight}
-                          {scoreItem.weight !== "-" ? "%" : ""}
-                        </p>
-                      </div>
-                      <div className="text-right font-bold text-lg">
-                        {scoreItem.score}{" "}
-                        <span className="text-sm text-gray-500 font-normal">
-                          / {scoreItem.maxScore || 100}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <h4 className="font-bold text-gray-800 mb-2">Remarks</h4>
-                <div className="bg-gray-50 p-4 rounded-lg border">
-                  {viewingEval.remarks || "No remarks provided."}
-                </div>
-              </div>
-            </div>
-            <div className="p-4 border-t flex justify-end bg-gray-50">
-              <button
-                onClick={closeModal}
-                className="px-6 py-2 bg-gray-800 text-white rounded-lg"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* CREATE EVALUATION MODAL FORM */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
+      {/* EVALUATION MODAL */}
+      {selectedEval && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full my-8 flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10 rounded-t-xl">
               <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                <Calculator className="w-6 h-6 text-indigo-600" />
-                Conduct Student Evaluation
+                {selectedEval.sessionType === "PROGRESS_ASSESSMENT" ? (
+                  <FileText className="w-6 h-6 text-indigo-600" />
+                ) : (
+                  <Calculator className="w-6 h-6 text-indigo-600" />
+                )}
+                {selectedEval.status === "PENDING"
+                  ? "Conduct Evaluation"
+                  : "Evaluation Report"}
               </h2>
               <button
                 onClick={closeModal}
@@ -426,203 +289,252 @@ export default function EvaluationPage() {
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto flex-1">
-              <form
-                id="evaluationForm"
-                onSubmit={handleSubmit}
-                className="space-y-6"
-              >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50 p-5 rounded-xl border border-gray-200">
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Select Student *
-                    </label>
-                    <select
-                      value={formData.studentId}
-                      onChange={(e) =>
-                        setFormData({ ...formData, studentId: e.target.value })
-                      }
-                      className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500"
-                      required
-                    >
-                      <option value="">-- Choose Student --</option>
-                      {students.map((s) => (
-                        <option key={s._id} value={s._id}>
-                          {s.name} ({s.matricNumber})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Session Type *
-                    </label>
-                    <select
-                      value={formData.sessionType}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          sessionType: e.target.value,
-                        })
-                      }
-                      className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500"
-                      required
-                    >
-                      <option value="">-- Select Type --</option>
-                      <option value="Proposal Defense">Proposal Defense</option>
-                      <option value="Progress Review #1">
-                        Progress Review #1
-                      </option>
-                      <option value="Progress Review #2">
-                        Progress Review #2
-                      </option>
-                      <option value="Final Defense">Final Defense</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Semester *
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <span className="px-3 py-2.5 bg-gray-100 border border-gray-300 rounded-lg text-gray-600 font-medium">
-                        {academicYear}
-                      </span>
-                      <select
-                        value={semesterNum}
-                        onChange={(e) => setSemesterNum(e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500"
-                        required
-                      >
-                        <option value="1">Semester 1</option>
-                        <option value="2">Semester 2</option>
-                        <option value="3">Semester 3</option>
-                      </select>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Evaluation Rubric *
-                    </label>
-                    <select
-                      value={formData.rubricId}
-                      onChange={(e) => {
-                        setFormData({ ...formData, rubricId: e.target.value });
-                        setScores({});
-                      }}
-                      className="w-full border border-gray-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500"
-                      required
-                    >
-                      <option value="">-- Select Rubric --</option>
-                      {rubrics.map((r) => (
-                        <option key={r._id} value={r._id}>
-                          {r.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+            <div className="p-6">
+              {/* Student Info Header */}
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-6 flex justify-between items-center">
+                <div>
+                  <p className="text-sm text-gray-500 uppercase font-bold tracking-wider">
+                    Candidate Details
+                  </p>
+                  <h3 className="text-xl font-bold text-gray-900 mt-1">
+                    {selectedEval.studentId?.name}
+                  </h3>
+                  <p className="text-gray-700 text-sm mt-1">
+                    <strong>Session:</strong>{" "}
+                    {selectedEval.sessionType?.replace("_", " ")} |{" "}
+                    {selectedEval.semester}
+                  </p>
                 </div>
-
-                {selectedRubric ? (
-                  <div className="space-y-4">
-                    <h3 className="font-bold text-gray-800 border-b pb-2">
-                      Grading Criteria
-                    </h3>
-                    {selectedRubric.criteria.map((criterion, index) => (
-                      <div
-                        key={index}
-                        className="flex flex-col sm:flex-row items-center justify-between bg-white p-4 rounded-lg border border-gray-200 shadow-sm"
-                      >
-                        <div className="flex-1 pr-4">
-                          <p className="font-semibold text-gray-900">
-                            {criterion.name}
-                          </p>
-                          <p className="text-sm text-gray-500">
-                            {criterion.description}
-                          </p>
-                          <div className="mt-2 text-xs font-medium px-2 py-1 bg-indigo-50 text-indigo-700 rounded inline-block">
-                            Weight: {criterion.weight}%
-                          </div>
-                        </div>
-                        <div className="mt-4 sm:mt-0 flex items-center gap-3">
-                          <input
-                            type="number"
-                            min="0"
-                            max={criterion.maxScore}
-                            step="0.5"
-                            required
-                            placeholder="Score"
-                            value={scores[index] || ""}
-                            onChange={(e) =>
-                              handleScoreChange(index, e.target.value)
-                            }
-                            className="w-24 border border-gray-300 rounded-lg p-2 text-center text-lg font-bold focus:ring-2 focus:ring-indigo-500"
-                          />
-                          <span className="text-gray-500 font-medium">
-                            / {criterion.maxScore}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                    <div className="flex justify-end pt-4">
-                      <div className="bg-gray-900 text-white px-6 py-4 rounded-xl shadow-lg flex items-center gap-4">
-                        <div className="text-right">
-                          <p className="text-sm text-gray-400 uppercase tracking-wide">
-                            Final Weighted Score
-                          </p>
-                          <p className="text-3xl font-bold">
-                            {calculateTotalScore()}{" "}
-                            <span className="text-lg text-gray-400">/ 100</span>
-                          </p>
-                        </div>
-                      </div>
+                {selectedEval.status === "COMPLETED" &&
+                  selectedEval.sessionType !== "PROGRESS_ASSESSMENT" && (
+                    <div
+                      className={`px-6 py-3 rounded-xl border-2 text-center bg-white ${getScoreColor(selectedEval.totalMarks)}`}
+                    >
+                      <p className="text-xs font-bold uppercase mb-1">
+                        Final Score
+                      </p>
+                      <p className="text-3xl font-black">
+                        {selectedEval.totalMarks?.toFixed(2)}%
+                      </p>
                     </div>
+                  )}
+              </div>
+
+              <form id="evalForm" onSubmit={handleSubmit}>
+                {/* 1. PROGRESS ASSESSMENT FORM (Text Only) */}
+                {selectedEval.sessionType === "PROGRESS_ASSESSMENT" && (
+                  <div className="space-y-6">
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        Panel Remarks / Feedback
+                      <label className="block text-sm font-bold text-gray-700 mb-2">
+                        Summary of Research Progress
                       </label>
                       <textarea
-                        value={formData.remarks}
+                        required
+                        disabled={selectedEval.status === "COMPLETED"}
+                        rows="4"
+                        className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-700"
+                        value={progressData.summaryOfProgress}
                         onChange={(e) =>
-                          setFormData({ ...formData, remarks: e.target.value })
+                          setProgressData({
+                            ...progressData,
+                            summaryOfProgress: e.target.value,
+                          })
                         }
-                        className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500"
-                        rows="3"
-                        placeholder="Provide overall feedback..."
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">
+                        Comments for Improvement
+                      </label>
+                      <textarea
+                        required
+                        disabled={selectedEval.status === "COMPLETED"}
+                        rows="4"
+                        className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-700"
+                        value={progressData.commentsForImprovement}
+                        onChange={(e) =>
+                          setProgressData({
+                            ...progressData,
+                            commentsForImprovement: e.target.value,
+                          })
+                        }
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">
+                        Overall Suggestions
+                      </label>
+                      <textarea
+                        required
+                        disabled={selectedEval.status === "COMPLETED"}
+                        rows="4"
+                        className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-700"
+                        value={progressData.overallSuggestions}
+                        onChange={(e) =>
+                          setProgressData({
+                            ...progressData,
+                            overallSuggestions: e.target.value,
+                          })
+                        }
                       />
                     </div>
                   </div>
-                ) : (
-                  <div className="text-center py-12 border-2 border-dashed border-gray-300 rounded-xl">
-                    <ClipboardCheck className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                    <p className="text-gray-500">
-                      Select a rubric above to load the grading criteria.
-                    </p>
+                )}
+
+                {/* 2. SCORED RUBRIC (Proposal & Pre-Viva) */}
+                {(selectedEval.sessionType === "PROPOSAL_DEFENSE" ||
+                  selectedEval.sessionType === "PRE_VIVA") && (
+                  <div>
+                    {!selectedEval.rubricId ? (
+                      <div className="p-8 text-center text-red-600 bg-red-50 rounded-lg border border-red-200">
+                        <AlertCircle className="w-8 h-8 mx-auto mb-2" />
+                        <p className="font-bold">Rubric Missing</p>
+                        <p className="text-sm">
+                          No rubric template was found for this session type.
+                        </p>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="overflow-x-auto border border-gray-200 rounded-xl mb-6 shadow-sm">
+                          <table className="w-full text-left text-sm">
+                            <thead>
+                              <tr className="bg-indigo-700 text-white">
+                                <th className="p-4 border-b border-indigo-800 w-1/4">
+                                  Criteria
+                                </th>
+                                {SCALE.map((s) => (
+                                  <th
+                                    key={s.value}
+                                    className="p-3 border-b border-indigo-800 text-center font-semibold"
+                                  >
+                                    {s.label} ({s.value})
+                                  </th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200 bg-white">
+                              {selectedEval.rubricId.criteria?.map((crit) => (
+                                <tr
+                                  key={crit.key}
+                                  className="hover:bg-indigo-50/30 transition-colors"
+                                >
+                                  <td className="p-4 bg-gray-50 border-r border-gray-200">
+                                    <p className="font-bold text-gray-800">
+                                      {crit.title}
+                                    </p>
+                                    {crit.description && (
+                                      <p className="text-xs text-gray-500 mt-1">
+                                        {crit.description}
+                                      </p>
+                                    )}
+                                  </td>
+
+                                  {SCALE.map((s) => {
+                                    const scaleKey = s.label.toLowerCase(); // 'exemplary', 'proficient', etc.
+                                    const isSelected =
+                                      scores[crit.key] === s.value;
+                                    return (
+                                      <td
+                                        key={s.value}
+                                        className={`p-3 border-r border-gray-200 text-center align-top ${selectedEval.status === "PENDING" ? "cursor-pointer hover:bg-indigo-50" : ""} ${isSelected ? "bg-indigo-50 ring-2 ring-inset ring-indigo-500" : ""}`}
+                                        onClick={() =>
+                                          selectedEval.status === "PENDING" &&
+                                          handleScoreChange(crit.key, s.value)
+                                        }
+                                      >
+                                        <div className="flex flex-col items-center gap-2">
+                                          <input
+                                            type="radio"
+                                            name={crit.key}
+                                            required
+                                            disabled={
+                                              selectedEval.status ===
+                                              "COMPLETED"
+                                            }
+                                            checked={isSelected}
+                                            onChange={() =>
+                                              handleScoreChange(
+                                                crit.key,
+                                                s.value,
+                                              )
+                                            }
+                                            className="w-5 h-5 accent-indigo-600"
+                                          />
+                                          <p
+                                            className={`text-xs text-justify leading-relaxed ${isSelected ? "text-indigo-900 font-medium" : "text-gray-600"}`}
+                                          >
+                                            {crit[scaleKey] ||
+                                              "No description provided for this tier."}
+                                          </p>
+                                        </div>
+                                      </td>
+                                    );
+                                  })}
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        {selectedEval.status === "PENDING" && (
+                          <div className="bg-gray-900 text-white p-6 rounded-xl flex justify-between items-center mb-6 shadow-lg">
+                            <span className="text-lg font-medium text-gray-300 uppercase tracking-widest">
+                              Live Calculated Score
+                            </span>
+                            <span className="text-4xl font-black text-indigo-400">
+                              {calculateTotalScore()}%
+                            </span>
+                          </div>
+                        )}
+
+                        <div>
+                          <label className="block text-sm font-bold text-gray-700 mb-2">
+                            Overall Remarks (Indexed for Historical Search)
+                          </label>
+                          <textarea
+                            required
+                            disabled={selectedEval.status === "COMPLETED"}
+                            rows="4"
+                            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-700"
+                            placeholder="Provide constructive feedback... This will be searchable in future semesters."
+                            value={overallComments}
+                            onChange={(e) => setOverallComments(e.target.value)}
+                          />
+                        </div>
+                      </>
+                    )}
                   </div>
                 )}
               </form>
             </div>
-            <div className="p-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50 rounded-b-xl">
+
+            {/* Footer Buttons */}
+            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50 rounded-b-xl sticky bottom-0">
               <button
-                onClick={closeModal}
                 type="button"
-                className="px-5 py-2 text-gray-600 font-medium hover:bg-gray-200 rounded-lg transition-colors"
+                onClick={closeModal}
+                className="px-5 py-2.5 text-gray-600 font-medium hover:bg-gray-200 rounded-lg transition-colors"
               >
-                Cancel
+                {selectedEval.status === "PENDING" ? "Cancel" : "Close"}
               </button>
-              <button
-                type="submit"
-                form="evaluationForm"
-                disabled={isSubmitting || !selectedRubric}
-                className="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 transition-colors flex items-center gap-2"
-              >
-                {isSubmitting ? (
-                  "Saving..."
-                ) : (
-                  <>
-                    <CheckCircle2 className="w-5 h-5" /> Submit Evaluation
-                  </>
-                )}
-              </button>
+
+              {selectedEval.status === "PENDING" && !isAdmin && (
+                <button
+                  type="submit"
+                  form="evalForm"
+                  disabled={isSubmitting}
+                  className="px-6 py-2.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400 transition-colors flex items-center gap-2 shadow-sm"
+                >
+                  {isSubmitting ? (
+                    "Submitting..."
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-5 h-5" /> Submit Official
+                      Evaluation
+                    </>
+                  )}
+                </button>
+              )}
             </div>
           </div>
         </div>
