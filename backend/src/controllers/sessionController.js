@@ -165,6 +165,15 @@ exports.createBulkSessions = async (req, res) => {
       const { studentId, sessionType, date, time, venue, panel1Id, panel2Id } =
         sessionData;
 
+      if (!panel1Id || !panel2Id) {
+        return res
+          .status(400)
+          .json({
+            error:
+              "Both Panel 1 and Panel 2 must be provided for every student.",
+          });
+      }
+
       // 1. Conflict of Interest Check
       const student = await User.findById(studentId);
       if (student && student.supervisorId) {
@@ -188,7 +197,7 @@ exports.createBulkSessions = async (req, res) => {
       const newSession = await Session.create({
         studentId,
         sessionType,
-        semester: "Semester 1, 2025/2026", // Defaulting for now, can be passed from frontend
+        semester: "Semester 1, 2025/2026",
         date,
         time,
         venue,
@@ -198,7 +207,7 @@ exports.createBulkSessions = async (req, res) => {
 
       createdSessions.push(newSession);
 
-      // 3. Fetch Rubric & Create Pending Evaluations
+      // 3. Fetch Rubric & Create EXACTLY TWO Pending Evaluations (One for each Panel)
       const rubric = await Rubric.findOne({ sessionType });
       const rubricId = rubric ? rubric._id : null;
 
@@ -223,7 +232,7 @@ exports.createBulkSessions = async (req, res) => {
       });
     }
 
-    // Save all pending evaluations in one go
+    // 4. Save all pending evaluations so the panels can see them!
     if (pendingEvaluations.length > 0) {
       await Evaluation.insertMany(pendingEvaluations);
     }
@@ -237,6 +246,136 @@ exports.createBulkSessions = async (req, res) => {
       });
   } catch (error) {
     console.error("Bulk Creation Error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+exports.deleteSession = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Find and delete the session
+    const deletedSession = await Session.findByIdAndDelete(id);
+    if (!deletedSession) {
+      return res.status(404).json({ error: "Session not found." });
+    }
+
+    // Crucial: Also delete the Pending Evaluations linked to this session!
+    await Evaluation.deleteMany({ sessionId: id });
+
+    res.status(200).json({
+      success: true,
+      message: "Session and linked evaluations deleted successfully.",
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+exports.updateSession = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      studentId,
+      sessionType,
+      semester,
+      date,
+      time,
+      venue,
+      panel1Id,
+      panel2Id,
+    } = req.body;
+
+    const session = await Session.findById(id);
+    if (!session) return res.status(404).json({ error: "Session not found." });
+
+    const student = await User.findById(studentId);
+    if (
+      student?.supervisorId?.toString() === panel1Id ||
+      student?.supervisorId?.toString() === panel2Id
+    ) {
+      return res.status(400).json({
+        error: "Conflict of Interest: A Supervisor cannot be a panel.",
+      });
+    }
+
+    if (panel1Id === panel2Id) {
+      return res
+        .status(400)
+        .json({ error: "Panel 1 and Panel 2 must be different examiners." });
+    }
+
+    // 1. Update the actual session
+    session.studentId = studentId;
+    session.sessionType = sessionType;
+    session.semester = semester;
+    session.date = date;
+    session.time = time;
+    session.venue = venue;
+    session.panel1Id = panel1Id;
+    session.panel2Id = panel2Id;
+    await session.save();
+
+    // 2. Fetch the correct Rubric if it's a Scored Session
+    let rubricId = null;
+    if (sessionType === "PROPOSAL_DEFENSE" || sessionType === "PRE_VIVA") {
+      const rubric = await Rubric.findOne({ sessionType });
+      if (rubric) rubricId = rubric._id;
+    }
+
+    // 3. Manage Pending Evaluations
+    // First, delete any PENDING evaluations for this session (in case panels changed)
+    await Evaluation.deleteMany({ sessionId: id, status: "PENDING" });
+
+    // Ensure Evaluation for Panel 1 exists
+    const eval1Exists = await Evaluation.findOne({
+      sessionId: id,
+      evaluatorId: panel1Id,
+    });
+    if (
+      !eval1Exists &&
+      (sessionType === "PROPOSAL_DEFENSE" ||
+        sessionType === "PRE_VIVA" ||
+        sessionType === "PROGRESS_ASSESSMENT")
+    ) {
+      await Evaluation.create({
+        sessionId: id,
+        studentId,
+        evaluatorId: panel1Id,
+        sessionType,
+        semester,
+        rubricId,
+        status: "PENDING",
+      });
+    }
+
+    // Ensure Evaluation for Panel 2 exists
+    const eval2Exists = await Evaluation.findOne({
+      sessionId: id,
+      evaluatorId: panel2Id,
+    });
+    if (
+      !eval2Exists &&
+      (sessionType === "PROPOSAL_DEFENSE" ||
+        sessionType === "PRE_VIVA" ||
+        sessionType === "PROGRESS_ASSESSMENT")
+    ) {
+      await Evaluation.create({
+        sessionId: id,
+        studentId,
+        evaluatorId: panel2Id,
+        sessionType,
+        semester,
+        rubricId,
+        status: "PENDING",
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Session updated and evaluations synced successfully!",
+    });
+  } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
 };

@@ -1,3 +1,4 @@
+// src/models/Rubric.js
 const mongoose = require("mongoose");
 
 const criterionSchema = new mongoose.Schema(
@@ -5,7 +6,21 @@ const criterionSchema = new mongoose.Schema(
     key: { type: String, required: true },
     title: { type: String, required: true },
 
-    // 🔴 ADDED: The exact text from the PDFs for each grade level
+    // 🔴 ADDED: Support for Quantitative vs Qualitative
+    type: {
+      type: String,
+      enum: ["quantitative", "qualitative"],
+      default: "quantitative",
+    },
+
+    // Quantitative specific fields
+    weight: { type: Number, default: 0 },
+    maxScore: { type: Number, default: 4 },
+
+    // Qualitative specific field (Instructions)
+    description: { type: String, default: "" },
+
+    // Grading Scale Text
     exemplary: { type: String, default: "" }, // 4 Marks
     proficient: { type: String, default: "" }, // 3 Marks
     satisfactory: { type: String, default: "" }, // 2 Marks

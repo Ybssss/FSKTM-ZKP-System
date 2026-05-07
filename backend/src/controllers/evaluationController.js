@@ -1,11 +1,9 @@
-// src/controllers/evaluationController.js
 const Evaluation = require("../models/Evaluation");
 const Session = require("../models/Session");
 const { calculateUTHMGrade } = require("../utils/gradeCalculator");
+const PermissionRequest = require("../models/PermissionRequest");
 
-// ==========================================
-// 1. GET ALL EVALUATIONS
-// ==========================================
+// --- 1. Filter getAllEvaluations based on Permissions ---
 exports.getAllEvaluations = async (req, res) => {
   try {
     const userId = req.user._id || req.user.id || req.user.userId;
@@ -25,6 +23,78 @@ exports.getAllEvaluations = async (req, res) => {
     res.status(200).json({ success: true, data: evaluations });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// --- 2. Request Access ---
+exports.requestAccess = async (req, res) => {
+  try {
+    const requestingPanelId = req.user._id || req.user.id;
+    const { targetEvaluationId } = req.body;
+
+    const evaluation = await Evaluation.findById(targetEvaluationId);
+    if (!evaluation)
+      return res.status(404).json({ error: "Evaluation not found." });
+
+    const newReq = await PermissionRequest.create({
+      requestingPanelId,
+      targetEvaluationId,
+      studentId: evaluation.studentId,
+      owningPanelId: evaluation.evaluatorId, // The person who wrote it
+      reason: req.body.reason || "Requesting access for historical context.",
+    });
+
+    res.status(201).json({
+      success: true,
+      message: "Request sent to the original evaluator.",
+    });
+  } catch (error) {
+    if (error.code === 11000)
+      return res
+        .status(400)
+        .json({ error: "You already requested access to this." });
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// --- 3. View My Pending Approvals ---
+exports.getPendingApprovals = async (req, res) => {
+  try {
+    const userId = req.user._id || req.user.id;
+    const requests = await PermissionRequest.find({
+      owningPanelId: userId,
+      status: "PENDING",
+    })
+      .populate("requestingPanelId", "name email")
+      .populate("studentId", "name")
+      .populate({ path: "targetEvaluationId", select: "sessionType semester" });
+
+    res.status(200).json({ success: true, data: requests });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+// --- 4. Approve/Reject Request ---
+exports.respondToRequest = async (req, res) => {
+  try {
+    const { requestId, action } = req.body; // action: 'APPROVED' or 'REJECTED'
+    const userId = req.user._id || req.user.id;
+
+    const permissionReq = await PermissionRequest.findOneAndUpdate(
+      { _id: requestId, owningPanelId: userId },
+      { status: action },
+      { new: true },
+    );
+
+    if (!permissionReq)
+      return res.status(404).json({ error: "Request not found." });
+
+    res
+      .status(200)
+      .json({ success: true, message: `Request has been ${action}.` });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 };
 
@@ -52,12 +122,14 @@ exports.submitEvaluation = async (req, res) => {
     }
 
     // Update with the submitted data based on session type
+    // 2. Update with the submitted data
     if (evaluation.sessionType === "PROGRESS_ASSESSMENT") {
       evaluation.summaryOfProgress = req.body.summaryOfProgress;
       evaluation.commentsForImprovement = req.body.commentsForImprovement;
       evaluation.overallSuggestions = req.body.overallSuggestions;
     } else {
       evaluation.scores = req.body.scores;
+      evaluation.qualitativeFeedback = req.body.qualitativeFeedback;
       evaluation.totalMarks = req.body.totalMarks;
       evaluation.overallComments = req.body.overallComments;
     }
@@ -66,13 +138,11 @@ exports.submitEvaluation = async (req, res) => {
     evaluation.status = "COMPLETED";
     await evaluation.save();
 
-    res
-      .status(200)
-      .json({
-        success: true,
-        message: "Evaluation submitted successfully.",
-        data: evaluation,
-      });
+    res.status(200).json({
+      success: true,
+      message: "Evaluation submitted successfully.",
+      data: evaluation,
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

@@ -56,13 +56,17 @@ export default function SessionDetailPage() {
               SCHEDULED
             </span>
           </div>
-          {/* 👈 FIXED: Points panel to their pending evaluations list */}
-          {user?.role === "panel" && (
+          {/*Points panel to their pending evaluations list */}
+          {["panel", "coordinator"].includes(user?.role) && (
             <button
-              onClick={() => navigate(`/panel/evaluation`)}
-              className="px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-bold shadow-sm"
+              onClick={() =>
+                navigate(
+                  `/panel/evaluation?sessionId=${session.id || session._id}`,
+                )
+              }
+              className="mt-4 sm:mt-0 px-5 py-2.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 font-bold shadow-sm"
             >
-              View Pending Evaluation
+              <FileText className="w-5 h-5" /> Start Evaluation
             </button>
           )}
         </div>

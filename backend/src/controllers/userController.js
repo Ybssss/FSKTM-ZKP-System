@@ -5,11 +5,13 @@ const { sendRegistrationEmail } = require("../utils/mailer"); // ✅ Import Mail
 exports.getAllUsers = async (req, res) => {
   try {
     const users = await User.find()
-      .populate("supervisorId", "name email userId")
-      .populate("assignedPanels.panelId", "name email userId")
+      .populate({ path: "supervisorId", select: "name email userId" }) // 👈 Explicitly populate SV
+      .lean()
       .sort({ createdAt: -1 });
-    res.json({ success: true, users });
+
+    res.status(200).json({ success: true, users });
   } catch (error) {
+    console.error("Get All Users Error:", error);
     res.status(500).json({ success: false, message: "Failed to fetch users" });
   }
 };

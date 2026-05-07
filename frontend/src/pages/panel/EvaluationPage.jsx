@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import api from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
+import { useLocation } from "react-router-dom";
 
 const SCALE = [
   { label: "Exemplary", value: 4 },
@@ -32,6 +33,7 @@ export default function EvaluationPage() {
 
   // Form State (Scored Rubric)
   const [scores, setScores] = useState({});
+  const [qualFeedback, setQualFeedback] = useState({}); // 👈 Qualitative text answers
   const [overallComments, setOverallComments] = useState("");
 
   // Form State (Progress Assessment)
@@ -48,9 +50,14 @@ export default function EvaluationPage() {
   const loadEvaluations = async () => {
     try {
       setLoading(true);
-      // Calls the GET /api/evaluations route we built
       const res = await api.get("/evaluations");
-      setEvaluations(res.data.data || []);
+
+      // DEBUG LOG
+      console.log("API Response for Evaluations:", res.data);
+
+      // Handle different possible response structures
+      const evaluationData = res.data.data || res.data.evaluations || [];
+      setEvaluations(evaluationData);
     } catch (error) {
       console.error("Error loading evaluation data:", error);
     } finally {
@@ -58,11 +65,56 @@ export default function EvaluationPage() {
     }
   };
 
+  useEffect(() => {
+    // Only run this check after evaluations have finished loading
+    if (!loading && evaluations.length > 0) {
+      const searchParams = new URLSearchParams(location.search);
+      const targetSessionId = searchParams.get("sessionId");
+
+      if (targetSessionId) {
+        // Find the evaluation that matches this session AND belongs to the current user
+        const targetEval = evaluations.find(
+          (e) =>
+            (e.sessionId?._id === targetSessionId ||
+              e.sessionId === targetSessionId) &&
+            e.evaluatorId?._id === user.id,
+        );
+
+        if (targetEval) {
+          openEvaluationModal(targetEval);
+
+          // Optional: Clean up the URL so it doesn't keep opening if they refresh
+          window.history.replaceState(
+            {},
+            document.title,
+            window.location.pathname,
+          );
+        }
+      }
+    }
+  }, [evaluations, loading, location.search, user.id]);
+
   // Math: Calculate percentage based on (Total Earned / Max Possible) * 100
+  // Note: Only counts criteria that are 'quantitative'
   const calculateTotalScore = () => {
     if (!selectedEval?.rubricId?.criteria) return 0;
-    const totalEarned = Object.values(scores).reduce((a, b) => a + b, 0);
-    const maxPossible = selectedEval.rubricId.criteria.length * 4; // 4 is Exemplary
+
+    const quantitativeCriteria = selectedEval.rubricId.criteria.filter(
+      (c) => c.type === "quantitative",
+    );
+    if (quantitativeCriteria.length === 0) return 0;
+
+    let totalEarned = 0;
+    let maxPossible = 0;
+
+    quantitativeCriteria.forEach((crit) => {
+      // Find the score the user selected, multiply by weight if your system uses weighted scores,
+      // or just sum the raw values. Here we just sum the raw 0-4 scores.
+      const score = scores[crit.key] || 0;
+      totalEarned += score;
+      maxPossible += crit.maxScore || 4;
+    });
+
     return maxPossible > 0 ? ((totalEarned / maxPossible) * 100).toFixed(2) : 0;
   };
 
@@ -81,9 +133,14 @@ export default function EvaluationPage() {
 
       // Validation for Scored Rubrics
       if (isScored) {
-        const criteriaCount = selectedEval.rubricId?.criteria?.length || 0;
-        if (Object.keys(scores).length < criteriaCount) {
-          alert("Please provide a score for ALL criteria before submitting.");
+        const quantitativeCriteria =
+          selectedEval.rubricId?.criteria?.filter(
+            (c) => c.type === "quantitative",
+          ) || [];
+        if (Object.keys(scores).length < quantitativeCriteria.length) {
+          alert(
+            "Please provide a score for ALL quantitative criteria in the table before submitting.",
+          );
           setIsSubmitting(false);
           return;
         }
@@ -96,6 +153,7 @@ export default function EvaluationPage() {
 
       if (isScored) {
         payload.scores = scores;
+        payload.qualitativeFeedback = qualFeedback; // Send the text feedback
         payload.totalMarks = parseFloat(calculateTotalScore());
         payload.overallComments = overallComments;
       } else {
@@ -104,12 +162,11 @@ export default function EvaluationPage() {
         payload.overallSuggestions = progressData.overallSuggestions;
       }
 
-      // Calls the POST /api/evaluations/submit route we built
       await api.post("/evaluations/submit", payload);
 
       alert("✅ Evaluation submitted successfully!");
       closeModal();
-      loadEvaluations(); // Refresh the list
+      loadEvaluations();
     } catch (error) {
       alert(
         error.response?.data?.error ||
@@ -123,7 +180,6 @@ export default function EvaluationPage() {
 
   const openEvaluationModal = (ev) => {
     setSelectedEval(ev);
-    // Pre-fill state if it's already COMPLETED
     if (ev.status === "COMPLETED") {
       if (ev.sessionType === "PROGRESS_ASSESSMENT") {
         setProgressData({
@@ -133,11 +189,12 @@ export default function EvaluationPage() {
         });
       } else {
         setScores(ev.scores || {});
+        setQualFeedback(ev.qualitativeFeedback || {});
         setOverallComments(ev.overallComments || "");
       }
     } else {
-      // Reset state for new PENDING evaluations
       setScores({});
+      setQualFeedback({});
       setOverallComments("");
       setProgressData({
         summaryOfProgress: "",
@@ -150,15 +207,16 @@ export default function EvaluationPage() {
   const closeModal = () => {
     setSelectedEval(null);
     setScores({});
+    setQualFeedback({});
     setOverallComments("");
   };
 
   const getScoreColor = (score) => {
-    if (score >= 90) return "text-green-700 bg-green-100 border-green-300"; // Pass w/o Amendment
-    if (score >= 80) return "text-blue-700 bg-blue-100 border-blue-300"; // Pass Minor
-    if (score >= 65) return "text-yellow-700 bg-yellow-100 border-yellow-300"; // Pass Major
-    if (score >= 50) return "text-orange-700 bg-orange-100 border-orange-300"; // Re-evaluation
-    return "text-red-700 bg-red-100 border-red-300"; // Fail
+    if (score >= 90) return "text-green-700 bg-green-100 border-green-300";
+    if (score >= 80) return "text-blue-700 bg-blue-100 border-blue-300";
+    if (score >= 65) return "text-yellow-700 bg-yellow-100 border-yellow-300";
+    if (score >= 50) return "text-orange-700 bg-orange-100 border-orange-300";
+    return "text-red-700 bg-red-100 border-red-300";
   };
 
   return (
@@ -395,87 +453,94 @@ export default function EvaluationPage() {
                       </div>
                     ) : (
                       <>
-                        <div className="overflow-x-auto border border-gray-200 rounded-xl mb-6 shadow-sm">
-                          <table className="w-full text-left text-sm">
-                            <thead>
-                              <tr className="bg-indigo-700 text-white">
-                                <th className="p-4 border-b border-indigo-800 w-1/4">
-                                  Criteria
-                                </th>
-                                {SCALE.map((s) => (
-                                  <th
-                                    key={s.value}
-                                    className="p-3 border-b border-indigo-800 text-center font-semibold"
-                                  >
-                                    {s.label} ({s.value})
+                        {/* 2A. QUANTITATIVE CRITERIA (The Table) */}
+                        {selectedEval.rubricId.criteria?.some(
+                          (c) => c.type === "quantitative",
+                        ) && (
+                          <div className="overflow-x-auto border border-gray-200 rounded-xl mb-6 shadow-sm">
+                            <table className="w-full text-left text-sm">
+                              <thead>
+                                <tr className="bg-indigo-700 text-white">
+                                  <th className="p-4 border-b border-indigo-800 w-1/4">
+                                    Quantitative Criteria
                                   </th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-200 bg-white">
-                              {selectedEval.rubricId.criteria?.map((crit) => (
-                                <tr
-                                  key={crit.key}
-                                  className="hover:bg-indigo-50/30 transition-colors"
-                                >
-                                  <td className="p-4 bg-gray-50 border-r border-gray-200">
-                                    <p className="font-bold text-gray-800">
-                                      {crit.title}
-                                    </p>
-                                    {crit.description && (
-                                      <p className="text-xs text-gray-500 mt-1">
-                                        {crit.description}
-                                      </p>
-                                    )}
-                                  </td>
+                                  {SCALE.map((s) => (
+                                    <th
+                                      key={s.value}
+                                      className="p-3 border-b border-indigo-800 text-center font-semibold"
+                                    >
+                                      {s.label} ({s.value})
+                                    </th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-200 bg-white">
+                                {selectedEval.rubricId.criteria
+                                  .filter((c) => c.type === "quantitative")
+                                  .map((crit) => (
+                                    <tr
+                                      key={crit.key}
+                                      className="hover:bg-indigo-50/30 transition-colors"
+                                    >
+                                      <td className="p-4 bg-gray-50 border-r border-gray-200">
+                                        <p className="font-bold text-gray-800">
+                                          {crit.title}
+                                        </p>
+                                      </td>
 
-                                  {SCALE.map((s) => {
-                                    const scaleKey = s.label.toLowerCase(); // 'exemplary', 'proficient', etc.
-                                    const isSelected =
-                                      scores[crit.key] === s.value;
-                                    return (
-                                      <td
-                                        key={s.value}
-                                        className={`p-3 border-r border-gray-200 text-center align-top ${selectedEval.status === "PENDING" ? "cursor-pointer hover:bg-indigo-50" : ""} ${isSelected ? "bg-indigo-50 ring-2 ring-inset ring-indigo-500" : ""}`}
-                                        onClick={() =>
-                                          selectedEval.status === "PENDING" &&
-                                          handleScoreChange(crit.key, s.value)
-                                        }
-                                      >
-                                        <div className="flex flex-col items-center gap-2">
-                                          <input
-                                            type="radio"
-                                            name={crit.key}
-                                            required
-                                            disabled={
+                                      {SCALE.map((s) => {
+                                        const scaleKey = s.label.toLowerCase();
+                                        const isSelected =
+                                          scores[crit.key] === s.value;
+                                        return (
+                                          <td
+                                            key={s.value}
+                                            className={`p-3 border-r border-gray-200 text-center align-top ${selectedEval.status === "PENDING" ? "cursor-pointer hover:bg-indigo-50" : ""} ${isSelected ? "bg-indigo-50 ring-2 ring-inset ring-indigo-500" : ""}`}
+                                            onClick={() =>
                                               selectedEval.status ===
-                                              "COMPLETED"
-                                            }
-                                            checked={isSelected}
-                                            onChange={() =>
+                                                "PENDING" &&
                                               handleScoreChange(
                                                 crit.key,
                                                 s.value,
                                               )
                                             }
-                                            className="w-5 h-5 accent-indigo-600"
-                                          />
-                                          <p
-                                            className={`text-xs text-justify leading-relaxed ${isSelected ? "text-indigo-900 font-medium" : "text-gray-600"}`}
                                           >
-                                            {crit[scaleKey] ||
-                                              "No description provided for this tier."}
-                                          </p>
-                                        </div>
-                                      </td>
-                                    );
-                                  })}
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
+                                            <div className="flex flex-col items-center gap-2">
+                                              <input
+                                                type="radio"
+                                                name={crit.key}
+                                                required
+                                                disabled={
+                                                  selectedEval.status ===
+                                                  "COMPLETED"
+                                                }
+                                                checked={isSelected}
+                                                onChange={() =>
+                                                  handleScoreChange(
+                                                    crit.key,
+                                                    s.value,
+                                                  )
+                                                }
+                                                className="w-5 h-5 accent-indigo-600"
+                                              />
+                                              <p
+                                                className={`text-xs text-justify leading-relaxed ${isSelected ? "text-indigo-900 font-medium" : "text-gray-600"}`}
+                                              >
+                                                {crit[scaleKey] ||
+                                                  "No description provided."}
+                                              </p>
+                                            </div>
+                                          </td>
+                                        );
+                                      })}
+                                    </tr>
+                                  ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
 
+                        {/* LIVE SCORE TRACKER */}
                         {selectedEval.status === "PENDING" && (
                           <div className="bg-gray-900 text-white p-6 rounded-xl flex justify-between items-center mb-6 shadow-lg">
                             <span className="text-lg font-medium text-gray-300 uppercase tracking-widest">
@@ -487,7 +552,41 @@ export default function EvaluationPage() {
                           </div>
                         )}
 
-                        <div>
+                        {/* 2B. QUALITATIVE CRITERIA (The Textboxes) */}
+                        {selectedEval.rubricId.criteria
+                          ?.filter((c) => c.type === "qualitative")
+                          .map((crit) => (
+                            <div
+                              key={crit.key}
+                              className="mb-6 bg-blue-50 border border-blue-200 p-5 rounded-xl"
+                            >
+                              <label className="block text-sm font-bold text-blue-900 mb-1">
+                                {crit.title}
+                              </label>
+                              {crit.description && (
+                                <p className="text-xs text-blue-700 mb-3">
+                                  {crit.description}
+                                </p>
+                              )}
+                              <textarea
+                                required
+                                disabled={selectedEval.status === "COMPLETED"}
+                                rows="4"
+                                className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-700"
+                                placeholder="Write your feedback here..."
+                                value={qualFeedback[crit.key] || ""}
+                                onChange={(e) =>
+                                  setQualFeedback((prev) => ({
+                                    ...prev,
+                                    [crit.key]: e.target.value,
+                                  }))
+                                }
+                              />
+                            </div>
+                          ))}
+
+                        {/* GENERAL OVERALL REMARKS */}
+                        <div className="mt-8 pt-6 border-t border-gray-200">
                           <label className="block text-sm font-bold text-gray-700 mb-2">
                             Overall Remarks (Indexed for Historical Search)
                           </label>

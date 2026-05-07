@@ -38,23 +38,33 @@ export default function TimetableManagementPage() {
   }, []);
 
   const loadData = async () => {
+    setLoading(true);
+
     try {
-      setLoading(true);
       const res = await api.get("/timetables/my");
       setSessions(res.data.data || res.data.sessions || []);
+    } catch (error) {
+      console.error(
+        "Error loading timetables:",
+        error.response?.data || error.message,
+      );
+    }
 
-      if (isAdmin) {
+    if (isAdmin) {
+      try {
         const usersRes = await api.get("/users/assignments");
+
+        console.log("✅ Fetched Assignments Data:", usersRes.data);
+
         setStudents(usersRes.data.students || []);
         setPanels(usersRes.data.panels || []);
+      } catch (error) {
+        console.error("Error loading timetable data", error);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error("Error loading timetable data", error);
-    } finally {
-      setLoading(false);
     }
   };
-
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this session permanently?")) return;
     try {
@@ -96,31 +106,45 @@ export default function TimetableManagementPage() {
 
     try {
       setIsSaving(true);
-      // We loop through selected students and call the standard create API
-      for (const studentId of selectedStudentIds) {
-        const studentObj = students.find((s) => s._id === studentId);
-        // Find 2 random panels just for the draft if they don't have assigned panels yet
-        const panel1Id = panels[0]?._id;
-        const panel2Id = panels[1]?._id;
 
-        await api.post("/timetables/create", {
-          studentId,
-          sessionType: bulkConfig.sessionType,
-          semester: "Semester 1, 2025/2026", // Or make dynamic
+      const payload = selectedStudentIds.map((studentId) => {
+        const studentObj = students.find((s) => s._id === studentId);
+        const draft = sessionDrafts[studentId] || {};
+
+        // Use the panels they selected in the UI dropdowns, or fallback to the first 2 available
+        const panel1Id = draft.panel1Id || panels[0]?._id;
+        const panel2Id = draft.panel2Id || panels[1]?._id;
+
+        if (!panel1Id || !panel2Id) {
+          throw new Error(`Please select two panels for ${studentObj?.name}.`);
+        }
+
+        return {
+          studentId: studentId,
+          sessionType: bulkConfig.sessionType
+            .toUpperCase()
+            .replace(/\s+/g, "_"),
           date: bulkConfig.date,
-          time: sessionDrafts[studentId].startTime,
+          time: draft.startTime || "09:00",
           venue: bulkConfig.venue,
-          panel1Id,
-          panel2Id,
-        });
-      }
+          panel1Id: panel1Id,
+          panel2Id: panel2Id,
+        };
+      });
+
+      await api.post("/timetables/bulk", { sessions: payload });
+
       alert("✅ Bulk Sessions Created Successfully!");
       setSelectedStudentIds([]);
       setSessionDrafts({});
       setActiveTab("list");
       loadData();
     } catch (error) {
-      alert(error.response?.data?.error || "Failed to create bulk sessions");
+      alert(
+        error.response?.data?.error ||
+          error.response?.data?.message ||
+          "Failed to create bulk sessions",
+      );
     } finally {
       setIsSaving(false);
     }
@@ -352,8 +376,11 @@ export default function TimetableManagementPage() {
             <div className="p-5 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-xl">
               <div>
                 <h2 className="font-bold text-lg text-gray-900">
-                  3. Adjust Timings & Save
+                  3. Adjust Timings & Select Panels
                 </h2>
+                <p className="text-xs text-gray-500">
+                  Customize the schedule and assign examiners for each student.
+                </p>
               </div>
               <button
                 onClick={handleBulkSubmit}
@@ -376,39 +403,81 @@ export default function TimetableManagementPage() {
                 <div className="space-y-4">
                   {selectedStudentIds.map((id) => {
                     const student = students.find((s) => s._id === id);
+                    const svId =
+                      student?.supervisorId?._id || student?.supervisorId;
+                    // Filter out the student's SV so they can't be assigned by mistake!
+                    const eligiblePanels = panels.filter((p) => p._id !== svId);
+
                     return (
                       <div
                         key={id}
-                        className="flex flex-col sm:flex-row items-center gap-4 p-4 border rounded-xl bg-white shadow-sm"
+                        className="flex flex-col gap-4 p-4 border rounded-xl bg-white shadow-sm"
                       >
-                        <div className="flex-1 min-w-0">
-                          <p className="font-bold text-gray-900">
-                            {student.name}
-                          </p>
-                          <p className="text-xs font-mono text-gray-500">
-                            {student.matricNumber}
-                          </p>
+                        <div className="flex justify-between items-center border-b pb-2">
+                          <div>
+                            <p className="font-bold text-gray-900">
+                              {student.name}
+                            </p>
+                            <p className="text-xs font-mono text-gray-500">
+                              {student.matricNumber} | SV:{" "}
+                              <span className="text-indigo-600">
+                                {student.supervisorId?.name || "Unknown"}
+                              </span>
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="time"
+                              value={sessionDrafts[id]?.startTime || "09:00"}
+                              onChange={(e) =>
+                                updateDraftTime(id, "startTime", e.target.value)
+                              }
+                              className="p-2 border rounded-lg text-sm font-medium bg-gray-50"
+                              required
+                            />
+                          </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="time"
-                            value={sessionDrafts[id]?.startTime || ""}
-                            onChange={(e) =>
-                              updateDraftTime(id, "startTime", e.target.value)
-                            }
-                            className="p-2 border rounded-lg text-sm font-medium bg-gray-50"
-                            required
-                          />
-                          <span className="text-gray-400">-</span>
-                          <input
-                            type="time"
-                            value={sessionDrafts[id]?.endTime || ""}
-                            onChange={(e) =>
-                              updateDraftTime(id, "endTime", e.target.value)
-                            }
-                            className="p-2 border rounded-lg text-sm font-medium bg-gray-50"
-                            required
-                          />
+
+                        {/* 🔴 NEW: PANEL SELECTION DROPDOWNS */}
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                              Panel 1 (Examiner)
+                            </label>
+                            <select
+                              value={sessionDrafts[id]?.panel1Id || ""}
+                              onChange={(e) =>
+                                updateDraftTime(id, "panel1Id", e.target.value)
+                              }
+                              className="w-full p-2 border rounded-lg text-sm bg-indigo-50 border-indigo-200 focus:ring-2 focus:ring-indigo-500"
+                            >
+                              <option value="">-- Select Panel 1 --</option>
+                              {eligiblePanels.map((p) => (
+                                <option key={p._id} value={p._id}>
+                                  {p.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1">
+                              Panel 2 (Examiner)
+                            </label>
+                            <select
+                              value={sessionDrafts[id]?.panel2Id || ""}
+                              onChange={(e) =>
+                                updateDraftTime(id, "panel2Id", e.target.value)
+                              }
+                              className="w-full p-2 border rounded-lg text-sm bg-indigo-50 border-indigo-200 focus:ring-2 focus:ring-indigo-500"
+                            >
+                              <option value="">-- Select Panel 2 --</option>
+                              {eligiblePanels.map((p) => (
+                                <option key={p._id} value={p._id}>
+                                  {p.name}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
                         </div>
                       </div>
                     );

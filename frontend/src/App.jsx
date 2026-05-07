@@ -19,7 +19,6 @@ import RegisterPage from "./pages/RegisterPage";
 // Panel/Staff Pages
 import PanelDashboard from "./pages/panel/PanelDashboard";
 import EvaluationPage from "./pages/panel/EvaluationPage";
-import EditEvaluationPage from "./pages/panel/EditEvaluationPage";
 import RubricPage from "./pages/panel/RubricPage";
 import UsersPage from "./pages/panel/UsersPage";
 import HistoricalFeedbackPage from "./pages/panel/HistoricalFeedbackPage";
@@ -72,11 +71,6 @@ function App() {
             <Route path="dashboard" element={<PanelDashboard />} />
             <Route path="evaluation" element={<EvaluationPage />} />
             <Route path="evaluation/new" element={<EvaluationPage />} />{" "}
-            {/* ✅ ADDED THIS LINE */}
-            <Route
-              path="evaluation/edit/:id"
-              element={<EditEvaluationPage />}
-            />
             <Route path="rubrics" element={<RubricPage />} />
             <Route
               path="historical-feedback"

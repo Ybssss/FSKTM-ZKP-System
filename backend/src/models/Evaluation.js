@@ -34,6 +34,8 @@ const evaluationSchema = new mongoose.Schema(
       default: null,
     },
     scores: { type: Map, of: Number, default: {} },
+    // 🔴 ADD THIS LINE to store the qualitative criteria text:
+    qualitativeFeedback: { type: Map, of: String, default: {} },
     totalMarks: { type: Number, default: 0 },
 
     // --- QUALITATIVE Forms (Progress Assessment) ---

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { Calendar, MapPin, Clock, AlertCircle, ArrowRight } from "lucide-react";
 import { Link } from "react-router-dom";
-import { timetableAPI } from "../../services/api";
+import api from "../../services/api"; // 👈 Make sure this uses your base API instance
 
 export default function PanelDashboard() {
   const { user } = useAuth();
@@ -19,31 +19,36 @@ export default function PanelDashboard() {
       setLoading(true);
       setError(null);
 
-      console.log("📅 Loading upcoming sessions...");
+      // 1. Fetch user's sessions using your existing timetable route
+      const response = await api.get("/timetables/my");
 
-      // Fetch user's sessions
-      const response = await timetableAPI.getMy();
+      // Handle the data structure (whether the backend sends .data or .sessions)
+      const allSessions = response.data?.data || response.data?.sessions || [];
 
-      console.log("✅ Sessions response:", response);
+      // 2. Filter for upcoming sessions
+      const now = new Date();
+      // Set to midnight so today's sessions don't disappear if the time has passed
+      now.setHours(0, 0, 0, 0);
 
-      if (response.success && response.data) {
-        // Filter for upcoming sessions (date >= today)
-        const now = new Date();
-        const upcoming = response.data
-          .filter((session) => {
-            const sessionDate = new Date(session.date);
-            return sessionDate >= now;
-          })
-          .sort((a, b) => new Date(a.date) - new Date(b.date));
+      const upcoming = allSessions
+        .filter((session) => {
+          // Look for 'date' or inside the 'schedule' object depending on your backend
+          const sessionDateStr = session.schedule?.date || session.date;
+          if (!sessionDateStr) return false;
 
-        setUpcomingSessions(upcoming);
-        console.log("✅ Dashboard data loaded successfully");
-      } else {
-        throw new Error("Invalid response from sessions API");
-      }
+          const sessionDate = new Date(sessionDateStr);
+          return sessionDate >= now;
+        })
+        .sort((a, b) => {
+          const dateA = new Date(a.schedule?.date || a.date);
+          const dateB = new Date(b.schedule?.date || b.date);
+          return dateA - dateB;
+        });
+
+      setUpcomingSessions(upcoming);
     } catch (error) {
       console.error("❌ Error loading dashboard:", error);
-      setError(error.message);
+      setError(error.message || "Failed to load upcoming sessions");
       setUpcomingSessions([]);
     } finally {
       setLoading(false);
@@ -52,18 +57,16 @@ export default function PanelDashboard() {
 
   if (loading) {
     return (
-      <div>
-        <div className="space-y-4">
-          {[1, 2, 3].map((i) => (
-            <div
-              key={i}
-              className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 animate-pulse"
-            >
-              <div className="h-4 bg-gray-200 rounded w-24 mb-4"></div>
-              <div className="h-8 bg-gray-200 rounded w-32"></div>
-            </div>
-          ))}
-        </div>
+      <div className="space-y-4">
+        {[1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 animate-pulse"
+          >
+            <div className="h-4 bg-gray-200 rounded w-24 mb-4"></div>
+            <div className="h-8 bg-gray-200 rounded w-32"></div>
+          </div>
+        ))}
       </div>
     );
   }
@@ -107,8 +110,7 @@ export default function PanelDashboard() {
             to="/panel/sessions"
             className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
           >
-            View all
-            <ArrowRight className="w-4 h-4" />
+            View all <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
 
@@ -124,16 +126,16 @@ export default function PanelDashboard() {
           <div className="space-y-4">
             {upcomingSessions.slice(0, 5).map((session) => (
               <div
-                key={session._id}
+                key={session.id || session._id}
                 className="p-4 border border-gray-200 rounded-lg hover:bg-blue-50 transition-colors"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex-1">
                     <h3 className="text-lg font-semibold text-gray-900">
-                      {session.title}
+                      {session.rubric || session.sessionType?.replace("_", " ")}
                     </h3>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {session.sessionType}
+                    <p className="text-sm font-bold text-indigo-700 mt-1">
+                      Student: {session.student?.name || "TBD"}
                     </p>
                   </div>
                 </div>
@@ -142,7 +144,9 @@ export default function PanelDashboard() {
                   <div className="flex items-center gap-2">
                     <Calendar className="w-4 h-4 text-gray-400" />
                     <span>
-                      {new Date(session.date).toLocaleDateString("en-MY", {
+                      {new Date(
+                        session.schedule?.date || session.date,
+                      ).toLocaleDateString("en-MY", {
                         month: "short",
                         day: "numeric",
                         year: "numeric",
@@ -151,19 +155,12 @@ export default function PanelDashboard() {
                   </div>
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4 text-gray-400" />
-                    <span>
-                      {session.startTime} - {session.endTime}
-                    </span>
+                    <span>{session.schedule?.time || session.time}</span>
                   </div>
-                  {session.venue && (
+                  {(session.schedule?.venue || session.venue) && (
                     <div className="flex items-center gap-2 col-span-2">
                       <MapPin className="w-4 h-4 text-gray-400" />
-                      <span>{session.venue}</span>
-                    </div>
-                  )}
-                  {session.description && (
-                    <div className="col-span-2 text-xs text-gray-500 line-clamp-2">
-                      {session.description}
+                      <span>{session.schedule?.venue || session.venue}</span>
                     </div>
                   )}
                 </div>

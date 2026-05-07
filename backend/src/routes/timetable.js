@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const { authenticateToken, requireRole } = require("../middleware/auth");
 const evaluationController = require("../controllers/evaluationController");
+const sessionController = require("../controllers/sessionController");
 const {
   createTimetable,
   getTimetables,
@@ -24,10 +25,32 @@ router.use(authenticateToken);
 // ==========================================
 // VIEWING ROUTES (All Authenticated Users)
 // ==========================================
-router.get("/", getTimetables); // Controller should filter based on role involvement
-router.get("/my", getMyTimetable); // For Students and Panels to see their assigned sessions
-router.get("/:id", getTimetableById);
-router.post("/bulk", authenticateToken, sessionController.createBulkSessions);
+// 1. Get Sessions (Open to everyone, controller filters by role)
+router.get("/my", authenticateToken, sessionController.getMySessions);
+
+// 2. Create Bulk Sessions (Strictly Admin Only)
+router.post(
+  "/bulk",
+  authenticateToken,
+  requireRole("admin", "superadmin"),
+  sessionController.createBulkSessions,
+);
+
+// 3. Create Single Session (Strictly Admin Only)
+router.post(
+  "/create",
+  authenticateToken,
+  requireRole("admin", "superadmin"),
+  sessionController.createSession,
+);
+
+// 4. Delete Session (Strictly Admin Only)
+router.delete(
+  "/:id",
+  authenticateToken,
+  requireRole("admin", "superadmin"),
+  sessionController.deleteSession,
+);
 // ==========================================
 // DOCUMENT & NOTES ROUTES
 // ==========================================
@@ -155,5 +178,12 @@ router.get(
 router.get("/", authenticateToken, evaluationController.getAllEvaluations);
 // Panel Assignment (Admin only) - Maps 2 panels to 1 student
 router.post("/assign-panel", requireRole("admin"), assignPanelToStudent);
+
+router.put(
+  "/:id",
+  authenticateToken,
+  requireRole("admin"),
+  sessionController.updateSession,
+);
 
 module.exports = router;

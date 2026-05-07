@@ -248,12 +248,15 @@ export default function UsersPage() {
                     <p className="text-xs text-gray-400">{u.email}</p>
                   </td>
                   <td className="p-4">{getRoleBadge(u.role)}</td>
+
+                  {/* 🔴 FIX 2: Safely display Supervisor Name */}
                   <td className="p-4 text-sm text-gray-600">
                     {u.role === "student" ? (
                       u.supervisorId ? (
                         <div className="flex flex-col">
                           <span className="font-semibold text-gray-800">
-                            {u.supervisorId.name}
+                            {/* Check if it's an object with a name, otherwise say Unknown */}
+                            {u.supervisorId.name || "Unknown Name"}
                           </span>
                           <span className="text-xs text-indigo-600 font-medium">
                             Supervisor
@@ -268,26 +271,28 @@ export default function UsersPage() {
                       <span className="text-gray-400">N/A</span>
                     )}
                   </td>
+
+                  {/* 🔴 FIX 1: Show Reset/Generate button for EVERYONE */}
                   <td className="p-4">
-                    {u.zkpRegistered ? (
-                      <div className="flex flex-col items-start gap-2">
+                    <div className="flex flex-col items-start gap-2">
+                      {u.zkpRegistered ? (
                         <span className="inline-flex items-center gap-1 text-green-700 bg-green-50 px-2 py-1 rounded text-xs font-bold border border-green-200">
                           <Shield className="w-3 h-3" /> SECURED
                         </span>
-                        {/* THE NEW RESET BUTTON */}
-                        <button
-                          onClick={() => handleResetZkp(u.userId, u.name)}
-                          className="text-xs text-red-600 hover:text-red-800 font-semibold underline transition-colors"
-                          title="Erase their keys and generate a new code"
-                        >
-                          Reset Keys
-                        </button>
-                      </div>
-                    ) : (
-                      <span className="inline-flex items-center gap-1 text-orange-700 bg-orange-50 px-2 py-1 rounded text-xs font-bold border border-orange-200">
-                        PENDING SETUP
-                      </span>
-                    )}
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-orange-700 bg-orange-50 px-2 py-1 rounded text-xs font-bold border border-orange-200">
+                          PENDING SETUP
+                        </span>
+                      )}
+
+                      {/* Button is now always visible! */}
+                      <button
+                        onClick={() => handleResetZkp(u.userId, u.name)}
+                        className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold underline transition-colors"
+                      >
+                        {u.zkpRegistered ? "Reset Keys" : "Generate Setup Code"}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
