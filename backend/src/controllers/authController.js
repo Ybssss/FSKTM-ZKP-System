@@ -183,7 +183,9 @@ exports.generateLoginChallenge = async (req, res) => {
 
 exports.verifyDeviceProof = async (req, res) => {
   try {
-    const { userId, proof, trustDevice = false, deviceId } = req.body;
+    const { userId, proof, deviceId } = req.body;
+    const trustDevice =
+      req.body.trustDevice === true || req.body.trustDevice === "true";
     if (!userId || !proof) {
       return res
         .status(400)
@@ -223,10 +225,10 @@ exports.verifyDeviceProof = async (req, res) => {
     let browser = "Unknown Browser";
     let os = "Unknown OS";
 
-    if (userAgent.includes("Firefox")) browser = "Firefox";
+    if (userAgent.includes("Edg/")) browser = "Microsoft Edge";
+    else if (userAgent.includes("Firefox")) browser = "Firefox";
     else if (userAgent.includes("Chrome")) browser = "Chrome";
     else if (userAgent.includes("Safari")) browser = "Safari";
-    else if (userAgent.includes("Edge")) browser = "Edge";
 
     if (userAgent.includes("Windows")) os = "Windows";
     else if (userAgent.includes("Mac")) os = "MacOS";

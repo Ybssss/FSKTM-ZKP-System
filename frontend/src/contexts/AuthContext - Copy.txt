@@ -61,16 +61,11 @@ export const AuthProvider = ({ children }) => {
         challengeResponse.challenge,
       );
 
-      // Force the passed parameter into a strict boolean
-      const forceTrusted = trustDevice === true || trustDevice === "true";
-
-      console.log(
-        `🔍 Verifying proof with server... (Trust Device: ${forceTrusted})`,
-      );
+      console.log("🔍 Verifying proof with server...");
       const verifyResponse = await authAPI.verify(
         userId,
         proofObject,
-        forceTrusted, // 👈 FIXED: We use the local 'forceTrusted' variable now!
+        isTrusted,
         deviceId,
       );
 

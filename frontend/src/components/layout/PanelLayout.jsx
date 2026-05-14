@@ -55,12 +55,6 @@ export default function PanelLayout() {
       allowedRoles: ["admin", "panel"],
     },
     {
-      to: "/panel/attendance",
-      icon: CalendarCheck,
-      label: "Attendance",
-      allowedRoles: ["admin", "panel"],
-    },
-    {
       to: "/panel/historical-feedback",
       icon: Search,
       label: "Feedback",

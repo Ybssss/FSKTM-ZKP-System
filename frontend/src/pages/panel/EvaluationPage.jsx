@@ -7,10 +7,10 @@ import {
   CheckCircle2,
   FileText,
   AlertCircle,
+  Calendar,
 } from "lucide-react";
 import api from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
-import { useLocation } from "react-router-dom";
 
 const SCALE = [
   { label: "Exemplary", value: 4 },
@@ -31,12 +31,11 @@ export default function EvaluationPage() {
   const [selectedEval, setSelectedEval] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form State (Scored Rubric)
+  // Form State
   const [scores, setScores] = useState({});
-  const [qualFeedback, setQualFeedback] = useState({}); // 👈 Qualitative text answers
+  const [qualFeedback, setQualFeedback] = useState({});
   const [overallComments, setOverallComments] = useState("");
 
-  // Form State (Progress Assessment)
   const [progressData, setProgressData] = useState({
     summaryOfProgress: "",
     commentsForImprovement: "",
@@ -51,13 +50,7 @@ export default function EvaluationPage() {
     try {
       setLoading(true);
       const res = await api.get("/evaluations");
-
-      // DEBUG LOG
-      console.log("API Response for Evaluations:", res.data);
-
-      // Handle different possible response structures
-      const evaluationData = res.data.data || res.data.evaluations || [];
-      setEvaluations(evaluationData);
+      setEvaluations(res.data.data || []);
     } catch (error) {
       console.error("Error loading evaluation data:", error);
     } finally {
@@ -65,37 +58,6 @@ export default function EvaluationPage() {
     }
   };
 
-  useEffect(() => {
-    // Only run this check after evaluations have finished loading
-    if (!loading && evaluations.length > 0) {
-      const searchParams = new URLSearchParams(location.search);
-      const targetSessionId = searchParams.get("sessionId");
-
-      if (targetSessionId) {
-        // Find the evaluation that matches this session AND belongs to the current user
-        const targetEval = evaluations.find(
-          (e) =>
-            (e.sessionId?._id === targetSessionId ||
-              e.sessionId === targetSessionId) &&
-            e.evaluatorId?._id === user.id,
-        );
-
-        if (targetEval) {
-          openEvaluationModal(targetEval);
-
-          // Optional: Clean up the URL so it doesn't keep opening if they refresh
-          window.history.replaceState(
-            {},
-            document.title,
-            window.location.pathname,
-          );
-        }
-      }
-    }
-  }, [evaluations, loading, location.search, user.id]);
-
-  // Math: Calculate percentage based on (Total Earned / Max Possible) * 100
-  // Note: Only counts criteria that are 'quantitative'
   const calculateTotalScore = () => {
     if (!selectedEval?.rubricId?.criteria) return 0;
 
@@ -108,13 +70,16 @@ export default function EvaluationPage() {
     let maxPossible = 0;
 
     quantitativeCriteria.forEach((crit) => {
-      // Find the score the user selected, multiply by weight if your system uses weighted scores,
-      // or just sum the raw values. Here we just sum the raw 0-4 scores.
-      const score = scores[crit.key] || 0;
-      totalEarned += score;
-      maxPossible += crit.maxScore || 4;
+      // Multiply the selected raw score (0-4) by the criterion's weight (e.g. 5, 10, 20)
+      const rawScore = scores[crit.key] || 0;
+      const weight = crit.weight || 0;
+
+      // We calculate points earned out of the weighted max.
+      totalEarned += (rawScore / (crit.maxScore || 4)) * weight;
+      maxPossible += weight; // Should ideally sum up to 100%
     });
 
+    // Ensure it's a clean percentage out of 100
     return maxPossible > 0 ? ((totalEarned / maxPossible) * 100).toFixed(2) : 0;
   };
 
@@ -131,29 +96,26 @@ export default function EvaluationPage() {
         selectedEval.sessionType === "PROPOSAL_DEFENSE" ||
         selectedEval.sessionType === "PRE_VIVA";
 
-      // Validation for Scored Rubrics
       if (isScored) {
         const quantitativeCriteria =
           selectedEval.rubricId?.criteria?.filter(
             (c) => c.type === "quantitative",
           ) || [];
         if (Object.keys(scores).length < quantitativeCriteria.length) {
-          alert(
-            "Please provide a score for ALL quantitative criteria in the table before submitting.",
-          );
+          alert("Please provide a score for ALL criteria before submitting.");
           setIsSubmitting(false);
           return;
         }
       }
 
       const payload = {
-        sessionId: selectedEval.sessionId._id,
+        sessionId: selectedEval.sessionId._id || selectedEval.sessionId,
         sessionType: selectedEval.sessionType,
       };
 
       if (isScored) {
         payload.scores = scores;
-        payload.qualitativeFeedback = qualFeedback; // Send the text feedback
+        payload.qualitativeFeedback = qualFeedback;
         payload.totalMarks = parseFloat(calculateTotalScore());
         payload.overallComments = overallComments;
       } else {
@@ -163,7 +125,6 @@ export default function EvaluationPage() {
       }
 
       await api.post("/evaluations/submit", payload);
-
       alert("✅ Evaluation submitted successfully!");
       closeModal();
       loadEvaluations();
@@ -193,9 +154,17 @@ export default function EvaluationPage() {
         setOverallComments(ev.overallComments || "");
       }
     } else {
-      setScores({});
-      setQualFeedback({});
-      setOverallComments("");
+      const savedDraft = localStorage.getItem(`eval_draft_${ev._id}`);
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft);
+        setScores(parsed.scores || {});
+        setQualFeedback(parsed.qualFeedback || {});
+        setOverallComments(parsed.overallComments || "");
+      } else {
+        setScores({});
+        setQualFeedback({});
+        setOverallComments("");
+      }
       setProgressData({
         summaryOfProgress: "",
         commentsForImprovement: "",
@@ -211,6 +180,18 @@ export default function EvaluationPage() {
     setOverallComments("");
   };
 
+  const [searchTerm, setSearchTerm] = useState("");
+
+  useEffect(() => {
+    if (selectedEval && selectedEval.status === "PENDING") {
+      const draft = { scores, qualFeedback, overallComments };
+      localStorage.setItem(
+        `eval_draft_${selectedEval._id}`,
+        JSON.stringify(draft),
+      );
+    }
+  }, [scores, qualFeedback, overallComments]);
+
   const getScoreColor = (score) => {
     if (score >= 90) return "text-green-700 bg-green-100 border-green-300";
     if (score >= 80) return "text-blue-700 bg-blue-100 border-blue-300";
@@ -220,7 +201,7 @@ export default function EvaluationPage() {
   };
 
   return (
-    <div className="max-w-7xl mx-auto">
+    <div className="max-w-7xl mx-auto space-y-6">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
@@ -235,6 +216,7 @@ export default function EvaluationPage() {
         </div>
       </div>
 
+      {/* Evaluations Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {loading ? (
           <div className="p-12 text-center">
@@ -246,200 +228,311 @@ export default function EvaluationPage() {
           </div>
         ) : (
           <div className="overflow-x-auto">
+            <div className="p-4 bg-gray-50 border-b border-gray-200">
+              <input
+                type="text"
+                placeholder="Search by Student Name or Matric No..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full md:w-1/3 p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
             <table className="w-full text-left">
               <thead className="bg-gray-50 border-b border-gray-200 text-sm text-gray-600 uppercase tracking-wider">
                 <tr>
-                  <th className="p-4">Student</th>
-                  <th className="p-4">Session Type</th>
-                  <th className="p-4">Semester</th>
+                  <th className="p-4">Candidate</th>
+                  <th className="p-4">Session Info</th>
                   {isAdmin && <th className="p-4">Evaluator</th>}
                   <th className="p-4 text-center">Status</th>
-                  <th className="p-4 text-center">Score</th>
+                  <th className="p-4 text-center">Final Score</th>
                   <th className="p-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {evaluations.map((ev) => (
-                  <tr key={ev._id} className="hover:bg-gray-50">
-                    <td className="p-4">
-                      <p className="font-semibold">
-                        {ev.studentId?.name || "Unknown Student"}
-                      </p>
-                    </td>
-                    <td className="p-4">
-                      <span className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-full text-xs font-bold">
-                        {ev.sessionType?.replace("_", " ")}
-                      </span>
-                    </td>
-                    <td className="p-4 text-sm text-gray-600">{ev.semester}</td>
-                    {isAdmin && (
-                      <td className="p-4 text-sm text-gray-600">
-                        {ev.evaluatorId?.name}
+                {/* 🔴 FIX: Map over filtered evaluations instead of all evaluations */}
+                {evaluations
+                  .filter(
+                    (e) =>
+                      e.studentId?.name
+                        ?.toLowerCase()
+                        .includes(searchTerm.toLowerCase()) ||
+                      e.studentId?.matricNumber
+                        ?.toLowerCase()
+                        .includes(searchTerm.toLowerCase()),
+                  )
+                  .map((ev) => (
+                    <tr key={ev._id} className="hover:bg-gray-50">
+                      <td className="p-4">
+                        <p className="font-bold text-gray-900">
+                          {ev.studentId?.name || "Unknown Student"}
+                        </p>
+                        <p className="text-xs font-mono text-gray-500">
+                          {ev.studentId?.matricNumber || "No Matric"}
+                        </p>
                       </td>
-                    )}
-
-                    <td className="p-4 text-center">
-                      <span
-                        className={`px-3 py-1 rounded-full text-xs font-bold ${ev.status === "COMPLETED" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"}`}
-                      >
-                        {ev.status}
-                      </span>
-                    </td>
-
-                    <td className="p-4 text-center">
-                      {ev.sessionType === "PROGRESS_ASSESSMENT" ? (
-                        <span className="text-gray-400 text-xs italic">
-                          Text Only
+                      <td className="p-4">
+                        <span className="inline-block px-3 py-1 bg-indigo-50 text-indigo-700 rounded text-xs font-bold uppercase border border-indigo-100 mb-1">
+                          {ev.sessionType?.replace("_", " ")}
                         </span>
-                      ) : ev.status === "COMPLETED" ? (
-                        <div
-                          className={`inline-flex px-3 py-1 rounded-lg border font-bold text-sm ${getScoreColor(ev.totalMarks)}`}
-                        >
-                          {ev.totalMarks?.toFixed(2)}%
-                        </div>
-                      ) : (
-                        <span className="text-gray-400 text-xs">--</span>
+                        <p className="text-xs text-gray-500 font-semibold">
+                          {ev.semester}
+                        </p>
+                      </td>
+                      {isAdmin && (
+                        <td className="p-4 text-sm font-semibold text-gray-700">
+                          {ev.evaluatorId?.name}
+                        </td>
                       )}
-                    </td>
 
-                    <td className="p-4 text-right">
-                      <button
-                        onClick={() => openEvaluationModal(ev)}
-                        className={`px-4 py-2 text-sm font-semibold rounded-lg transition-colors ${
-                          ev.status === "PENDING" && !isAdmin
-                            ? "bg-indigo-600 text-white hover:bg-indigo-700"
-                            : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-                        }`}
-                      >
-                        {ev.status === "PENDING" && !isAdmin
-                          ? "Evaluate Now"
-                          : "View Report"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      <td className="p-4 text-center">
+                        <span
+                          className={`inline-flex px-3 py-1 rounded text-xs font-bold ${ev.status === "COMPLETED" ? "bg-green-100 text-green-700 border border-green-200" : "bg-yellow-100 text-yellow-700 border border-yellow-200"}`}
+                        >
+                          {ev.status}
+                        </span>
+                      </td>
+
+                      <td className="p-4 text-center">
+                        {ev.sessionType === "PROGRESS_ASSESSMENT" ? (
+                          <span className="text-gray-400 text-xs italic">
+                            Text Only
+                          </span>
+                        ) : ev.status === "COMPLETED" ? (
+                          <div
+                            className={`inline-flex px-3 py-1.5 rounded-lg border font-bold text-sm shadow-sm ${getScoreColor(ev.totalMarks)}`}
+                          >
+                            {ev.totalMarks?.toFixed(2)}%
+                          </div>
+                        ) : (
+                          <span className="text-gray-400 font-bold">--</span>
+                        )}
+                      </td>
+
+                      <td className="p-4 text-right">
+                        <button
+                          onClick={() => openEvaluationModal(ev)}
+                          className={`px-5 py-2 text-sm font-bold rounded-lg transition-colors flex items-center justify-center gap-2 ml-auto ${
+                            ev.status === "PENDING" && !isAdmin
+                              ? "bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm"
+                              : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                          }`}
+                        >
+                          {ev.status === "PENDING" && !isAdmin ? (
+                            <>
+                              <FileText className="w-4 h-4" /> Evaluate
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="w-4 h-4" /> View Report
+                            </>
+                          )}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
         )}
       </div>
 
-      {/* EVALUATION MODAL */}
+      {/* ==================================================== */}
+      {/* FORMAL UTHM EVALUATION MODAL                         */}
+      {/* ==================================================== */}
       {selectedEval && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-2xl max-w-6xl w-full my-8 flex flex-col">
-            <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between sticky top-0 bg-white z-10 rounded-t-xl">
-              <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                {selectedEval.sessionType === "PROGRESS_ASSESSMENT" ? (
-                  <FileText className="w-6 h-6 text-indigo-600" />
-                ) : (
-                  <Calculator className="w-6 h-6 text-indigo-600" />
-                )}
-                {selectedEval.status === "PENDING"
-                  ? "Conduct Evaluation"
-                  : "Evaluation Report"}
-              </h2>
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4 sm:p-6 lg:p-8 backdrop-blur-sm">
+          {/* 🔴 FIX: Removed absolute/sticky positioning issues. Used standard flex layout. */}
+          <div className="bg-white shadow-2xl max-w-5xl w-full h-[90vh] flex flex-col mx-auto rounded-xl overflow-hidden relative">
+            {/* Modal Header (Fixed at the very top of the box) */}
+            <div className="px-8 py-5 border-b border-gray-200 flex items-center justify-between bg-white z-20 flex-shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-indigo-100 text-indigo-700 rounded-lg">
+                  <ClipboardCheck className="w-6 h-6" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-gray-900 uppercase tracking-wide">
+                    {selectedEval.status === "PENDING" && !isAdmin
+                      ? "Conduct Evaluation"
+                      : "Official Evaluation Report"}
+                  </h2>
+                  <p className="text-sm font-semibold text-indigo-600">
+                    {selectedEval.rubricId?.name ||
+                      selectedEval.sessionType?.replace("_", " ")}
+                  </p>
+                </div>
+              </div>
               <button
                 onClick={closeModal}
-                className="text-gray-400 hover:text-gray-700"
+                className="p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 rounded-lg transition-colors"
               >
                 <X className="w-6 h-6" />
               </button>
             </div>
 
-            <div className="p-6">
-              {/* Student Info Header */}
-              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-6 flex justify-between items-center">
-                <div>
-                  <p className="text-sm text-gray-500 uppercase font-bold tracking-wider">
-                    Candidate Details
-                  </p>
-                  <h3 className="text-xl font-bold text-gray-900 mt-1">
-                    {selectedEval.studentId?.name}
-                  </h3>
-                  <p className="text-gray-700 text-sm mt-1">
-                    <strong>Session:</strong>{" "}
-                    {selectedEval.sessionType?.replace("_", " ")} |{" "}
-                    {selectedEval.semester}
-                  </p>
+            {/* Scrollable Content Area */}
+            <div className="p-8 overflow-y-auto flex-1 bg-gray-50">
+              {/* --- FORMAL UTHM HEADER BLOCK --- */}
+              <div className="border border-gray-300 mb-8 rounded-lg overflow-hidden bg-white shadow-sm">
+                <div className="bg-gray-100 px-4 py-2 border-b border-gray-300">
+                  <span className="font-bold text-gray-800 uppercase text-sm tracking-widest">
+                    Section A: Candidate's & Examiner's Details
+                  </span>
                 </div>
-                {selectedEval.status === "COMPLETED" &&
-                  selectedEval.sessionType !== "PROGRESS_ASSESSMENT" && (
-                    <div
-                      className={`px-6 py-3 rounded-xl border-2 text-center bg-white ${getScoreColor(selectedEval.totalMarks)}`}
-                    >
-                      <p className="text-xs font-bold uppercase mb-1">
-                        Final Score
+                <div className="grid grid-cols-1 md:grid-cols-2">
+                  <div className="p-4 border-b md:border-b-0 md:border-r border-gray-300">
+                    <p className="text-xs font-bold text-gray-500 uppercase mb-1">
+                      Candidate's Name
+                    </p>
+                    <p className="font-bold text-gray-900 text-lg">
+                      {selectedEval.studentId?.name || "N/A"}
+                    </p>
+                  </div>
+                  <div className="p-4 border-b border-gray-300 bg-gray-50">
+                    <p className="text-xs font-bold text-gray-500 uppercase mb-1">
+                      Matric Number
+                    </p>
+                    <p className="font-mono font-bold text-gray-900 text-lg">
+                      {selectedEval.studentId?.matricNumber || "N/A"}
+                    </p>
+                  </div>
+                  <div className="p-4 border-t md:border-t-0 border-b md:border-b-0 md:border-r border-gray-300 bg-gray-50">
+                    <p className="text-xs font-bold text-gray-500 uppercase mb-1">
+                      Academic Programme
+                    </p>
+                    <p className="font-semibold text-gray-900">
+                      {selectedEval.studentId?.program || "N/A"}
+                    </p>
+                  </div>
+                  <div className="p-4 border-t border-gray-300">
+                    <p className="text-xs font-bold text-gray-500 uppercase mb-1">
+                      Semester / Session Type
+                    </p>
+                    <p className="font-semibold text-gray-900">
+                      {selectedEval.semester} |{" "}
+                      {selectedEval.sessionType?.replace("_", " ")}
+                    </p>
+                  </div>
+                  <div className="p-4 border-t md:border-r border-gray-300">
+                    <p className="text-xs font-bold text-gray-500 uppercase mb-1">
+                      Examiner's Name
+                    </p>
+                    <p className="font-bold text-indigo-700">
+                      {selectedEval.evaluatorId?.name || "N/A"}
+                    </p>
+                  </div>
+                  <div className="p-4 border-t border-gray-300 bg-gray-50 flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-bold text-gray-500 uppercase mb-1">
+                        Evaluation Status
                       </p>
-                      <p className="text-3xl font-black">
-                        {selectedEval.totalMarks?.toFixed(2)}%
-                      </p>
+                      <span
+                        className={`inline-block px-3 py-1 rounded text-xs font-bold ${selectedEval.status === "COMPLETED" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}`}
+                      >
+                        {selectedEval.status}
+                      </span>
                     </div>
-                  )}
+                    {selectedEval.status === "COMPLETED" &&
+                      selectedEval.sessionType !== "PROGRESS_ASSESSMENT" && (
+                        <div className="text-right">
+                          <p className="text-xs font-bold text-gray-500 uppercase mb-1">
+                            Total Marks
+                          </p>
+                          <p className="text-2xl font-black text-green-600">
+                            {selectedEval.totalMarks}%
+                          </p>
+                        </div>
+                      )}
+                  </div>
+                </div>
               </div>
 
+              {selectedEval.studentId?.researchTitle && (
+                <div className="mb-8 p-5 bg-indigo-50 border border-indigo-100 rounded-lg shadow-sm">
+                  <p className="text-xs font-bold text-indigo-800 uppercase tracking-widest mb-1">
+                    Research Title
+                  </p>
+                  <p className="font-bold text-gray-900 text-lg leading-snug">
+                    {selectedEval.studentId.researchTitle}
+                  </p>
+                </div>
+              )}
+
+              {/* --- EVALUATION FORM --- */}
               <form id="evalForm" onSubmit={handleSubmit}>
-                {/* 1. PROGRESS ASSESSMENT FORM (Text Only) */}
                 {selectedEval.sessionType === "PROGRESS_ASSESSMENT" && (
                   <div className="space-y-6">
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2">
-                        Summary of Research Progress
-                      </label>
-                      <textarea
-                        required
-                        disabled={selectedEval.status === "COMPLETED"}
-                        rows="4"
-                        className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-700"
-                        value={progressData.summaryOfProgress}
-                        onChange={(e) =>
-                          setProgressData({
-                            ...progressData,
-                            summaryOfProgress: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2">
-                        Comments for Improvement
-                      </label>
-                      <textarea
-                        required
-                        disabled={selectedEval.status === "COMPLETED"}
-                        rows="4"
-                        className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-700"
-                        value={progressData.commentsForImprovement}
-                        onChange={(e) =>
-                          setProgressData({
-                            ...progressData,
-                            commentsForImprovement: e.target.value,
-                          })
-                        }
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-2">
-                        Overall Suggestions
-                      </label>
-                      <textarea
-                        required
-                        disabled={selectedEval.status === "COMPLETED"}
-                        rows="4"
-                        className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-700"
-                        value={progressData.overallSuggestions}
-                        onChange={(e) =>
-                          setProgressData({
-                            ...progressData,
-                            overallSuggestions: e.target.value,
-                          })
-                        }
-                      />
+                    <div className="bg-white border border-gray-300 rounded-lg overflow-hidden shadow-sm">
+                      <div className="bg-gray-100 px-4 py-3 border-b border-gray-300">
+                        <span className="font-bold text-gray-800 uppercase text-sm tracking-widest">
+                          Section B: Progress Report
+                        </span>
+                      </div>
+                      <div className="p-6 space-y-6">
+                        <div>
+                          <label className="block text-sm font-bold text-gray-900 mb-2">
+                            Summary of Research Progress
+                          </label>
+                          <textarea
+                            required
+                            disabled={
+                              selectedEval.status === "COMPLETED" || isAdmin
+                            }
+                            rows="4"
+                            className="w-full border border-gray-300 rounded-lg p-4 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-800"
+                            value={progressData.summaryOfProgress}
+                            onChange={(e) =>
+                              setProgressData({
+                                ...progressData,
+                                summaryOfProgress: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-bold text-gray-900 mb-2">
+                            Comments for Improvement
+                          </label>
+                          <textarea
+                            required
+                            disabled={
+                              selectedEval.status === "COMPLETED" || isAdmin
+                            }
+                            rows="4"
+                            className="w-full border border-gray-300 rounded-lg p-4 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-800"
+                            value={progressData.commentsForImprovement}
+                            onChange={(e) =>
+                              setProgressData({
+                                ...progressData,
+                                commentsForImprovement: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-bold text-gray-900 mb-2">
+                            Overall Suggestions
+                          </label>
+                          <textarea
+                            required
+                            disabled={
+                              selectedEval.status === "COMPLETED" || isAdmin
+                            }
+                            rows="4"
+                            className="w-full border border-gray-300 rounded-lg p-4 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-800"
+                            value={progressData.overallSuggestions}
+                            onChange={(e) =>
+                              setProgressData({
+                                ...progressData,
+                                overallSuggestions: e.target.value,
+                              })
+                            }
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
                 )}
 
-                {/* 2. SCORED RUBRIC (Proposal & Pre-Viva) */}
                 {(selectedEval.sessionType === "PROPOSAL_DEFENSE" ||
                   selectedEval.sessionType === "PRE_VIVA") && (
                   <div>
@@ -453,152 +546,185 @@ export default function EvaluationPage() {
                       </div>
                     ) : (
                       <>
-                        {/* 2A. QUANTITATIVE CRITERIA (The Table) */}
-                        {selectedEval.rubricId.criteria?.some(
-                          (c) => c.type === "quantitative",
-                        ) && (
-                          <div className="overflow-x-auto border border-gray-200 rounded-xl mb-6 shadow-sm">
-                            <table className="w-full text-left text-sm">
-                              <thead>
-                                <tr className="bg-indigo-700 text-white">
-                                  <th className="p-4 border-b border-indigo-800 w-1/4">
-                                    Quantitative Criteria
-                                  </th>
-                                  {SCALE.map((s) => (
-                                    <th
-                                      key={s.value}
-                                      className="p-3 border-b border-indigo-800 text-center font-semibold"
-                                    >
-                                      {s.label} ({s.value})
-                                    </th>
-                                  ))}
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-200 bg-white">
-                                {selectedEval.rubricId.criteria
-                                  .filter((c) => c.type === "quantitative")
-                                  .map((crit) => (
-                                    <tr
-                                      key={crit.key}
-                                      className="hover:bg-indigo-50/30 transition-colors"
-                                    >
-                                      <td className="p-4 bg-gray-50 border-r border-gray-200">
-                                        <p className="font-bold text-gray-800">
-                                          {crit.title}
-                                        </p>
-                                      </td>
+                        <div className="bg-gray-900 text-white px-5 py-3 rounded-t-lg flex justify-between items-center shadow-md">
+                          <span className="font-bold uppercase text-sm tracking-widest flex items-center gap-2">
+                            <FileText className="w-4 h-4" /> Section B: Detailed
+                            Evaluation Rubric
+                          </span>
+                        </div>
 
-                                      {SCALE.map((s) => {
-                                        const scaleKey = s.label.toLowerCase();
-                                        const isSelected =
-                                          scores[crit.key] === s.value;
-                                        return (
-                                          <td
+                        {/* QUANTITATIVE CRITERIA */}
+                        <div className="space-y-6 mb-8">
+                          {selectedEval.rubricId.criteria
+                            ?.filter((c) => c.type === "quantitative")
+                            .map((crit) => (
+                              <div
+                                key={crit.key}
+                                className="border border-gray-300 bg-white rounded-b-lg overflow-hidden shadow-sm"
+                              >
+                                <div className="bg-gray-50 px-5 py-3 border-b border-gray-300 flex justify-between items-center">
+                                  <h3 className="font-black text-gray-900">
+                                    {crit.title}
+                                  </h3>
+                                  <span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded text-xs font-bold">
+                                    Weight: {crit.weight}%
+                                  </span>
+                                </div>
+                                <div className="overflow-x-auto">
+                                  <table className="w-full text-left text-sm table-fixed">
+                                    <thead>
+                                      <tr className="bg-white border-b border-gray-200">
+                                        {SCALE.map((s) => (
+                                          <th
                                             key={s.value}
-                                            className={`p-3 border-r border-gray-200 text-center align-top ${selectedEval.status === "PENDING" ? "cursor-pointer hover:bg-indigo-50" : ""} ${isSelected ? "bg-indigo-50 ring-2 ring-inset ring-indigo-500" : ""}`}
-                                            onClick={() =>
-                                              selectedEval.status ===
-                                                "PENDING" &&
-                                              handleScoreChange(
-                                                crit.key,
-                                                s.value,
-                                              )
-                                            }
+                                            className="p-3 border-r last:border-r-0 border-gray-200 text-center font-bold text-gray-500 text-xs uppercase tracking-wider w-1/5"
                                           >
-                                            <div className="flex flex-col items-center gap-2">
-                                              <input
-                                                type="radio"
-                                                name={crit.key}
-                                                required
-                                                disabled={
-                                                  selectedEval.status ===
-                                                  "COMPLETED"
-                                                }
-                                                checked={isSelected}
-                                                onChange={() =>
-                                                  handleScoreChange(
-                                                    crit.key,
-                                                    s.value,
-                                                  )
-                                                }
-                                                className="w-5 h-5 accent-indigo-600"
-                                              />
-                                              <p
-                                                className={`text-xs text-justify leading-relaxed ${isSelected ? "text-indigo-900 font-medium" : "text-gray-600"}`}
-                                              >
-                                                {crit[scaleKey] ||
-                                                  "No description provided."}
-                                              </p>
-                                            </div>
-                                          </td>
-                                        );
-                                      })}
-                                    </tr>
-                                  ))}
-                              </tbody>
-                            </table>
-                          </div>
-                        )}
+                                            {s.label} ({s.value})
+                                          </th>
+                                        ))}
+                                      </tr>
+                                    </thead>
+                                    <tbody className="divide-x divide-gray-200">
+                                      <tr>
+                                        {SCALE.map((s) => {
+                                          const scaleKey =
+                                            s.label.toLowerCase();
+                                          const isSelected =
+                                            scores[crit.key] === s.value;
+                                          return (
+                                            <td
+                                              key={s.value}
+                                              className={`p-4 align-top transition-colors relative 
+                                              ${selectedEval.status === "PENDING" && !isAdmin ? "cursor-pointer hover:bg-blue-50" : ""} 
+                                              ${isSelected ? "bg-indigo-50 border-t-4 border-t-indigo-600" : ""}`}
+                                              onClick={() =>
+                                                selectedEval.status ===
+                                                  "PENDING" &&
+                                                !isAdmin &&
+                                                handleScoreChange(
+                                                  crit.key,
+                                                  s.value,
+                                                )
+                                              }
+                                            >
+                                              <div className="flex flex-col items-center">
+                                                <input
+                                                  type="radio"
+                                                  name={crit.key}
+                                                  required
+                                                  disabled={
+                                                    selectedEval.status ===
+                                                      "COMPLETED" || isAdmin
+                                                  }
+                                                  checked={isSelected}
+                                                  onChange={() =>
+                                                    handleScoreChange(
+                                                      crit.key,
+                                                      s.value,
+                                                    )
+                                                  }
+                                                  className="w-5 h-5 accent-indigo-600 mb-3 cursor-pointer"
+                                                />
+                                                <p
+                                                  className={`text-xs text-justify leading-relaxed ${isSelected ? "text-indigo-900 font-bold" : "text-gray-600 font-medium"}`}
+                                                >
+                                                  {crit[scaleKey] ||
+                                                    "No description provided."}
+                                                </p>
+                                              </div>
+                                            </td>
+                                          );
+                                        })}
+                                      </tr>
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </div>
+                            ))}
+                        </div>
 
-                        {/* LIVE SCORE TRACKER */}
                         {selectedEval.status === "PENDING" && (
-                          <div className="bg-gray-900 text-white p-6 rounded-xl flex justify-between items-center mb-6 shadow-lg">
-                            <span className="text-lg font-medium text-gray-300 uppercase tracking-widest">
-                              Live Calculated Score
-                            </span>
-                            <span className="text-4xl font-black text-indigo-400">
+                          <div className="bg-gradient-to-r from-gray-900 to-indigo-900 text-white p-6 rounded-xl flex justify-between items-center mb-8 shadow-xl">
+                            <div>
+                              <span className="block text-lg font-bold uppercase tracking-widest text-indigo-300">
+                                Live Calculated Mark
+                              </span>
+                              <span className="block text-sm text-gray-400 mt-1">
+                                Weighted average of all quantitative criteria
+                              </span>
+                            </div>
+                            <span className="text-5xl font-black text-white">
                               {calculateTotalScore()}%
                             </span>
                           </div>
                         )}
 
-                        {/* 2B. QUALITATIVE CRITERIA (The Textboxes) */}
-                        {selectedEval.rubricId.criteria
-                          ?.filter((c) => c.type === "qualitative")
-                          .map((crit) => (
-                            <div
-                              key={crit.key}
-                              className="mb-6 bg-blue-50 border border-blue-200 p-5 rounded-xl"
-                            >
-                              <label className="block text-sm font-bold text-blue-900 mb-1">
-                                {crit.title}
+                        {/* QUALITATIVE CRITERIA */}
+                        <div className="border border-gray-300 bg-white rounded-lg overflow-hidden shadow-sm mb-8">
+                          <div className="bg-gray-100 px-5 py-3 border-b border-gray-300">
+                            <span className="font-bold text-gray-800 uppercase text-sm tracking-widest">
+                              Section C: Qualitative Feedback
+                            </span>
+                          </div>
+                          <div className="p-6 space-y-6 bg-gray-50">
+                            {selectedEval.rubricId.criteria
+                              ?.filter((c) => c.type === "qualitative")
+                              .map((crit) => (
+                                <div
+                                  key={crit.key}
+                                  className="bg-white border border-gray-200 p-5 rounded-lg shadow-sm"
+                                >
+                                  <label className="block text-sm font-bold text-indigo-900 mb-1">
+                                    {crit.title}
+                                  </label>
+                                  {crit.description && (
+                                    <p className="text-xs text-gray-500 mb-3 font-medium">
+                                      {crit.description}
+                                    </p>
+                                  )}
+                                  <textarea
+                                    required
+                                    disabled={
+                                      selectedEval.status === "COMPLETED" ||
+                                      isAdmin
+                                    }
+                                    rows="4"
+                                    className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-800"
+                                    placeholder="Write your detailed feedback here..."
+                                    value={qualFeedback[crit.key] || ""}
+                                    onChange={(e) =>
+                                      setQualFeedback((prev) => ({
+                                        ...prev,
+                                        [crit.key]: e.target.value,
+                                      }))
+                                    }
+                                  />
+                                </div>
+                              ))}
+
+                            <div className="bg-white border border-gray-200 p-5 rounded-lg shadow-sm">
+                              <label className="block text-sm font-bold text-gray-900 mb-2">
+                                Overall Examiner Remarks
                               </label>
-                              {crit.description && (
-                                <p className="text-xs text-blue-700 mb-3">
-                                  {crit.description}
-                                </p>
-                              )}
+                              <p className="text-xs text-gray-500 mb-3 font-medium">
+                                Provide final constructive feedback. This will
+                                be indexed for the Historical Vault.
+                              </p>
                               <textarea
                                 required
-                                disabled={selectedEval.status === "COMPLETED"}
-                                rows="4"
-                                className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-700"
-                                placeholder="Write your feedback here..."
-                                value={qualFeedback[crit.key] || ""}
+                                disabled={
+                                  selectedEval.status === "COMPLETED" || isAdmin
+                                }
+                                rows="5"
+                                className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-800"
+                                placeholder="Final remarks..."
+                                value={overallComments}
                                 onChange={(e) =>
-                                  setQualFeedback((prev) => ({
-                                    ...prev,
-                                    [crit.key]: e.target.value,
-                                  }))
+                                  setOverallComments(e.target.value)
                                 }
                               />
                             </div>
-                          ))}
-
-                        {/* GENERAL OVERALL REMARKS */}
-                        <div className="mt-8 pt-6 border-t border-gray-200">
-                          <label className="block text-sm font-bold text-gray-700 mb-2">
-                            Overall Remarks (Indexed for Historical Search)
-                          </label>
-                          <textarea
-                            required
-                            disabled={selectedEval.status === "COMPLETED"}
-                            rows="4"
-                            className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-700"
-                            placeholder="Provide constructive feedback... This will be searchable in future semesters."
-                            value={overallComments}
-                            onChange={(e) => setOverallComments(e.target.value)}
-                          />
+                          </div>
                         </div>
                       </>
                     )}
@@ -607,14 +733,16 @@ export default function EvaluationPage() {
               </form>
             </div>
 
-            {/* Footer Buttons */}
-            <div className="px-6 py-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50 rounded-b-xl sticky bottom-0">
+            {/* Modal Footer (Fixed at the bottom of the box) */}
+            <div className="px-8 py-4 border-t border-gray-200 flex justify-end gap-3 bg-white z-20 flex-shrink-0">
               <button
                 type="button"
                 onClick={closeModal}
-                className="px-5 py-2.5 text-gray-600 font-medium hover:bg-gray-200 rounded-lg transition-colors"
+                className="px-6 py-2.5 bg-gray-100 border border-gray-300 text-gray-700 font-bold hover:bg-gray-200 rounded-lg transition-colors"
               >
-                {selectedEval.status === "PENDING" ? "Cancel" : "Close"}
+                {selectedEval.status === "PENDING" && !isAdmin
+                  ? "Cancel"
+                  : "Close Document"}
               </button>
 
               {selectedEval.status === "PENDING" && !isAdmin && (
@@ -622,7 +750,7 @@ export default function EvaluationPage() {
                   type="submit"
                   form="evalForm"
                   disabled={isSubmitting}
-                  className="px-6 py-2.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400 transition-colors flex items-center gap-2 shadow-sm"
+                  className="px-8 py-2.5 bg-indigo-600 text-white font-black rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400 transition-colors flex items-center gap-2 shadow-md"
                 >
                   {isSubmitting ? (
                     "Submitting..."

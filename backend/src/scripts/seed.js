@@ -22,98 +22,225 @@ if (!MONGO_URI) {
 }
 
 // ==========================================
-// MIXED RUBRICS (Quantitative & Qualitative)
+// 100% COMPLETE FSKTM UTHM RUBRICS
 // ==========================================
 const rubricsData = [
   {
     name: "Research Proposal Evaluation Rubric",
     sessionType: "PROPOSAL_DEFENSE",
     criteria: [
-      // --- QUANTITATIVE CRITERIA (With Weights and Scores) ---
       {
         key: "crit_a_title",
         title: "CRITERIA A: PROPOSED RESEARCH TITLE",
         type: "quantitative",
-        weight: 10, // 10% of total score
+        weight: 5,
         maxScore: 4,
         exemplary:
-          "The candidate’s proposed research title is concise, conceptually sound, and appropriately aligned with the stated purpose and objectives of the study. It reflects a strong command of the subject matter.",
+          "The candidate presents a thesis title that is concise, precise, and directly aligned with the core focus of the research. The title reflects comprehensive subject knowledge and a clear grasp of key relationships within the field. It is articulated with clarity and academic rigour.",
         proficient:
-          "The candidate’s proposed research title is clearly articulated and appropriately aligned with the study’s purpose and objectives.",
+          "The candidate presents a thesis title that is relevant, clearly worded, and appropriate to the research domain. It demonstrates a sound understanding of the subject matter and outlines the main scope of the study.",
         satisfactory:
-          "The candidate’s proposed research title is generally relevant and adequately aligned. Additional refinement is required.",
+          "The candidate presents a thesis title that identifies the general area of research and reflects an adequate level of understanding. However, the title lacks specificity, depth, or balanced scope.",
         foundational:
-          "The candidate’s proposed research title demonstrates limited clarity. Marginally suitable.",
+          "The candidate presents a thesis title that demonstrates limited familiarity with the subject area. The wording is vague, overgeneralised, or imprecise.",
         novice:
-          "The candidate’s proposed research title lacks clarity, coherence, and alignment. Unsuitable.",
+          "The candidate presents a thesis title that is unclear, unrelated, or unsuitable for academic inquiry. The title does not demonstrate basic understanding of the subject.",
       },
       {
         key: "crit_b_exec_summary",
         title: "CRITERIA B: EXECUTIVE SUMMARY",
         type: "quantitative",
-        weight: 20, // 20% of total score
+        weight: 10,
         maxScore: 4,
         exemplary:
-          "Presents a clear, coherent overview of the research proposal. High-level cognitive skills are demonstrated.",
+          "The candidate's executive summary presents a clear, coherent overview of the research proposal. The problem, purpose/objectives, and rationale are logically structured and well integrated. High-level cognitive skills are demonstrated through critical synthesis.",
         proficient:
-          "Effectively communicates the core components of the proposal. Problem-solving elements are present.",
+          "The candidate's executive summary effectively communicates the core components of the proposal. The research problem and purpose/objectives are clearly stated, and there is evidence of logical reasoning.",
         satisfactory:
-          "Provides a basic structure and covers the main aspects of the research.",
+          "The candidate's executive summary provides a basic structure and covers the main aspects of the research. Cognitive engagement is present but limited in depth.",
         foundational:
-          "Lacks clarity and cohesion. The problem, aim, or rationale may be unclear.",
-        novice: "Poorly structured and lacks essential components.",
+          "The candidate's executive summary lacks clarity and cohesion. The problem, aim, or rationale may be unclear or disconnected.",
+        novice:
+          "The candidate's executive summary is poorly structured and lacks essential components. Little or no demonstration of cognitive reasoning.",
+      },
+      {
+        key: "crit_c_problem",
+        title: "CRITERIA C: PROBLEM STATEMENT & SIGNIFICANCE",
+        type: "quantitative",
+        weight: 15,
+        maxScore: 4,
+        exemplary:
+          "The problem statement is well-defined, contextually grounded, and critically justified with relevant literature. High-level cognitive and critical thinking skills are evident.",
+        proficient:
+          "The problem statement is clearly articulated and supported with appropriate context and references. The significance of the study is logically presented.",
+        satisfactory:
+          "The problem statement is adequately stated and generally relevant, though some elements may lack clarity or depth.",
+        foundational:
+          "The problem statement lacks clarity or is weakly developed. The justification is minimal, and the significance is not convincingly explained.",
+        novice:
+          "The problem statement is unclear, unfocused, or missing. No meaningful justification is provided.",
+      },
+      {
+        key: "crit_d_objective",
+        title: "CRITERIA D: OBJECTIVE OF STUDY & RESEARCH QUESTIONS",
+        type: "quantitative",
+        weight: 10,
+        maxScore: 4,
+        exemplary:
+          "The research objectives are clearly defined, focused, and aligned with the research problem, structured to be measurable, achievable, and academically pertinent.",
+        proficient:
+          "The research objectives are clear, relevant, and generally well-aligned with the research problem, offering measurable and structured guidance.",
+        satisfactory:
+          "The research objectives are generally understandable but show limited clarity, specificity, and alignment with the research problem.",
+        foundational:
+          "The research objectives are unclear, overly broad, and weakly connected to the research problem, with poor structure.",
+        novice:
+          "The research objectives are absent or entirely unclear, showing no alignment with the research problem.",
+      },
+      {
+        key: "crit_e_literature",
+        title: "CRITERIA E: LITERATURE REVIEW",
+        type: "quantitative",
+        weight: 15,
+        maxScore: 4,
+        exemplary:
+          "The literature review demonstrates critical engagement with a wide range of relevant and credible sources, clearly identifying key debates and gaps.",
+        proficient:
+          "The literature review is well-organised and clearly written, using relevant sources to support the research context. Evidence of critical discussion and synthesis is present.",
+        satisfactory:
+          "The literature review adequately covers relevant sources but is largely descriptive rather than analytical. Some key authors or themes may be underrepresented.",
+        foundational:
+          "The literature review is loosely structured and shows limited critical insight. Coverage of relevant literature is incomplete.",
+        novice:
+          "The literature review is poorly constructed, showing minimal critical engagement and limited relevance.",
       },
       {
         key: "crit_f_methodology",
         title: "CRITERIA F: METHODOLOGY",
         type: "quantitative",
-        weight: 40, // 40% of total score
+        weight: 20,
         maxScore: 4,
         exemplary:
-          "The methodology is comprehensive, clearly aligned with the research objectives, and well justified.",
+          "The methodology is comprehensive, clearly aligned with the research objectives, and well justified. The research design, data collection, and analysis methods are methodologically sound.",
         proficient:
-          "The methodology is coherent and appropriately structured, with relevant research design.",
+          "The methodology is coherent and appropriately structured, with relevant research design and methods that are clearly explained and generally well justified.",
         satisfactory:
-          "Outlines the basic research procedures with moderate alignment to the objectives.",
+          "The methodology outlines the basic research procedures with moderate alignment to the objectives. Justification is provided but limited.",
         foundational:
-          "Lacks clarity and consistency, with weak alignment to the research objectives.",
-        novice: "Poorly structured or largely absent.",
+          "The methodology lacks clarity and consistency, with weak alignment to the research objectives and inadequate justification.",
+        novice:
+          "The methodology is poorly structured or largely absent, with research methods that are inappropriate or disconnected.",
       },
       {
-        key: "crit_l_presentation",
+        key: "crit_g_prelim",
+        title: "CRITERIA G: PRELIMINARY RESULTS / EXPECTED OUTCOME",
+        type: "quantitative",
+        weight: 5,
+        maxScore: 4,
+        exemplary:
+          "Preliminary findings (where applicable) are presented clearly and supported by rigorous analysis using appropriate digital or analytical tools. Expected outcomes are precisely formulated.",
+        proficient:
+          "Preliminary findings are explained with clarity and supported by relevant data and tools. Expected outcomes are reasonably derived.",
+        satisfactory:
+          "Preliminary findings are reported with limited depth and supported by basic analysis. Expected outcomes are generally aligned.",
+        foundational:
+          "Preliminary findings are vaguely presented and lack analytical rigour. Expected outcomes are loosely connected.",
+        novice:
+          "Preliminary findings are absent or unclear, with no meaningful analytical support.",
+      },
+      {
+        key: "crit_h_ethics",
+        title: "CRITERIA H: METHOD RELIABILITY, VALIDITY AND ETHICS",
+        type: "quantitative",
+        weight: 5,
+        maxScore: 4,
+        exemplary:
+          "Methodological reliability and validity are comprehensively addressed with well-reasoned justification and supported by appropriate references. Ethical considerations are thoroughly integrated.",
+        proficient:
+          "Methodological reliability and validity are adequately explained with reasonable justification. Ethical considerations are incorporated.",
+        satisfactory:
+          "Basic attention is given to methodological reliability and validity, though explanation may be general. Some ethical procedures are mentioned.",
+        foundational:
+          "Methodological reliability and validity are vaguely addressed. Ethical aspects are referenced but poorly defined.",
+        novice:
+          "Methodological reliability and validity are omitted. Ethical considerations are absent or misinterpreted.",
+      },
+      {
+        key: "crit_i_org",
+        title: "CRITERIA I: ORGANIZATION OF IDEAS",
+        type: "quantitative",
+        weight: 5,
+        maxScore: 4,
+        exemplary:
+          "The proposal was written with exceptional clarity and coherence, demonstrating a logical and purposeful sequence of ideas. Transitions were seamless.",
+        proficient:
+          "The proposal was written in a clear and structured manner, with logical progression and effective transitions between sections.",
+        satisfactory:
+          "The proposal was written with a basic level of organisation, though occasional inconsistencies in flow or clarity were evident.",
+        foundational:
+          "The proposal was written with limited coherence and structure. Ideas were not consistently organised.",
+        novice:
+          "The proposal was written without clear structure or logical progression. Ideas appeared fragmented.",
+      },
+      {
+        key: "crit_j_lang",
+        title: "CRITERIA J: LANGUAGE AND WRITING STYLE",
+        type: "quantitative",
+        weight: 5,
+        maxScore: 4,
+        exemplary:
+          "The proposal was written using precise, formal, and discipline-appropriate language throughout. Sentence structure and grammar consistently accurate.",
+        proficient:
+          "The proposal was written with generally accurate and formal language appropriate to the academic context.",
+        satisfactory:
+          "The proposal was written using language that was mostly appropriate, though lapses in grammar or clarity were occasionally evident.",
+        foundational:
+          "The proposal was written with frequent grammatical or structural errors that affected clarity.",
+        novice:
+          "The proposal was written with persistent language and grammatical issues that interfered with meaning.",
+      },
+      {
+        key: "crit_k_ref",
+        title: "CRITERIA K: REFERENCES AND CITATION",
+        type: "quantitative",
+        weight: 5,
+        maxScore: 4,
+        exemplary:
+          "Demonstrates precise and consistent use of the required referencing style throughout. All citations are accurate and correctly formatted.",
+        proficient:
+          "Referencing style is applied correctly with only occasional minor errors. Sources are appropriately chosen.",
+        satisfactory:
+          "Referencing is generally appropriate but contains recurring formatting or citation errors.",
+        foundational:
+          "Referencing style is inconsistently applied, with frequent formatting errors and incomplete citations.",
+        novice:
+          "Shows little or no understanding of academic referencing. Citations are largely inaccurate or absent.",
+      },
+      {
+        key: "crit_l_pres",
         title: "CRITERIA L: ORAL PRESENTATION SKILLS",
         type: "quantitative",
-        weight: 30, // 30% of total score
+        weight: 5,
         maxScore: 4,
         exemplary:
-          "Presentation was delivered with clarity, confidence, and a strong academic presence.",
+          "Presentation delivered with clarity, confidence, and a strong academic presence. Ideas communicated logically and fluently.",
         proficient:
-          "Presentation was delivered clearly, with appropriate tone and structure.",
+          "Presentation delivered clearly, with appropriate tone and structure. Key points effectively communicated.",
         satisfactory:
-          "Presentation was delivered with adequate clarity and structure, though some hesitation was evident.",
+          "Presentation delivered with adequate clarity and structure, though some hesitation was evident.",
         foundational:
-          "Presentation was delivered with limited clarity and confidence.",
+          "Presentation delivered with limited clarity and confidence. Content was poorly organised.",
         novice:
-          "Presentation was delivered in a disorganised and unclear manner.",
+          "Presentation delivered in a disorganised and unclear manner. Key ideas poorly expressed.",
       },
-      // --- QUALITATIVE CRITERIA (No weights, pure text feedback) ---
       {
-        key: "crit_qual_1",
-        title: "PANEL'S QUALITATIVE FEEDBACK",
+        key: "crit_m_qual",
+        title: "PANEL'S FEEDBACK: STRENGTHS & WEAKNESSES",
         type: "qualitative",
         weight: 0,
         maxScore: 0,
         description:
-          "Please provide specific qualitative feedback regarding the student's problem statement and literature review. Do they need more recent citations?",
-      },
-      {
-        key: "crit_qual_2",
-        title: "ETHICS & RELIABILITY REMARKS",
-        type: "qualitative",
-        weight: 0,
-        maxScore: 0,
-        description:
-          "Note any concerns regarding data reliability, validity, or ethical compliance.",
+          "Please elaborate on specific areas the candidate must improve before proceeding.",
       },
     ],
   },
@@ -122,50 +249,302 @@ const rubricsData = [
     sessionType: "PRE_VIVA",
     criteria: [
       {
-        key: "crit_a_thesis_title",
+        key: "crit_a_title",
         title: "CRITERIA A: THESIS TITLE",
         type: "quantitative",
-        weight: 50,
+        weight: 5,
         maxScore: 4,
         exemplary:
-          "Concise, precise, and directly aligned with the core focus of the research.",
+          "Title is concise, precise, and directly aligned with the core focus of the research. Articulated with clarity and academic rigour.",
         proficient:
-          "Relevant, clearly worded, and appropriate to the research domain.",
+          "Title is relevant, clearly worded, and appropriate to the research domain. Demonstrates a sound understanding.",
         satisfactory:
-          "Identifies the general area of research and reflects an adequate level of understanding.",
-        foundational: "Demonstrates limited familiarity with the subject area.",
+          "Identifies the general area of research and reflects an adequate level of understanding. Lacks specificity.",
+        foundational:
+          "Demonstrates limited familiarity with the subject area. The wording is vague or imprecise.",
         novice: "Unclear, unrelated, or unsuitable for academic inquiry.",
       },
       {
-        key: "crit_k_conclusion",
-        title: "CRITERIA K: CONCLUSION AND RECOMMENDATIONS",
+        key: "crit_b_abs",
+        title: "CRITERIA B: ABSTRACT",
         type: "quantitative",
-        weight: 50,
+        weight: 5,
         maxScore: 4,
         exemplary:
-          "Formulated conclusions that reflected a high level of synthesis, critically integrating the study's findings.",
+          "Demonstrates high scholarly competence. Offers a precise, coherent, and methodologically sound synthesis.",
         proficient:
-          "Presented coherent conclusions aligned with the study's objectives.",
+          "Presented in a well-organised and academically appropriate manner. Clearly identifies research problem.",
         satisfactory:
-          "Presented acceptable conclusions derived from the findings, though limited in analytical depth.",
+          "Constructs the abstract with reasonable academic coherence. Lacks critical depth.",
+        foundational:
+          "Demonstrates partial understanding. Ambiguously stated or underdeveloped.",
+        novice: "Fails to construct a coherent abstract. Vague or fragmented.",
+      },
+      {
+        key: "crit_c_prob",
+        title: "CRITERIA C: PROBLEM STATEMENT",
+        type: "quantitative",
+        weight: 10,
+        maxScore: 4,
+        exemplary:
+          "Well-defined, contextually grounded, and critically justified with relevant literature. Strong critical thinking.",
+        proficient:
+          "Clear and logical problem statement. Relevant and supported with appropriate background.",
+        satisfactory:
+          "Generally clear but may be overly broad. Rationale is not fully persuasive.",
+        foundational:
+          "Attempt made, but lacks sufficient clarity, specificity, or focus.",
+        novice:
+          "Does not provide a coherent or researchable problem statement.",
+      },
+      {
+        key: "crit_d_obj",
+        title: "CRITERIA D: OBJECTIVE OF STUDY",
+        type: "quantitative",
+        weight: 5,
+        maxScore: 4,
+        exemplary:
+          "Articulates objectives with exceptional clarity and precision. Measurable and strong strategic focus.",
+        proficient: "Objectives are clear, relevant, and appropriately scoped.",
+        satisfactory:
+          "Objectives are understandable and somewhat aligned, but may lack specificity.",
+        foundational: "Objectives are vague, overly broad, or loosely related.",
+        novice: "Does not present appropriate research objectives.",
+      },
+      {
+        key: "crit_e_lit",
+        title: "CRITERIA E: LITERATURE REVIEW",
+        type: "quantitative",
+        weight: 10,
+        maxScore: 4,
+        exemplary:
+          "Shows critical engagement and synthesis of credible sources. Key debates articulated.",
+        proficient:
+          "Well-organised and clearly written. Evidence of critical discussion.",
+        satisfactory:
+          "Adequate coverage but tends to be more descriptive than analytical.",
+        foundational: "Loosely structured with limited critical insight.",
+        novice: "Poorly constructed, showing minimal critical engagement.",
+      },
+      {
+        key: "crit_f_meth",
+        title: "CRITERIA F: METHODOLOGY",
+        type: "quantitative",
+        weight: 10,
+        maxScore: 4,
+        exemplary:
+          "Methodology is clearly articulated, rigorously justified, and highly appropriate.",
+        proficient:
+          "Methodology is logically structured and appropriate for the research aims.",
+        satisfactory:
+          "Methodology is generally appropriate, though may lack detail or strong justification.",
+        foundational:
+          "Methodology has minimal explanation. Procedures are loosely aligned.",
+        novice: "Fails to present a viable methodology.",
+      },
+      {
+        key: "crit_g_res",
+        title: "CRITERIA G: RESULTS AND DISCUSSION / DATA ANALYSIS",
+        type: "quantitative",
+        weight: 10,
+        maxScore: 4,
+        exemplary:
+          "Demonstrates critical analysis, with findings well-integrated and justified. Results synthesized insightfully.",
+        proficient:
+          "Clear and well-structured, effectively interpreting results and linking them to objectives.",
+        satisfactory:
+          "Addresses main findings with basic interpretation. Descriptive rather than critical.",
+        foundational:
+          "Shows minimal interpretation with limited engagement with literature.",
+        novice: "Provides little or no meaningful analysis.",
+      },
+      {
+        key: "crit_h_find",
+        title: "CRITERIA H: PRESENTATION OF FINDINGS",
+        type: "quantitative",
+        weight: 5,
+        maxScore: 4,
+        exemplary:
+          "Presented with clarity and logical flow, supported by accurate and well-designed visualisations.",
+        proficient:
+          "Findings presented with clarity and effective structure. Digital tools used appropriately.",
+        satisfactory:
+          "Generally clear but may lack depth or polish. Visuals may be simplistic.",
+        foundational:
+          "Struggles to present findings coherently. Use of tools is minimal or misapplied.",
+        novice: "Presentation lacks structure and coherence.",
+      },
+      {
+        key: "crit_i_eth",
+        title: "CRITERIA I: DATA RELIABILITY, VALIDITY AND ETHICS",
+        type: "quantitative",
+        weight: 5,
+        maxScore: 4,
+        exemplary:
+          "Demonstrates strong critical thinking in data analysis using well-justified methods. Rigorous ethical compliance.",
+        proficient:
+          "Applies suitable analytical methods to interpret data. Ethical considerations addressed.",
+        satisfactory:
+          "Basic competence in handling data. Ethical procedures partially implemented.",
+        foundational:
+          "Limited ability in organising data. Ethical considerations addressed superficially.",
+        novice:
+          "Unable to apply appropriate data analysis techniques. Ethical obligations not observed.",
+      },
+      {
+        key: "crit_j_contrib",
+        title: "CRITERIA J: CONTRIBUTION TO THE BODY OF KNOWLEDGE",
+        type: "quantitative",
+        weight: 10,
+        maxScore: 4,
+        exemplary:
+          "Substantive and original contribution yielding novel theoretical constructs or innovations.",
+        proficient:
+          "Coherent and well-substantiated contribution addressing a relevant gap.",
+        satisfactory:
+          "Valid contribution addressing a defined question, though significance was limited.",
+        foundational:
+          "Limited contribution to knowledge addressing a narrowly defined issue.",
+        novice: "Did not demonstrate a meaningful or credible contribution.",
+      },
+      {
+        key: "crit_k_conc",
+        title: "CRITERIA K: CONCLUSION AND RECOMMENDATIONS",
+        type: "quantitative",
+        weight: 5,
+        maxScore: 4,
+        exemplary:
+          "Formulated conclusions reflecting a high level of synthesis. Original and analytically grounded.",
+        proficient: "Presented coherent conclusions aligned with objectives.",
+        satisfactory:
+          "Presented acceptable conclusions derived from findings, limited in analytical depth.",
         foundational: "Presented basic conclusions with weak synthesis.",
         novice: "Failed to present coherent or substantiated conclusions.",
       },
       {
-        key: "crit_qual_viva",
-        title: "FINAL RECOMMENDATIONS TO CHAIRPERSON",
+        key: "crit_l_org2",
+        title: "CRITERIA L: ORGANIZATION OF IDEAS",
+        type: "quantitative",
+        weight: 5,
+        maxScore: 4,
+        exemplary:
+          "Exceptional clarity and coherence. Logical progression of ideas.",
+        proficient:
+          "Ideas presented in a coherent and logically sequenced manner.",
+        satisfactory:
+          "Generally consistent structure, though some sections lacked cohesion.",
+        foundational:
+          "Basic attempt at organising content. Inconsistent sequencing.",
+        novice: "Failed to organise thesis content in a coherent manner.",
+      },
+      {
+        key: "crit_m_lang2",
+        title: "CRITERIA M: LANGUAGE AND WRITING STYLE",
+        type: "quantitative",
+        weight: 5,
+        maxScore: 4,
+        exemplary:
+          "Language consistently precise, scholarly, and aligned with disciplinary norms.",
+        proficient:
+          "Language appropriate to context with clear articulation of arguments.",
+        satisfactory:
+          "Acceptable academic language, with occasional imprecision.",
+        foundational:
+          "Limited control over academic writing conventions. Inconsistently structured.",
+        novice: "Did not demonstrate proficiency in academic writing.",
+      },
+      {
+        key: "crit_n_ref2",
+        title: "CRITERIA N: REFERENCES AND CITATION",
+        type: "quantitative",
+        weight: 5,
+        maxScore: 4,
+        exemplary:
+          "Precise and consistent use of required referencing style. All citations accurate.",
+        proficient:
+          "Style applied correctly with only occasional minor errors.",
+        satisfactory:
+          "Generally appropriate but contains recurring formatting or citation errors.",
+        foundational:
+          "Inconsistently applied, with frequent formatting errors and incomplete citations.",
+        novice: "Shows little or no understanding of academic referencing.",
+      },
+      {
+        key: "crit_o_pres2",
+        title: "CRITERIA O: ORAL PRESENTATION SKILLS",
+        type: "quantitative",
+        weight: 2.5,
+        maxScore: 4,
+        exemplary:
+          "Delivered a well-structured and analytically rigorous presentation.",
+        proficient:
+          "Presented coherently, showing a solid grasp of the objective.",
+        satisfactory:
+          "Communicated main aspects with reasonable clarity. Lacked consistency in fluency.",
+        foundational:
+          "Presented research with limited clarity and organisation.",
+        novice:
+          "Did not present the research in an academically appropriate manner.",
+      },
+      {
+        key: "crit_p_delib",
+        title: "CRITERIA P: DELIBERATIVE ORAL EVALUATION",
+        type: "quantitative",
+        weight: 2.5,
+        maxScore: 4,
+        exemplary:
+          "Exceptional academic leadership, full autonomy, and deep sense of responsibility in defending the thesis.",
+        proficient:
+          "Displays strong academic independence and responsibility. Defence is well-structured.",
+        satisfactory:
+          "Shows adequate autonomy and a satisfactory level of responsibility.",
+        foundational:
+          "Demonstrates limited autonomy and emerging responsibility. Justifications are superficial.",
+        novice: "Fails to exhibit autonomy, responsibility, or leadership.",
+      },
+      {
+        key: "crit_qual_chairperson",
+        title: "RECOMMENDATION TO CHAIRPERSON",
         type: "qualitative",
         weight: 0,
         maxScore: 0,
         description:
-          "Provide a qualitative summary of why this thesis should pass or require major amendments.",
+          "Specify whether the candidate requires minor amendments, major amendments, or re-evaluation before the final Viva Voce.",
       },
     ],
   },
   {
     name: "Progress Report Assessment Form",
     sessionType: "PROGRESS_ASSESSMENT",
-    criteria: [], // Entirely qualitative textboxes handled by UI
+    criteria: [
+      {
+        key: "prog_1_summary",
+        title: "Summary of Research Progress",
+        type: "qualitative",
+        weight: 0,
+        maxScore: 0,
+        description:
+          "Please summarize the student's progress since the last evaluation.",
+      },
+      {
+        key: "prog_2_improve",
+        title: "Comments for Improvement",
+        type: "qualitative",
+        weight: 0,
+        maxScore: 0,
+        description:
+          "What specific areas require the student's immediate attention?",
+      },
+      {
+        key: "prog_3_suggest",
+        title: "Overall Suggestions",
+        type: "qualitative",
+        weight: 0,
+        maxScore: 0,
+        description:
+          "Provide final recommendations for the next phase of research.",
+      },
+    ],
   },
 ];
 
@@ -180,9 +559,7 @@ const seedDatabase = async () => {
     await User.deleteMany({});
 
     // 1. Create Rubrics
-    console.log(
-      "📚 Seeding UTHM Rubric Templates (Mixed Quantitative/Qualitative)...",
-    );
+    console.log("📚 Seeding UTHM Rubric Templates with FULL Criteria...");
     const createdRubrics = await Rubric.create(rubricsData);
 
     const proposalRubric = createdRubrics.find(
@@ -290,10 +667,9 @@ const seedDatabase = async () => {
     const createdPanels = await User.create(scrapedPanels);
     allUsers = [...allUsers, ...createdPanels];
 
-    // 4. Create Students and GUARANTEE Supervisor Assignment
+    // 4. Create Students and Assign Supervisors
     console.log("🎓 Seeding Students and assigning Supervisors securely...");
 
-    // We explicitly attach the exact ObjectId of the newly created panels to the students
     const studentUsers = [
       {
         userId: "AW240001",
@@ -304,7 +680,7 @@ const seedDatabase = async () => {
         registrationCode: null,
         program: "Master of Information Technology",
         researchTitle: "Optimization of Zero-Knowledge Proofs",
-        supervisorId: createdPanels[0]._id, // Guaranteed Assignment
+        supervisorId: createdPanels[0]._id,
       },
       {
         userId: "AW240002",
@@ -315,7 +691,7 @@ const seedDatabase = async () => {
         registrationCode: null,
         program: "PhD in Computer Science",
         researchTitle: "Advanced Deep Learning Models",
-        supervisorId: createdPanels[1]._id, // Guaranteed Assignment
+        supervisorId: createdPanels[1]._id,
       },
       {
         userId: "AW240003",
@@ -326,7 +702,7 @@ const seedDatabase = async () => {
         registrationCode: null,
         program: "Master of Software Engineering",
         researchTitle: "Blockchain Healthcare Systems",
-        supervisorId: createdPanels[2]._id, // Guaranteed Assignment
+        supervisorId: createdPanels[2]._id,
       },
     ];
 
@@ -334,9 +710,8 @@ const seedDatabase = async () => {
     allUsers = [...allUsers, ...createdStudents];
     const getUserId = (email) => allUsers.find((u) => u.email === email)._id;
 
-    // 5. Create Sessions (Preventing Conflict of Interest)
+    // 5. Create Sessions
     console.log("📅 Seeding 3 Evaluation Sessions...");
-
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     const nextWeek = new Date();
@@ -344,7 +719,6 @@ const seedDatabase = async () => {
 
     const sessionsData = [
       {
-        // Proposal Defense - Ali (SV is Panel 0, so Evaluators are Admin and Panel 1)
         studentId: getUserId("ali@student.uthm.edu.my"),
         sessionType: "PROPOSAL_DEFENSE",
         semester: "Semester 1, 2025/2026",
@@ -355,7 +729,6 @@ const seedDatabase = async () => {
         panel2Id: createdPanels[1]._id,
       },
       {
-        // Pre-Viva - Siti (SV is Panel 1, so Evaluators are Admin and Panel 2)
         studentId: getUserId("siti@student.uthm.edu.my"),
         sessionType: "PRE_VIVA",
         semester: "Semester 1, 2025/2026",
@@ -366,7 +739,6 @@ const seedDatabase = async () => {
         panel2Id: createdPanels[2]._id,
       },
       {
-        // Progress - Chong (SV is Panel 2, so Evaluators are Admin and Panel 3)
         studentId: getUserId("chong@student.uthm.edu.my"),
         sessionType: "PROGRESS_ASSESSMENT",
         semester: "Semester 1, 2025/2026",
@@ -379,9 +751,10 @@ const seedDatabase = async () => {
     ];
     const createdSessions = await Session.create(sessionsData);
 
-    // 6. Auto-Create PENDING Evaluations
-    console.log("📋 Seeding PENDING evaluations linked to Rubrics...");
+    // 6. Auto-Create Evaluations
+    console.log("📋 Seeding evaluations linked to Rubrics...");
     const evaluationsData = [
+      // 1. PENDING Proposal Defense
       {
         sessionId: createdSessions[0]._id,
         rubricId: proposalRubric._id,
@@ -400,6 +773,8 @@ const seedDatabase = async () => {
         sessionType: createdSessions[0].sessionType,
         status: "PENDING",
       },
+
+      // 2. COMPLETED Pre-Viva (Fully filled out based on real UTHM example)
       {
         sessionId: createdSessions[1]._id,
         rubricId: preVivaRubric._id,
@@ -407,7 +782,32 @@ const seedDatabase = async () => {
         evaluatorId: getUserId("samihah@uthm.edu.my"),
         semester: createdSessions[1].semester,
         sessionType: createdSessions[1].sessionType,
-        status: "PENDING",
+        status: "COMPLETED",
+        totalMarks: 76.25, // Math matches the actual weights of A-P!
+        scores: {
+          crit_a_title: 3,
+          crit_b_abs: 4,
+          crit_c_prob: 3,
+          crit_d_obj: 3,
+          crit_e_lit: 2,
+          crit_f_meth: 4,
+          crit_g_res: 3,
+          crit_h_find: 3,
+          crit_i_eth: 4,
+          crit_j_contrib: 2,
+          crit_k_conc: 3,
+          crit_l_org2: 3,
+          crit_m_lang2: 3,
+          crit_n_ref2: 2,
+          crit_o_pres2: 3,
+          crit_p_delib: 3,
+        },
+        qualitativeFeedback: {
+          crit_qual_chairperson:
+            "PASS. The candidate has demonstrated solid understanding, effective research skills, and adequate scholarly contribution. Minor improvements in the literature review structure would enhance clarity further.",
+        },
+        overallComments:
+          "The thesis demonstrates strong alignment with the National Educational Code, particularly in aspects of responsible digital practices, analytical thinking, and ethical conduct.",
       },
       {
         sessionId: createdSessions[1]._id,
@@ -418,6 +818,8 @@ const seedDatabase = async () => {
         sessionType: createdSessions[1].sessionType,
         status: "PENDING",
       },
+
+      // 3. PENDING Progress Assessment
       {
         sessionId: createdSessions[2]._id,
         rubricId: progressRubric._id,

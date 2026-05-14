@@ -8,6 +8,8 @@ import {
   Copy,
   CheckCircle,
   Search,
+  Mail,
+  Edit,
 } from "lucide-react";
 import api from "../../services/api";
 
@@ -18,13 +20,20 @@ export default function UsersPage() {
 
   const [usersList, setUsersList] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
 
-  // State for the newly generated code popup
+  // Modals
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
   const [newCredentials, setNewCredentials] = useState(null);
 
+  // Email Config Memory
+  const [senderEmail, setSenderEmail] = useState(
+    localStorage.getItem("admin_sender_email") || "admin.fsktm@uthm.edu.my",
+  );
+
   const [formData, setFormData] = useState({
+    id: "",
     userId: "",
     name: "",
     email: "",
@@ -51,37 +60,42 @@ export default function UsersPage() {
     }
   };
 
-  // Filter out available supervisors for the dropdown
+  const handleSenderChange = (e) => {
+    const val = e.target.value;
+    setSenderEmail(val);
+    localStorage.setItem("admin_sender_email", val);
+  };
+
   const supervisors = usersList.filter(
     (u) => u.role === "supervisor" || u.role === "panel",
   );
 
-  const handleSubmit = async (e) => {
+  const openEditModal = (targetUser) => {
+    setFormData({
+      id: targetUser._id,
+      userId: targetUser.userId,
+      name: targetUser.name,
+      email: targetUser.email,
+      role: targetUser.role,
+      matricNumber: targetUser.matricNumber || "",
+      program: targetUser.program || "",
+      researchTitle: targetUser.researchTitle || "",
+    });
+    setShowEditModal(true);
+  };
+
+  const handleCreateSubmit = async (e) => {
     e.preventDefault();
     try {
       const res = await api.post("/users", formData);
       if (res.data.success) {
         setNewCredentials({
+          email: res.data.user.email,
           userId: res.data.user.userId,
           name: res.data.user.name,
           registrationCode: res.data.registrationCode,
         });
-        // ✅ AUTO-COPY TO CLIPBOARD
-        navigator.clipboard.writeText(
-          `Welcome ${res.data.user.name}!\nYour System ID: ${res.data.user.userId}\nYour First-Time Setup Code: ${res.data.registrationCode}`,
-        );
-
-        setShowModal(false);
-        setFormData({
-          userId: "",
-          name: "",
-          email: "",
-          role: "",
-          matricNumber: "",
-          program: "",
-          researchTitle: "",
-          supervisorId: "",
-        });
+        setShowCreateModal(false);
         fetchUsers();
       }
     } catch (error) {
@@ -89,20 +103,29 @@ export default function UsersPage() {
     }
   };
 
-  const handleResetZkp = async (userId, name) => {
+  const handleEditSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await api.put(`/users/${formData.id}`, formData);
+      alert("✅ User details updated successfully!");
+      setShowEditModal(false);
+      fetchUsers();
+    } catch (error) {
+      alert(error.response?.data?.message || "Failed to update user");
+    }
+  };
+
+  const handleResetZkp = async (userId, name, email) => {
     if (!window.confirm(`⚠️ WARNING: Erase ${name}'s keys?`)) return;
     try {
       const res = await api.post(`/users/${userId}/reset-zkp`);
       if (res.data.success) {
         setNewCredentials({
+          email: email,
           userId: res.data.userId,
           name: res.data.name,
           registrationCode: res.data.registrationCode,
         });
-        // ✅ AUTO-COPY TO CLIPBOARD
-        navigator.clipboard.writeText(
-          `Hello ${res.data.name},\nYour ZKP Keys have been reset.\nNew Setup Code: ${res.data.registrationCode}`,
-        );
         fetchUsers();
       }
     } catch (error) {
@@ -139,72 +162,113 @@ export default function UsersPage() {
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-            <Users className="w-8 h-8 text-indigo-600" />
-            User & Role Management
+            <Users className="w-8 h-8 text-indigo-600" /> User & Role Management
           </h1>
-          <p className="text-gray-600 mt-2">
-            {isSuperAdmin
-              ? "Full system control. Manage Admins and higher."
-              : "Manage Students, Panels, and Supervisors."}
-          </p>
         </div>
         <button
-          onClick={() => setShowModal(true)}
-          className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 font-semibold shadow-sm"
+          onClick={() => {
+            setFormData({
+              id: "",
+              userId: "",
+              name: "",
+              email: "",
+              role: "",
+              matricNumber: "",
+              program: "",
+              researchTitle: "",
+              supervisorId: "",
+            });
+            setShowCreateModal(true);
+          }}
+          className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold shadow-sm flex items-center gap-2"
         >
-          <UserPlus className="w-5 h-5" />
-          Create New User
+          <UserPlus className="w-5 h-5" /> Create New User
         </button>
       </div>
 
       {/* SUCCESS POPUP FOR NEW CREDENTIALS */}
       {newCredentials && (
-        <div className="bg-green-50 border-2 border-green-500 rounded-xl p-6 shadow-lg mb-6 relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-4">
-            <button
-              onClick={() => setNewCredentials(null)}
-              className="text-green-700 hover:text-green-900"
-            >
-              <X className="w-6 h-6" />
-            </button>
-          </div>
+        <div className="bg-green-50 border-2 border-green-500 rounded-xl p-6 shadow-lg mb-6 relative">
+          <button
+            onClick={() => setNewCredentials(null)}
+            className="absolute top-4 right-4 text-green-700"
+          >
+            <X className="w-6 h-6" />
+          </button>
           <div className="flex items-start gap-4">
-            <CheckCircle className="w-10 h-10 text-green-600 flex-shrink-0" />
-            <div>
-              <h3 className="text-xl font-bold text-green-900 mb-1">
-                User Created Successfully!
+            <CheckCircle className="w-10 h-10 text-green-600" />
+            <div className="flex-1">
+              <h3 className="text-xl font-bold text-green-900">
+                Credentials Generated!
               </h3>
               <p className="text-green-800 mb-4">
-                Please copy these credentials and send them to{" "}
-                <strong>{newCredentials.name}</strong> securely. They will need
-                this code for their first login.
+                Send these to <strong>{newCredentials.name}</strong> securely so
+                they can log in.
               </p>
 
-              <div className="bg-white p-4 rounded-lg border border-green-200 inline-block">
-                <p className="text-sm text-gray-600 mb-1">User ID:</p>
-                <p className="font-mono text-lg font-bold text-gray-900 mb-3">
-                  {newCredentials.userId}
-                </p>
-
-                <p className="text-sm text-gray-600 mb-1">
-                  First-Time Registration Code:
-                </p>
-                <div className="flex items-center gap-3">
-                  <p className="font-mono text-2xl font-black text-indigo-600 bg-indigo-50 px-4 py-2 rounded border border-indigo-100 tracking-widest">
-                    {newCredentials.registrationCode}
+              <div className="bg-white p-5 rounded-lg border border-green-200 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <p className="text-sm font-bold text-gray-500 uppercase">
+                    User ID
                   </p>
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(
-                        `User ID: ${newCredentials.userId}\nRegistration Code: ${newCredentials.registrationCode}`,
-                      );
-                      alert("Copied to clipboard!");
-                    }}
-                    className="p-2 text-indigo-600 hover:bg-indigo-100 rounded transition-colors"
-                    title="Copy to clipboard"
+                  <p className="font-mono text-lg font-bold text-gray-900 mb-3">
+                    {newCredentials.userId}
+                  </p>
+
+                  <p className="text-sm font-bold text-gray-500 uppercase">
+                    Registration Code
+                  </p>
+                  <div className="flex items-center gap-3">
+                    <p className="font-mono text-2xl font-black text-indigo-600 tracking-widest">
+                      {newCredentials.registrationCode}
+                    </p>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(
+                          `User ID: ${newCredentials.userId}\nRegistration Code: ${newCredentials.registrationCode}`,
+                        );
+                        alert("Copied to clipboard!");
+                      }}
+                      className="p-2 text-indigo-600 hover:bg-indigo-100 rounded transition-colors"
+                      title="Copy to clipboard"
+                    >
+                      <Copy className="w-5 h-5" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                  <h4 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                    <Mail className="w-4 h-4" /> Email Configuration
+                  </h4>
+
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                    Send From (Saved to Memory)
+                  </label>
+                  <input
+                    type="email"
+                    value={senderEmail}
+                    onChange={handleSenderChange}
+                    className="w-full text-sm p-2 border rounded mb-3 bg-white"
+                    placeholder="your.admin@email.com"
+                  />
+
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
+                    Send To (Auto-filled)
+                  </label>
+                  <input
+                    type="email"
+                    value={newCredentials.email}
+                    readOnly
+                    className="w-full text-sm p-2 border rounded mb-4 bg-gray-100 text-gray-600 cursor-not-allowed"
+                  />
+
+                  <a
+                    href={`mailto:${newCredentials.email}?subject=Your FSKTM ZKP System Credentials&body=Hello ${newCredentials.name},%0D%0A%0D%0APlease use the following credentials to set up your passwordless login on the FSKTM ZKP System:%0D%0A%0D%0AUser ID: ${newCredentials.userId}%0D%0ARegistration Code: ${newCredentials.registrationCode}%0D%0A%0D%0ARegards,%0D%0AFSKTM Admin`}
+                    className="w-full inline-flex justify-center items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded font-bold hover:bg-indigo-700 transition-colors"
                   >
-                    <Copy className="w-5 h-5" />
-                  </button>
+                    <Mail className="w-4 h-4" /> Open Mail Client
+                  </a>
                 </div>
               </div>
             </div>
@@ -212,241 +276,199 @@ export default function UsersPage() {
         </div>
       )}
 
-      {/* Users Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-        <div className="p-4 border-b border-gray-200 flex items-center gap-4 bg-gray-50 rounded-t-xl">
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Search by Name or User ID..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
-            />
-          </div>
+        <div className="p-4 bg-gray-50 border-b flex items-center">
+          <Search className="w-5 h-5 text-gray-400 absolute ml-3" />
+          <input
+            type="text"
+            placeholder="Search by Name or ID..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full max-w-md pl-10 pr-4 py-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
+          />
         </div>
-
         <div className="overflow-x-auto">
           <table className="w-full text-left">
-            <thead className="bg-gray-50 border-b border-gray-200 text-sm text-gray-600 uppercase tracking-wider">
+            <thead className="bg-gray-50 border-b text-sm text-gray-600 uppercase tracking-wider">
               <tr>
                 <th className="p-4 font-semibold">User Info</th>
-                <th className="p-4 font-semibold">Role</th>
-                <th className="p-4 font-semibold">Supervisor / Dept</th>
-                <th className="p-4 font-semibold">Status</th>
+                <th className="p-4 font-semibold">Role & Details</th>
+                <th className="p-4 font-semibold">Supervisor</th>
+                <th className="p-4 font-semibold">Status & Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filteredUsers.map((u) => (
-                <tr key={u._id} className="hover:bg-gray-50">
-                  <td className="p-4">
-                    <p className="font-bold text-gray-900">{u.name}</p>
-                    <p className="text-sm text-gray-500 font-mono">
-                      {u.userId}
-                    </p>
-                    <p className="text-xs text-gray-400">{u.email}</p>
-                  </td>
-                  <td className="p-4">{getRoleBadge(u.role)}</td>
+              {filteredUsers.map((u) => {
+                let svName = "No Supervisor Assigned";
+                let hasSv = false;
 
-                  {/* 🔴 FIX 2: Safely display Supervisor Name */}
-                  <td className="p-4 text-sm text-gray-600">
-                    {u.role === "student" ? (
-                      u.supervisorId ? (
-                        <div className="flex flex-col">
-                          <span className="font-semibold text-gray-800">
-                            {/* Check if it's an object with a name, otherwise say Unknown */}
-                            {u.supervisorId.name || "Unknown Name"}
-                          </span>
-                          <span className="text-xs text-indigo-600 font-medium">
-                            Supervisor
-                          </span>
-                        </div>
-                      ) : (
-                        <span className="text-red-500 font-medium">
-                          No Supervisor Assigned
-                        </span>
-                      )
-                    ) : (
-                      <span className="text-gray-400">N/A</span>
-                    )}
-                  </td>
+                if (u.supervisorId) {
+                  hasSv = true;
+                  if (
+                    typeof u.supervisorId === "object" &&
+                    u.supervisorId.name
+                  ) {
+                    svName = u.supervisorId.name;
+                  } else if (typeof u.supervisorId === "string") {
+                    const foundSv = usersList.find(
+                      (sysUser) => sysUser._id === u.supervisorId,
+                    );
+                    if (foundSv) svName = foundSv.name;
+                  }
+                }
 
-                  {/* 🔴 FIX 1: Show Reset/Generate button for EVERYONE */}
-                  <td className="p-4">
-                    <div className="flex flex-col items-start gap-2">
-                      {u.zkpRegistered ? (
-                        <span className="inline-flex items-center gap-1 text-green-700 bg-green-50 px-2 py-1 rounded text-xs font-bold border border-green-200">
-                          <Shield className="w-3 h-3" /> SECURED
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 text-orange-700 bg-orange-50 px-2 py-1 rounded text-xs font-bold border border-orange-200">
-                          PENDING SETUP
-                        </span>
+                return (
+                  <tr key={u._id} className="hover:bg-gray-50">
+                    <td className="p-4">
+                      <p className="font-bold text-gray-900">{u.name}</p>
+                      <p className="text-sm font-mono text-gray-500">
+                        {u.userId}
+                      </p>
+                      <p className="text-xs text-gray-400">{u.email}</p>
+                    </td>
+                    <td className="p-4">
+                      <span className="px-3 py-1 rounded-full text-xs font-bold uppercase bg-indigo-100 text-indigo-800">
+                        {u.role}
+                      </span>
+                      {u.role === "panel" && u.expertiseTags && (
+                        <p
+                          className="text-xs text-gray-500 mt-2 line-clamp-2 w-48"
+                          title={u.expertiseTags.join(", ")}
+                        >
+                          Expertise: {u.expertiseTags.join(", ")}
+                        </p>
                       )}
+                    </td>
 
-                      {/* Button is now always visible! */}
-                      <button
-                        onClick={() => handleResetZkp(u.userId, u.name)}
-                        className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold underline transition-colors"
-                      >
-                        {u.zkpRegistered ? "Reset Keys" : "Generate Setup Code"}
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    <td className="p-4 text-sm text-gray-600">
+                      {u.role === "student" ? (
+                        hasSv ? (
+                          <div className="flex flex-col">
+                            <span className="font-bold text-gray-900">
+                              {svName}
+                            </span>
+                            <span className="text-[10px] text-indigo-600 font-bold uppercase tracking-wider">
+                              Supervisor
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-red-500 font-bold bg-red-50 px-2 py-1 rounded text-xs border border-red-100">
+                            NO SUPERVISOR
+                          </span>
+                        )
+                      ) : (
+                        <span className="text-gray-400 italic">N/A</span>
+                      )}
+                    </td>
+
+                    <td className="p-4">
+                      <div className="flex flex-col items-start gap-2">
+                        {u.zkpRegistered ? (
+                          <span className="inline-flex items-center gap-1 text-green-700 bg-green-50 px-2 py-1 rounded text-xs font-bold border border-green-200">
+                            <Shield className="w-3 h-3" /> SECURED
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-orange-700 bg-orange-50 px-2 py-1 rounded text-xs font-bold border border-orange-200">
+                            PENDING SETUP
+                          </span>
+                        )}
+                        <div className="flex gap-3 mt-1">
+                          <button
+                            onClick={() => openEditModal(u)}
+                            className="text-xs text-gray-600 hover:text-indigo-600 font-bold flex items-center gap-1"
+                          >
+                            <Edit className="w-3 h-3" /> Edit Info
+                          </button>
+                          <button
+                            onClick={() =>
+                              handleResetZkp(u.userId, u.name, u.email)
+                            }
+                            className="text-xs text-red-600 hover:text-red-800 font-bold flex items-center gap-1"
+                          >
+                            {u.zkpRegistered ? "Reset Keys" : "Generate Code"}
+                          </button>
+                        </div>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* CREATE MODAL */}
-      {showModal && (
+      {/* CREATE / EDIT MODALS */}
+      {showEditModal && (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center sticky top-0 bg-white z-10">
-              <h2 className="text-xl font-bold text-gray-900">
-                Create New System User
-              </h2>
-              <button
-                onClick={() => setShowModal(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="p-6 space-y-5">
-              <div className="grid grid-cols-2 gap-5">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    User Role *
-                  </label>
-                  <select
-                    value={formData.role}
-                    onChange={(e) =>
-                      setFormData({ ...formData, role: e.target.value })
-                    }
-                    className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-indigo-500"
-                    required
-                  >
-                    <option value="">-- Select Role --</option>
-                    {/* Role Enforcement logic */}
-                    {isSuperAdmin && <option value="admin">Admin (PIC)</option>}
-                    {/* Both Superadmin AND Admin can create these: */}
-                    {(isAdmin || isSuperAdmin) && (
-                      <>
-                        <option value="student">Postgraduate Student</option>
-                        <option value="panel">Evaluating Panel</option>
-                        <option value="supervisor">Supervisor</option>
-                      </>
-                    )}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    System User ID *
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.userId}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        userId: e.target.value.toUpperCase(),
-                      })
-                    }
-                    className="w-full border border-gray-300 rounded p-2 focus:ring-2 focus:ring-indigo-500 uppercase"
-                    placeholder="e.g. STU001"
-                    required
-                  />
-                </div>
+          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6">
+            <h2 className="text-2xl font-bold mb-4 border-b pb-2">
+              Edit User Profile
+            </h2>
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">
+                  System User ID (Read-Only)
+                </label>
+                <input
+                  type="text"
+                  value={formData.userId}
+                  disabled
+                  className="w-full border rounded p-2 bg-gray-100 text-gray-500 cursor-not-allowed font-mono"
+                />
               </div>
-
-              <div className="grid grid-cols-2 gap-5">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    Full Name *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.name}
-                    onChange={(e) =>
-                      setFormData({ ...formData, name: e.target.value })
-                    }
-                    className="w-full border border-gray-300 rounded p-2"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    Email Address *
-                  </label>
-                  <input
-                    type="email"
-                    required
-                    value={formData.email}
-                    onChange={(e) =>
-                      setFormData({ ...formData, email: e.target.value })
-                    }
-                    className="w-full border border-gray-300 rounded p-2"
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">
+                  Full Name *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.name}
+                  onChange={(e) =>
+                    setFormData({ ...formData, name: e.target.value })
+                  }
+                  className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500"
+                />
               </div>
-
-              {/* Dynamic Student Fields */}
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">
+                  Email Address *
+                </label>
+                <input
+                  type="email"
+                  required
+                  value={formData.email}
+                  onChange={(e) =>
+                    setFormData({ ...formData, email: e.target.value })
+                  }
+                  className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
               {formData.role === "student" && (
-                <div className="bg-indigo-50 p-5 rounded-lg border border-indigo-100 space-y-4 mt-4">
-                  <h4 className="font-bold text-indigo-900 border-b border-indigo-200 pb-2">
-                    Academic Details
-                  </h4>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">
-                        Matric Number *
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.matricNumber}
-                        onChange={(e) =>
-                          setFormData({
-                            ...formData,
-                            matricNumber: e.target.value,
-                          })
-                        }
-                        className="w-full border border-gray-300 rounded p-2"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">
-                        Program *
-                      </label>
-                      <select
-                        required
-                        value={formData.program}
-                        onChange={(e) =>
-                          setFormData({ ...formData, program: e.target.value })
-                        }
-                        className="w-full border border-gray-300 rounded p-2"
-                      >
-                        <option value="">Select Program...</option>
-                        <option value="Master of Computer Science">
-                          Master of Computer Science
-                        </option>
-                        <option value="PhD in Information Technology">
-                          PhD in Information Technology
-                        </option>
-                      </select>
-                    </div>
-                  </div>
+                <>
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1">
-                      Research Title
+                    <label className="block text-sm font-bold text-gray-700 mb-1">
+                      Matric Number
                     </label>
                     <input
                       type="text"
+                      value={formData.matricNumber}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          matricNumber: e.target.value,
+                        })
+                      }
+                      className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">
+                      Research Title
+                    </label>
+                    <textarea
+                      rows="2"
                       value={formData.researchTitle}
                       onChange={(e) =>
                         setFormData({
@@ -454,40 +476,16 @@ export default function UsersPage() {
                           researchTitle: e.target.value,
                         })
                       }
-                      className="w-full border border-gray-300 rounded p-2"
+                      className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-1 text-indigo-800 flex items-center gap-1">
-                      <UserPlus className="w-4 h-4" /> Assign Supervisor *
-                    </label>
-                    <select
-                      required
-                      value={formData.supervisorId}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          supervisorId: e.target.value,
-                        })
-                      }
-                      className="w-full border border-indigo-300 rounded p-2 bg-white focus:ring-2 focus:ring-indigo-500"
-                    >
-                      <option value="">-- Choose a Supervisor --</option>
-                      {supervisors.map((sup) => (
-                        <option key={sup._id} value={sup._id}>
-                          {sup.name} ({sup.userId})
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
+                </>
               )}
-
-              <div className="pt-4 flex justify-end gap-3 border-t border-gray-100">
+              <div className="pt-4 flex justify-end gap-3 border-t">
                 <button
                   type="button"
-                  onClick={() => setShowModal(false)}
-                  className="px-5 py-2 text-gray-600 hover:bg-gray-100 rounded"
+                  onClick={() => setShowEditModal(false)}
+                  className="px-5 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded font-bold"
                 >
                   Cancel
                 </button>
@@ -495,7 +493,7 @@ export default function UsersPage() {
                   type="submit"
                   className="px-6 py-2 bg-indigo-600 text-white font-bold rounded shadow hover:bg-indigo-700"
                 >
-                  Create User & Generate Code
+                  Save Changes
                 </button>
               </div>
             </form>

@@ -168,3 +168,28 @@ exports.getAssignments = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+
+// src/controllers/userController.js (add to bottom)
+
+exports.updateUser = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, email, matricNumber, program, researchTitle } = req.body;
+
+    // Only allow editing safe fields (prevent role/ZKP tampering here)
+    const user = await User.findByIdAndUpdate(
+      id,
+      { name, email, matricNumber, program, researchTitle },
+      { new: true, runValidators: true },
+    );
+
+    if (!user)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+
+    res.status(200).json({ success: true, user });
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to update user." });
+  }
+};

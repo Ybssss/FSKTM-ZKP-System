@@ -1,11 +1,20 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Edit, Trash2, Eye, X, Settings } from "lucide-react";
-import { rubricAPI } from "../../services/api";
+import {
+  Plus,
+  Edit,
+  Trash2,
+  Eye,
+  X,
+  Settings,
+  FileText,
+  CheckCircle2,
+} from "lucide-react";
+import api from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
 
 export default function RubricPage() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin";
+  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
 
   const [rubrics, setRubrics] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -13,25 +22,26 @@ export default function RubricPage() {
   const [showViewModal, setShowViewModal] = useState(false);
   const [editingRubric, setEditingRubric] = useState(null);
   const [viewingRubric, setViewingRubric] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const defaultCriterion = () => ({
+    key: `crit_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+    title: "",
+    type: "quantitative",
+    weight: 0,
+    maxScore: 4,
+    description: "",
+    exemplary: "",
+    proficient: "",
+    satisfactory: "",
+    foundational: "",
+    novice: "",
+  });
 
   const [formData, setFormData] = useState({
     name: "",
     sessionType: "",
-    criteria: [
-      {
-        key: `crit_${Date.now()}`,
-        title: "",
-        type: "quantitative",
-        weight: 0,
-        maxScore: 4,
-        description: "",
-        exemplary: "",
-        proficient: "",
-        satisfactory: "",
-        foundational: "",
-        novice: "",
-      },
-    ],
+    criteria: [defaultCriterion()],
   });
 
   useEffect(() => {
@@ -41,8 +51,8 @@ export default function RubricPage() {
   const loadRubrics = async () => {
     try {
       setLoading(true);
-      const data = await rubricAPI.getAll();
-      setRubrics(data.rubrics || data.data || []);
+      const res = await api.get("/rubrics");
+      setRubrics(res.data.data || res.data.rubrics || []);
     } catch (error) {
       console.error("Error loading rubrics:", error);
       alert("Failed to load rubrics");
@@ -54,22 +64,7 @@ export default function RubricPage() {
   const handleAddCriterion = () => {
     setFormData({
       ...formData,
-      criteria: [
-        ...formData.criteria,
-        {
-          key: `crit_${Date.now()}`,
-          title: "",
-          type: "quantitative",
-          weight: 0,
-          maxScore: 4,
-          description: "",
-          exemplary: "",
-          proficient: "",
-          satisfactory: "",
-          foundational: "",
-          novice: "",
-        },
-      ],
+      criteria: [...formData.criteria, defaultCriterion()],
     });
   };
 
@@ -97,10 +92,18 @@ export default function RubricPage() {
   };
 
   const validateForm = () => {
-    if (!formData.name.trim()) return alert("Please enter rubric name");
-    if (!formData.sessionType) return alert("Please select a session type");
-    if (formData.criteria.length === 0)
-      return alert("Please add at least one criterion");
+    if (!formData.name.trim()) {
+      alert("Please enter a rubric name");
+      return false;
+    }
+    if (!formData.sessionType) {
+      alert("Please select a session type");
+      return false;
+    }
+    if (formData.criteria.length === 0) {
+      alert("Please add at least one criterion");
+      return false;
+    }
 
     const hasQuantitative = formData.criteria.some(
       (c) => c.type === "quantitative",
@@ -118,7 +121,7 @@ export default function RubricPage() {
     for (let i = 0; i < formData.criteria.length; i++) {
       const c = formData.criteria[i];
       if (!c.title.trim()) {
-        alert(`Please enter a title for criterion ${i + 1}`);
+        alert(`Please enter a title for Criterion ${i + 1}`);
         return false;
       }
     }
@@ -131,18 +134,25 @@ export default function RubricPage() {
     if (!validateForm()) return;
 
     try {
+      setIsSubmitting(true);
       if (editingRubric) {
-        await rubricAPI.update(editingRubric._id, formData);
+        await api.put(`/rubrics/${editingRubric._id}`, formData);
         alert("Rubric updated successfully!");
       } else {
-        await rubricAPI.create(formData);
+        await api.post("/rubrics", formData);
         alert("Rubric created successfully!");
       }
 
       handleCloseModal();
       loadRubrics();
     } catch (error) {
-      alert(error.response?.data?.message || "Failed to save rubric");
+      alert(
+        error.response?.data?.message ||
+          error.response?.data?.error ||
+          "Failed to save rubric",
+      );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -151,7 +161,10 @@ export default function RubricPage() {
     setFormData({
       name: rubric.name,
       sessionType: rubric.sessionType || "",
-      criteria: rubric.criteria || [],
+      criteria:
+        rubric.criteria && rubric.criteria.length > 0
+          ? rubric.criteria
+          : [defaultCriterion()],
     });
     setShowModal(true);
   };
@@ -162,9 +175,14 @@ export default function RubricPage() {
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this rubric?")) return;
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this rubric? This may break historical evaluations linked to it.",
+      )
+    )
+      return;
     try {
-      await rubricAPI.delete(id);
+      await api.delete(`/rubrics/${id}`);
       loadRubrics();
     } catch (error) {
       alert("Failed to delete rubric");
@@ -174,34 +192,17 @@ export default function RubricPage() {
   const handleCloseModal = () => {
     setShowModal(false);
     setEditingRubric(null);
-    setFormData({
-      name: "",
-      sessionType: "",
-      criteria: [
-        {
-          key: `crit_${Date.now()}`,
-          title: "",
-          type: "quantitative",
-          weight: 0,
-          maxScore: 4,
-          description: "",
-          exemplary: "",
-          proficient: "",
-          satisfactory: "",
-          foundational: "",
-          novice: "",
-        },
-      ],
-    });
+    setFormData({ name: "", sessionType: "", criteria: [defaultCriterion()] });
   };
 
   return (
     <>
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex items-center justify-between mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">
-              Evaluation Rubrics
+            <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
+              <FileText className="w-8 h-8 text-indigo-600" /> Evaluation
+              Rubrics
             </h1>
             <p className="text-gray-600 mt-2">
               Manage UTHM evaluation criteria and rubrics
@@ -210,54 +211,88 @@ export default function RubricPage() {
           {isAdmin && (
             <button
               onClick={() => setShowModal(true)}
-              className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2"
+              className="px-6 py-3 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 flex items-center gap-2 shadow-sm transition-colors"
             >
               <Plus className="w-5 h-5" /> Create New Rubric
             </button>
           )}
         </div>
 
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        {!isAdmin && (
+          <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <p className="text-sm font-semibold text-blue-800">
+              ℹ️ You have view-only access. Only administrators can create or
+              edit official rubrics.
+            </p>
+          </div>
+        )}
+
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           {loading ? (
-            <div className="p-12 text-center">Loading rubrics...</div>
+            <div className="p-12 text-center text-gray-500">
+              Loading rubrics...
+            </div>
           ) : rubrics.length === 0 ? (
             <div className="p-12 text-center text-gray-500">
               No rubrics found. Please seed the database or create one.
             </div>
           ) : (
-            <div className="divide-y divide-gray-200">
+            <div className="divide-y divide-gray-100">
               {rubrics.map((rubric) => (
-                <div key={rubric._id} className="p-6 hover:bg-gray-50">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="text-lg font-bold text-gray-900 mb-1">
-                        {rubric.name}
-                      </h3>
-                      <span className="px-3 py-1 bg-blue-100 text-blue-800 text-xs font-bold rounded-full">
-                        {rubric.sessionType?.replace("_", " ")}
-                      </span>
-                      <p className="text-sm text-gray-500 mt-3">
-                        {rubric.criteria?.length || 0} Criteria configured
-                      </p>
+                <div
+                  key={rubric._id}
+                  className="p-6 hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <h3 className="text-xl font-bold text-gray-900">
+                          {rubric.name}
+                        </h3>
+                        <span className="px-3 py-1 bg-indigo-50 border border-indigo-100 text-indigo-800 text-xs font-bold uppercase rounded-full">
+                          {rubric.sessionType?.replace("_", " ")}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-4 text-sm text-gray-600 mt-3 bg-white border p-3 rounded-lg inline-block">
+                        <div>
+                          <span className="font-bold text-gray-900">
+                            {rubric.criteria?.filter(
+                              (c) => c.type === "quantitative",
+                            ).length || 0}
+                          </span>{" "}
+                          Scored Criteria
+                        </div>
+                        <div className="border-l pl-4">
+                          <span className="font-bold text-gray-900">
+                            {rubric.criteria?.filter(
+                              (c) => c.type === "qualitative",
+                            ).length || 0}
+                          </span>{" "}
+                          Text Feedbacks
+                        </div>
+                      </div>
                     </div>
-                    <div className="flex gap-2">
+
+                    <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleView(rubric)}
-                        className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg"
+                        className="px-4 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 font-bold rounded-lg transition-colors flex items-center gap-2"
                       >
-                        <Eye className="w-5 h-5" />
+                        <Eye className="w-4 h-4" /> View Details
                       </button>
+
                       {isAdmin && (
                         <>
                           <button
                             onClick={() => handleEdit(rubric)}
-                            className="p-2 text-yellow-600 hover:bg-yellow-50 rounded-lg"
+                            className="p-2 text-yellow-600 bg-yellow-50 hover:bg-yellow-100 rounded-lg transition-colors"
                           >
                             <Edit className="w-5 h-5" />
                           </button>
                           <button
                             onClick={() => handleDelete(rubric._id)}
-                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg"
+                            className="p-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
                           >
                             <Trash2 className="w-5 h-5" />
                           </button>
@@ -272,29 +307,32 @@ export default function RubricPage() {
         </div>
       </div>
 
-      {/* CREATE / EDIT MODAL */}
       {showModal && isAdmin && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[90vh] flex flex-col">
-            <div className="px-6 py-4 border-b flex justify-between items-center sticky top-0 bg-white z-10">
-              <h2 className="text-2xl font-bold text-gray-900">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full my-8 flex flex-col mx-auto">
+            <div className="px-8 py-5 border-b flex justify-between items-center sticky top-0 bg-white z-10">
+              <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
+                <Settings className="w-6 h-6 text-indigo-600" />
                 {editingRubric ? "Edit Rubric" : "Create New Rubric"}
               </h2>
-              <button onClick={handleCloseModal}>
-                <X className="w-6 h-6 text-gray-400" />
+              <button
+                onClick={handleCloseModal}
+                className="text-gray-400 hover:text-gray-700 bg-gray-100 p-2 rounded-lg"
+              >
+                <X className="w-6 h-6" />
               </button>
             </div>
 
-            <div className="p-6 overflow-y-auto flex-1 bg-gray-50">
+            <div className="p-8 bg-gray-50 flex-1 overflow-y-auto">
               <form
                 id="rubricForm"
                 onSubmit={handleSubmit}
-                className="space-y-6"
+                className="space-y-8"
               >
-                <div className="grid grid-cols-2 gap-6 bg-white p-5 rounded-lg border shadow-sm">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-2">
-                      Rubric Name
+                      Rubric Name *
                     </label>
                     <input
                       type="text"
@@ -302,14 +340,14 @@ export default function RubricPage() {
                       onChange={(e) =>
                         setFormData({ ...formData, name: e.target.value })
                       }
-                      className="w-full p-2 border rounded focus:ring-2 focus:ring-indigo-500"
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500"
                       placeholder="e.g., Pre-Viva Final Evaluation"
                       required
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-2">
-                      Linked Session Type
+                      Linked Session Type *
                     </label>
                     <select
                       value={formData.sessionType}
@@ -319,7 +357,7 @@ export default function RubricPage() {
                           sessionType: e.target.value,
                         })
                       }
-                      className="w-full p-2 border rounded focus:ring-2 focus:ring-indigo-500"
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
                       required
                     >
                       <option value="">-- Select --</option>
@@ -348,7 +386,7 @@ export default function RubricPage() {
 
                 {formData.criteria.map((criterion, index) => (
                   <div
-                    key={index}
+                    key={criterion.key}
                     className="bg-white border-2 border-indigo-100 rounded-xl p-5 shadow-sm relative mb-4"
                   >
                     <div className="absolute top-4 right-4 flex gap-4">
@@ -413,7 +451,7 @@ export default function RubricPage() {
                         <div className="grid grid-cols-2 gap-4 mb-4 pb-4 border-b">
                           <div>
                             <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
-                              Weight (%)
+                              Weight (%) *
                             </label>
                             <input
                               type="number"
@@ -594,93 +632,123 @@ export default function RubricPage() {
         </div>
       )}
 
-      {/* View Modal - For Everyone */}
       {showViewModal && viewingRubric && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-gray-900">
-                {viewingRubric.name}
-              </h2>
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto flex flex-col">
+            <div className="sticky top-0 bg-white border-b border-gray-200 px-8 py-5 flex items-center justify-between z-10 rounded-t-xl">
+              <div>
+                <h2 className="text-2xl font-bold text-gray-900">
+                  {viewingRubric.name}
+                </h2>
+                <span className="inline-block mt-2 px-3 py-1 bg-indigo-50 border border-indigo-100 text-indigo-800 text-xs font-bold uppercase rounded-full">
+                  {viewingRubric.sessionType?.replace("_", " ")}
+                </span>
+              </div>
               <button
                 onClick={() => {
                   setShowViewModal(false);
                   setViewingRubric(null);
                 }}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-gray-400 hover:text-gray-700 bg-gray-100 p-2 rounded-lg"
               >
                 <X className="w-6 h-6" />
               </button>
             </div>
 
-            <div className="p-6">
-              <div className="mb-6">
-                <h3 className="font-semibold text-gray-900 mb-4">
-                  Criteria Details
-                </h3>
-                <div className="space-y-4">
-                  {viewingRubric.criteria?.map((criterion, index) => (
-                    <div
-                      key={index}
-                      className="border border-gray-200 rounded-lg p-4 bg-gray-50"
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-bold text-gray-900">
-                          {criterion.title}
-                        </h4>
-                        <span
-                          className={`px-2 py-1 rounded text-xs font-bold uppercase ${criterion.type === "quantitative" ? "bg-indigo-100 text-indigo-700" : "bg-blue-100 text-blue-700"}`}
-                        >
-                          {criterion.type}
-                        </span>
-                      </div>
+            <div className="p-8 bg-gray-50 flex-1">
+              <div className="space-y-6">
+                {viewingRubric.criteria?.map((criterion, index) => (
+                  <div
+                    key={index}
+                    className="border border-gray-200 rounded-xl bg-white shadow-sm overflow-hidden"
+                  >
+                    <div className="bg-gray-100 px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+                      <h4 className="font-bold text-gray-900">
+                        {criterion.title}
+                      </h4>
+                      <span
+                        className={`px-3 py-1 rounded-md text-xs font-bold uppercase border ${criterion.type === "quantitative" ? "bg-indigo-50 text-indigo-700 border-indigo-200" : "bg-blue-50 text-blue-700 border-blue-200"}`}
+                      >
+                        {criterion.type}
+                      </span>
+                    </div>
 
+                    <div className="p-6">
                       {criterion.type === "quantitative" ? (
-                        <div className="mt-4">
-                          <p className="text-sm font-bold text-gray-600 mb-2">
-                            Weight: {criterion.weight}%
+                        <div>
+                          <p className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-4">
+                            Weight:{" "}
+                            <span className="text-indigo-600">
+                              {criterion.weight}%
+                            </span>
                           </p>
-                          <div className="grid grid-cols-5 gap-2 text-xs">
-                            <div className="bg-white p-2 rounded border">
-                              <strong>Exemplary:</strong>
-                              <p className="mt-1">{criterion.exemplary}</p>
+                          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                            <div className="bg-green-50 border border-green-200 p-3 rounded-lg">
+                              <p className="text-[10px] font-bold text-green-700 uppercase tracking-widest mb-2 border-b border-green-200 pb-1">
+                                Exemplary (4)
+                              </p>
+                              <p className="text-xs text-gray-700">
+                                {criterion.exemplary}
+                              </p>
                             </div>
-                            <div className="bg-white p-2 rounded border">
-                              <strong>Proficient:</strong>
-                              <p className="mt-1">{criterion.proficient}</p>
+                            <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
+                              <p className="text-[10px] font-bold text-blue-700 uppercase tracking-widest mb-2 border-b border-blue-200 pb-1">
+                                Proficient (3)
+                              </p>
+                              <p className="text-xs text-gray-700">
+                                {criterion.proficient}
+                              </p>
                             </div>
-                            <div className="bg-white p-2 rounded border">
-                              <strong>Satisfactory:</strong>
-                              <p className="mt-1">{criterion.satisfactory}</p>
+                            <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg">
+                              <p className="text-[10px] font-bold text-yellow-700 uppercase tracking-widest mb-2 border-b border-yellow-200 pb-1">
+                                Satisfactory (2)
+                              </p>
+                              <p className="text-xs text-gray-700">
+                                {criterion.satisfactory}
+                              </p>
                             </div>
-                            <div className="bg-white p-2 rounded border">
-                              <strong>Foundational:</strong>
-                              <p className="mt-1">{criterion.foundational}</p>
+                            <div className="bg-orange-50 border border-orange-200 p-3 rounded-lg">
+                              <p className="text-[10px] font-bold text-orange-700 uppercase tracking-widest mb-2 border-b border-orange-200 pb-1">
+                                Foundational (1)
+                              </p>
+                              <p className="text-xs text-gray-700">
+                                {criterion.foundational}
+                              </p>
                             </div>
-                            <div className="bg-white p-2 rounded border">
-                              <strong>Novice:</strong>
-                              <p className="mt-1">{criterion.novice}</p>
+                            <div className="bg-red-50 border border-red-200 p-3 rounded-lg">
+                              <p className="text-[10px] font-bold text-red-700 uppercase tracking-widest mb-2 border-b border-red-200 pb-1">
+                                Novice (0)
+                              </p>
+                              <p className="text-xs text-gray-700">
+                                {criterion.novice}
+                              </p>
                             </div>
                           </div>
                         </div>
                       ) : (
-                        <p className="text-sm text-gray-700 mt-2 bg-white p-3 rounded border">
-                          <strong>Instructions:</strong> {criterion.description}
-                        </p>
+                        <div>
+                          <p className="text-sm font-bold text-gray-500 uppercase tracking-widest mb-2">
+                            Instructions for Evaluator
+                          </p>
+                          <p className="text-sm text-gray-800 bg-blue-50 p-4 rounded-lg border border-blue-100">
+                            {criterion.description ||
+                              "No instructions provided."}
+                          </p>
+                        </div>
                       )}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </div>
             </div>
 
-            <div className="px-6 py-4 border-t flex justify-end bg-gray-50">
+            <div className="px-8 py-5 border-t border-gray-200 flex justify-end bg-white rounded-b-xl sticky bottom-0">
               <button
                 onClick={() => {
                   setShowViewModal(false);
                   setViewingRubric(null);
                 }}
-                className="px-6 py-2 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300"
+                className="px-6 py-2 bg-gray-100 text-gray-700 font-bold rounded-lg hover:bg-gray-200 transition-colors"
               >
                 Close
               </button>
