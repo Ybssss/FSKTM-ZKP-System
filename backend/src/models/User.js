@@ -1,4 +1,3 @@
-// src/models/User.js
 const mongoose = require("mongoose");
 
 const userSchema = new mongoose.Schema(
@@ -11,6 +10,11 @@ const userSchema = new mongoose.Schema(
       enum: ["superadmin", "admin", "panel", "student"],
       required: true,
     },
+    // 🔴 FIXED: ADDED THE MISSING UTHM DIRECTORY FIELDS
+    matricNumber: { type: String, default: "" },
+    profession: { type: String, default: "" },
+    researchTitle: { type: String, default: "" },
+
     supervisorId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -20,46 +24,36 @@ const userSchema = new mongoose.Schema(
       type: [String],
       default: [],
     },
-    registrationCode: {
-      type: String,
-      default: null,
-    },
-    zkpPublicKey: {
-      type: String,
-      default: null,
-    },
-    zkpRegistered: {
-      type: Boolean,
-      default: false,
-    },
-    zkpChallenge: {
-      type: String,
-      default: null,
-    },
-    zkpChallengeExpiry: {
-      type: Date,
-      default: null,
-    },
-    zkpPairingCode: {
-      type: String,
-      default: null,
-    },
-    zkpPairingTempPublicKey: {
-      type: String,
-      default: null,
-    },
-    zkpPairingPayload: {
-      type: String,
-      default: null,
-    },
-    zkpPairingExpiresAt: {
-      type: Date,
-      default: null,
-    },
+
+    // 🔴 FIXED: ADDED THE MISSING ASSIGNMENT ARRAYS
+    assignedStudents: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "User",
+      },
+    ],
+    assignedPanels: [
+      {
+        panelId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+        startDate: { type: Date, default: Date.now },
+        endDate: { type: Date, default: null },
+      },
+    ],
+
+    registrationCode: { type: String, default: null },
+    zkpPublicKey: { type: String, default: null },
+    zkpRegistered: { type: Boolean, default: false },
+    zkpChallenge: { type: String, default: null },
+    zkpChallengeExpiry: { type: Date, default: null },
+    zkpPairingCode: { type: String, default: null },
+    zkpPairingTempPublicKey: { type: String, default: null },
+    zkpPairingPayload: { type: String, default: null },
+    zkpPairingExpiresAt: { type: Date, default: null },
+
     authenticatedDevices: [
       {
         deviceId: String,
-        deviceName: String, // e.g., "Chrome on Windows"
+        deviceName: String,
         ipAddress: String,
         isActive: { type: Boolean, default: true },
         trusted: { type: Boolean, default: false },
@@ -67,10 +61,7 @@ const userSchema = new mongoose.Schema(
         createdAt: { type: Date, default: Date.now },
       },
     ],
-    zkpIdentityCommitment: {
-      type: String,
-      default: null,
-    },
+    zkpIdentityCommitment: { type: String, default: null },
   },
   { timestamps: true },
 );

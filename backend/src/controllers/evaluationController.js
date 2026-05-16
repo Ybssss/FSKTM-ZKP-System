@@ -14,14 +14,31 @@ exports.getAllEvaluations = async (req, res) => {
     else if (role === "student") query = { studentId: userId };
 
     const evaluations = await Evaluation.find(query)
-      .populate("studentId", "name email")
-      .populate("evaluatorId", "name email")
-      .populate("sessionId", "semester sessionType")
-      .populate("rubricId", "name criteria")
+      .populate({
+        path: "studentId",
+        select: "name email matricNumber researchTitle supervisorId",
+        strictPopulate: false,
+      })
+      .populate({
+        path: "evaluatorId",
+        select: "name email expertiseTags",
+        strictPopulate: false,
+      })
+      .populate({
+        path: "sessionId",
+        select: "semester sessionType date venue",
+        strictPopulate: false,
+      })
+      .populate({
+        path: "rubricId",
+        select: "name sessionType criteria",
+        strictPopulate: false,
+      })
       .sort({ createdAt: -1 });
 
     res.status(200).json({ success: true, data: evaluations });
   } catch (error) {
+    console.error("Evaluation Fetch Error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -137,11 +154,19 @@ exports.submitEvaluation = async (req, res) => {
     // Mark as COMPLETED
     evaluation.status = "COMPLETED";
     await evaluation.save();
+    const savedEvaluation = await evaluation.save();
+
+    // Re-populate for the frontend report view
+    const completedEval = await Evaluation.findById(savedEvaluation._id)
+      .populate("studentId", "name matricNumber program")
+      .populate("evaluatorId", "name")
+      .populate("rubricId", "name");
 
     res.status(200).json({
       success: true,
       message: "Evaluation submitted successfully.",
       data: evaluation,
+      data: completedEval,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

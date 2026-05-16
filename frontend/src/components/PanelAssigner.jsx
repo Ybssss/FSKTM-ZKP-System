@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from "react";
 import axios from "axios";
 
-const PanelAssigner = ({ studentTitle, panelCandidates }) => {
+const PanelAssigner = ({ studentTitle, panelCandidates, onAssign }) => {
   const [selectedPanel, setSelectedPanel] = useState("");
   const [expertise, setExpertise] = useState([]);
   const [matchScore, setMatchScore] = useState(0);
@@ -36,7 +36,6 @@ const PanelAssigner = ({ studentTitle, panelCandidates }) => {
     if (!panelName) return;
     setLoading(true);
     try {
-      // Call the Express backend we just created
       const res = await axios.get(
         `http://localhost:5000/api/expertise?panelName=${panelName}`,
       );
@@ -56,19 +55,33 @@ const PanelAssigner = ({ studentTitle, panelCandidates }) => {
     fetchExpertise(selectedPanel);
   }, [selectedPanel]);
 
-  return (
-    <div className="p-4 border rounded shadow-sm bg-white">
-      <h3 className="text-lg font-bold mb-2">Assign Panel</h3>
+  const handleConfirm = () => {
+    if (onAssign && selectedPanel) {
+      // Find the full panel object to pass back to the parent component
+      const fullPanelObject = panelCandidates.find(
+        (p) => p.name === selectedPanel,
+      );
+      onAssign(fullPanelObject);
+    }
+  };
 
-      <div className="mb-4">
-        <p className="text-sm text-gray-600">Student Research Title:</p>
-        <p className="font-semibold text-blue-700">{studentTitle}</p>
+  return (
+    <div className="p-6 border-2 border-gray-200 rounded-lg shadow-md bg-white w-full">
+      <h3 className="text-xl font-bold mb-4 text-gray-800">
+        Assign Panel Expert
+      </h3>
+
+      <div className="mb-5 bg-blue-50 p-4 rounded-md border border-blue-100">
+        <p className="text-sm text-gray-600 mb-1">Student Research Title:</p>
+        <p className="font-semibold text-blue-800 text-lg">{studentTitle}</p>
       </div>
 
-      <div className="mb-4">
-        <label className="block text-sm mb-1">Select Panel Evaluator:</label>
+      <div className="mb-5">
+        <label className="block text-sm font-medium mb-2 text-gray-700">
+          Select Panel Evaluator:
+        </label>
         <select
-          className="w-full p-2 border rounded"
+          className="w-full p-3 border-2 border-gray-300 rounded-md focus:border-blue-500 focus:ring-blue-500 text-base"
           value={selectedPanel}
           onChange={(e) => setSelectedPanel(e.target.value)}
         >
@@ -82,17 +95,21 @@ const PanelAssigner = ({ studentTitle, panelCandidates }) => {
       </div>
 
       {loading && (
-        <p className="text-sm text-gray-500">
+        <div className="mt-4 p-4 text-center text-blue-600 animate-pulse bg-blue-50 rounded-md">
           Fetching expertise from UTHM Community...
-        </p>
+        </div>
       )}
 
-      {!loading && expertise.length > 0 && (
-        <div className="mt-4 p-3 bg-gray-50 border rounded">
-          <div className="flex justify-between items-center mb-2">
-            <h4 className="font-bold">Panel Expertise:</h4>
+      {!loading && expertise.length > 0 && selectedPanel && (
+        <div className="mt-6 p-5 bg-gray-50 border-2 border-gray-200 rounded-lg">
+          <div className="flex justify-between items-center mb-4">
+            <h4 className="font-bold text-gray-800 text-lg">
+              Panel Expertise Match:
+            </h4>
             <span
-              className={`px-2 py-1 rounded text-white text-sm ${matchScore > 50 ? "bg-green-500" : "bg-orange-500"}`}
+              className={`px-3 py-1.5 rounded-md text-white font-bold text-sm shadow-sm ${
+                matchScore >= 50 ? "bg-green-600" : "bg-orange-500"
+              }`}
             >
               Title Match: {matchScore}%
             </span>
@@ -102,7 +119,7 @@ const PanelAssigner = ({ studentTitle, panelCandidates }) => {
             {expertise.map((tag, idx) => (
               <span
                 key={idx}
-                className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded"
+                className="bg-blue-100 text-blue-800 text-sm font-medium px-3 py-1.5 rounded-md border border-blue-200"
               >
                 {tag}
               </span>
@@ -110,6 +127,19 @@ const PanelAssigner = ({ studentTitle, panelCandidates }) => {
           </div>
         </div>
       )}
+
+      {/* NEW: Confirmation Button */}
+      <button
+        onClick={handleConfirm}
+        disabled={!selectedPanel}
+        className={`mt-6 w-full py-3 px-4 rounded-md text-white font-bold text-lg transition-all ${
+          selectedPanel
+            ? "bg-blue-600 hover:bg-blue-700 shadow-md cursor-pointer"
+            : "bg-gray-300 cursor-not-allowed"
+        }`}
+      >
+        Confirm Panel Assignment
+      </button>
     </div>
   );
 };

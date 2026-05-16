@@ -53,11 +53,12 @@ export const authAPI = {
     const response = await api.post("/auth/challenge", { userId });
     return response.data;
   },
+
   verify: async (userId, proof, trustDevice, deviceId) => {
     const response = await api.post("/auth/verify", {
       userId,
       proof,
-      trustDevice,
+      trustDevice, // <-- This is what fixes the "Trusted Device" issue!
       deviceId,
     });
     return response.data;
@@ -96,7 +97,6 @@ export const authAPI = {
   },
   //Secure Device Pairing endpoints
   requestPairingCode: async (userId, tempPublicKeyBase64) => {
-    // Updated to send temp key
     const response = await api.post("/auth/pairing/request", {
       userId,
       tempPublicKeyBase64,
@@ -104,7 +104,6 @@ export const authAPI = {
     return response.data;
   },
   getTempPublicKey: async (pairingCode) => {
-    // NEW: No-Camera Fallback
     const response = await api.post("/auth/pairing/key", { pairingCode });
     return response.data;
   },

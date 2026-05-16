@@ -28,7 +28,7 @@ export default function StudentLayout() {
 
   const navItems = [
     { to: "/student/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { to: "/student/feedback", icon: MessageSquare, label: "Evaluations" },
+    { to: "/student/feedback", icon: MessageSquare, label: "Official Reports" },
     { to: "/student/rubrics", icon: FileText, label: "Rubrics" },
     { to: "/student/progress", icon: TrendingUp, label: "Progress" },
     { to: "/student/schedule", icon: Calendar, label: "Schedule" },

@@ -16,6 +16,8 @@ import {
   UserCircle,
   Menu, // 👈 Added Menu icon for mobile
   X, // 👈 Added X icon for closing
+  BookOpen, // 👈 ADD THIS
+  History, // 👈 ADD THIS
 } from "lucide-react";
 
 export default function PanelLayout() {
@@ -37,58 +39,55 @@ export default function PanelLayout() {
       allowedRoles: ["admin", "panel", "coordinator"],
     },
     {
-      to: "/panel/evaluation",
-      icon: ClipboardCheck,
-      label: "Evaluations",
-      allowedRoles: ["admin", "panel"],
-    },
-    {
-      to: "/panel/rubrics",
-      icon: FileText,
-      label: "Rubrics",
-      allowedRoles: ["admin", "panel"],
-    },
-    {
       to: "/panel/sessions",
       icon: Calendar,
-      label: "Sessions",
-      allowedRoles: ["admin", "panel"],
+      label: "Timetable Management",
+      allowedRoles: ["admin", "panel", "coordinator"],
+    },
+    {
+      to: "/panel/assignments",
+      icon: FileText,
+      label: "Panel Assignments",
+      allowedRoles: ["superadmin", "admin", "coordinator"],
+    },
+    {
+      to: "/panel/evaluation",
+      icon: ClipboardCheck,
+      label: "Evaluation Forms",
+      allowedRoles: ["superadmin", "admin", "panel"],
     },
     {
       to: "/panel/historical-feedback",
-      icon: Search,
-      label: "Feedback",
-      allowedRoles: ["admin", "panel", "coordinator"],
+      icon: History,
+      label: "Historical Vault",
+      allowedRoles: ["superadmin", "admin", "panel"],
+    },
+    {
+      to: "/panel/rubrics",
+      icon: BookOpen,
+      label: "Rubrics",
+      allowedRoles: ["superadmin", "admin"],
     },
     {
       to: "/panel/users",
       icon: Users,
       label: "Users",
-      allowedRoles: ["admin"],
-    },
-    {
-      to: "/panel/assignments",
-      icon: UserCog,
-      label: "Assignments",
-      allowedRoles: ["admin"],
+      allowedRoles: ["superadmin", "admin"],
     },
     {
       to: "/panel/devices",
       icon: Smartphone,
-      label: "My Devices",
-      allowedRoles: ["admin", "panel", "coordinator"],
-    },
-    {
-      to: "/panel/profile",
-      icon: UserCircle,
-      label: "Profile",
+      label: "Devices",
       allowedRoles: ["admin", "panel", "coordinator"],
     },
   ];
 
+  // Safely check if allowedRoles exists before calling .includes()
   const filteredNavItems = navItems.filter(
-    (item) => user && item.allowedRoles.includes(user.role),
+    (item) =>
+      user && item.allowedRoles && item.allowedRoles.includes(user.role),
   );
+
   const formatRole = (role) => {
     if (!role) return "Staff";
     return role.charAt(0).toUpperCase() + role.slice(1);

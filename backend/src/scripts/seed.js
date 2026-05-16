@@ -710,6 +710,27 @@ const seedDatabase = async () => {
     allUsers = [...allUsers, ...createdStudents];
     const getUserId = (email) => allUsers.find((u) => u.email === email)._id;
 
+    // LINK ASSIGNMENTS PROPERLY IN THE DB SO THEY SHOW IN UI
+    console.log("🔗 Saving Panel Assignments to Database...");
+    await User.findByIdAndUpdate(getUserId("ali@student.uthm.edu.my"), {
+      assignedPanels: [
+        { panelId: getUserId("samihah@uthm.edu.my") },
+        { panelId: createdPanels[1]._id },
+      ],
+    });
+    await User.findByIdAndUpdate(getUserId("siti@student.uthm.edu.my"), {
+      assignedPanels: [
+        { panelId: getUserId("samihah@uthm.edu.my") },
+        { panelId: createdPanels[2]._id },
+      ],
+    });
+    await User.findByIdAndUpdate(getUserId("chong@student.uthm.edu.my"), {
+      assignedPanels: [
+        { panelId: getUserId("samihah@uthm.edu.my") },
+        { panelId: createdPanels[3]._id },
+      ],
+    });
+
     // 5. Create Sessions
     console.log("📅 Seeding 3 Evaluation Sessions...");
     const tomorrow = new Date();
@@ -719,37 +740,42 @@ const seedDatabase = async () => {
 
     const sessionsData = [
       {
-        studentId: getUserId("ali@student.uthm.edu.my"),
+        students: [getUserId("ali@student.uthm.edu.my")],
+        panels: [getUserId("samihah@uthm.edu.my"), createdPanels[1]._id],
+        title: "Proposal Defense - Muhammad Ali",
         sessionType: "PROPOSAL_DEFENSE",
-        semester: "Semester 1, 2025/2026",
         date: tomorrow,
-        time: "10:00 AM",
+        startTime: "10:00",
+        endTime: "11:00",
         venue: "Bilik Seminar 1",
-        panel1Id: getUserId("samihah@uthm.edu.my"),
-        panel2Id: createdPanels[1]._id,
+        status: "scheduled",
       },
       {
-        studentId: getUserId("siti@student.uthm.edu.my"),
+        students: [getUserId("siti@student.uthm.edu.my")],
+        panels: [getUserId("samihah@uthm.edu.my"), createdPanels[2]._id],
+        title: "Pre-Viva - Siti Nuraisyah",
         sessionType: "PRE_VIVA",
-        semester: "Semester 1, 2025/2026",
         date: nextWeek,
-        time: "2:30 PM",
+        startTime: "14:30",
+        endTime: "15:30",
         venue: "Makmal Komputer 3",
-        panel1Id: getUserId("samihah@uthm.edu.my"),
-        panel2Id: createdPanels[2]._id,
+        status: "scheduled",
       },
       {
-        studentId: getUserId("chong@student.uthm.edu.my"),
+        students: [getUserId("chong@student.uthm.edu.my")],
+        panels: [getUserId("samihah@uthm.edu.my"), createdPanels[3]._id],
+        title: "Progress Assessment - Chong Wei Ming",
         sessionType: "PROGRESS_ASSESSMENT",
-        semester: "Semester 1, 2025/2026",
         date: tomorrow,
-        time: "09:00 AM",
+        startTime: "09:00",
+        endTime: "10:00",
         venue: "Online (Webex)",
-        panel1Id: getUserId("samihah@uthm.edu.my"),
-        panel2Id: createdPanels[3]._id,
+        status: "scheduled",
       },
     ];
-    const createdSessions = await Session.create(sessionsData);
+
+    const Timetable = require("../models/Timetable");
+    const createdSessions = await Timetable.create(sessionsData);
 
     // 6. Auto-Create Evaluations
     console.log("📋 Seeding evaluations linked to Rubrics...");
@@ -760,8 +786,8 @@ const seedDatabase = async () => {
         rubricId: proposalRubric._id,
         studentId: getUserId("ali@student.uthm.edu.my"),
         evaluatorId: getUserId("samihah@uthm.edu.my"),
-        semester: createdSessions[0].semester,
-        sessionType: createdSessions[0].sessionType,
+        semester: "Semester 1, 2025/2026",
+        sessionType: "PROPOSAL_DEFENSE",
         status: "PENDING",
       },
       {
@@ -769,21 +795,21 @@ const seedDatabase = async () => {
         rubricId: proposalRubric._id,
         studentId: getUserId("ali@student.uthm.edu.my"),
         evaluatorId: createdPanels[1]._id,
-        semester: createdSessions[0].semester,
-        sessionType: createdSessions[0].sessionType,
+        semester: "Semester 1, 2025/2026",
+        sessionType: "PROPOSAL_DEFENSE",
         status: "PENDING",
       },
 
-      // 2. COMPLETED Pre-Viva (Fully filled out based on real UTHM example)
+      // 2. COMPLETED Pre-Viva
       {
         sessionId: createdSessions[1]._id,
         rubricId: preVivaRubric._id,
         studentId: getUserId("siti@student.uthm.edu.my"),
         evaluatorId: getUserId("samihah@uthm.edu.my"),
-        semester: createdSessions[1].semester,
-        sessionType: createdSessions[1].sessionType,
+        semester: "Semester 1, 2025/2026",
+        sessionType: "PRE_VIVA",
         status: "COMPLETED",
-        totalMarks: 76.25, // Math matches the actual weights of A-P!
+        totalMarks: 76.25,
         scores: {
           crit_a_title: 3,
           crit_b_abs: 4,
@@ -814,8 +840,8 @@ const seedDatabase = async () => {
         rubricId: preVivaRubric._id,
         studentId: getUserId("siti@student.uthm.edu.my"),
         evaluatorId: createdPanels[2]._id,
-        semester: createdSessions[1].semester,
-        sessionType: createdSessions[1].sessionType,
+        semester: "Semester 1, 2025/2026",
+        sessionType: "PRE_VIVA",
         status: "PENDING",
       },
 
@@ -825,8 +851,8 @@ const seedDatabase = async () => {
         rubricId: progressRubric._id,
         studentId: getUserId("chong@student.uthm.edu.my"),
         evaluatorId: getUserId("samihah@uthm.edu.my"),
-        semester: createdSessions[2].semester,
-        sessionType: createdSessions[2].sessionType,
+        semester: "Semester 1, 2025/2026",
+        sessionType: "PROGRESS_ASSESSMENT",
         status: "PENDING",
       },
       {
@@ -834,8 +860,8 @@ const seedDatabase = async () => {
         rubricId: progressRubric._id,
         studentId: getUserId("chong@student.uthm.edu.my"),
         evaluatorId: createdPanels[3]._id,
-        semester: createdSessions[2].semester,
-        sessionType: createdSessions[2].sessionType,
+        semester: "Semester 1, 2025/2026",
+        sessionType: "PROGRESS_ASSESSMENT",
         status: "PENDING",
       },
     ];

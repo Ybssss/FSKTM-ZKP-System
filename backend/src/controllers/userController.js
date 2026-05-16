@@ -30,13 +30,7 @@ exports.createUser = async (req, res) => {
     } = req.body;
     const creatorRole = req.user.role;
 
-    if (creatorRole === "admin" && ["superadmin", "admin"].includes(role)) {
-      return res.status(403).json({
-        success: false,
-        message: "Admins cannot create other Admins.",
-      });
-    }
-    if (creatorRole !== "superadmin" && creatorRole !== "admin") {
+    if (creatorRole !== "admin") {
       return res
         .status(403)
         .json({ success: false, message: "Unauthorized to create users." });
@@ -146,16 +140,15 @@ exports.resetZkpRegistration = async (req, res) => {
 
 exports.getAssignments = async (req, res) => {
   try {
-    // Safely fetch students and populate their supervisor's name
     const students = await User.find({ role: "student" })
       .select(
-        "name email userId matricNumber program researchTitle supervisorId",
+        "name email userId matricNumber program researchTitle supervisorId assignedPanels",
       )
-      .populate("supervisorId", "name email");
+      .populate("supervisorId", "name email")
+      .populate("assignedPanels.panelId", "name email expertiseTags");
 
-    // Safely fetch panels
     const panels = await User.find({ role: "panel" }).select(
-      "name email userId expertiseTags",
+      "name email userId expertiseTags assignedStudents",
     );
 
     res.status(200).json({
@@ -169,19 +162,42 @@ exports.getAssignments = async (req, res) => {
   }
 };
 
-// src/controllers/userController.js (add to bottom)
-
 exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, email, matricNumber, program, researchTitle } = req.body;
 
-    // Only allow editing safe fields (prevent role/ZKP tampering here)
-    const user = await User.findByIdAndUpdate(
-      id,
-      { name, email, matricNumber, program, researchTitle },
-      { new: true, runValidators: true },
-    );
+    // 🔴 Added expertiseTags so the array can be saved
+    const {
+      name,
+      email,
+      matricNumber,
+      program,
+      researchTitle,
+      supervisorId,
+      profession,
+      role,
+      expertiseTags,
+    } = req.body;
+
+    const updateData = {
+      name,
+      email,
+      matricNumber,
+      program,
+      researchTitle,
+      supervisorId,
+      profession,
+      expertiseTags,
+    };
+
+    if (role && (req.user.role === "superadmin" || req.user.role === "admin")) {
+      updateData.role = role;
+    }
+
+    const user = await User.findByIdAndUpdate(id, updateData, {
+      new: true,
+      runValidators: true,
+    });
 
     if (!user)
       return res
@@ -191,5 +207,40 @@ exports.updateUser = async (req, res) => {
     res.status(200).json({ success: true, user });
   } catch (error) {
     res.status(500).json({ success: false, message: "Failed to update user." });
+  }
+};
+
+exports.unassignPanel = async (req, res) => {
+  try {
+    const { studentId, panelId } = req.body;
+
+    if (!studentId || !panelId) {
+      return res.status(400).json({
+        success: false,
+        message: "studentId and panelId are required",
+      });
+    }
+
+    const User = require("../models/User"); // Ensure User model is loaded
+
+    // 1. Remove panel from student's assignedPanels array
+    await User.findByIdAndUpdate(studentId, {
+      $pull: { assignedPanels: panelId },
+    });
+
+    // 2. Remove student from panel's assignedStudents array
+    await User.findByIdAndUpdate(panelId, {
+      $pull: { assignedStudents: studentId },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Successfully unassigned panel from student.",
+    });
+  } catch (error) {
+    console.error("Unassign Error:", error);
+    res
+      .status(500)
+      .json({ success: false, message: "Server error during unassignment." });
   }
 };

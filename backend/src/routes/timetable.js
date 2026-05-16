@@ -2,7 +2,8 @@ const express = require("express");
 const router = express.Router();
 const { authenticateToken, requireRole } = require("../middleware/auth");
 const evaluationController = require("../controllers/evaluationController");
-const sessionController = require("../controllers/sessionController");
+
+// Import our updated bulletproof timetable controller
 const {
   createTimetable,
   getTimetables,
@@ -10,14 +11,14 @@ const {
   getTimetableById,
   updateTimetable,
   deleteTimetable,
-  assignPanelToStudent,
   uploadDocument,
   deleteDocument,
   addPanelNotes,
   createBulkTimetables,
-  // You will need to create this in your controller later:
-  // createBulkTimetables
 } = require("../controllers/timetableController");
+
+const matchingController = require("../controllers/matchingController");
+const expertiseService = require("../services/expertiseService");
 
 // All routes require authentication
 router.use(authenticateToken);
@@ -25,145 +26,99 @@ router.use(authenticateToken);
 // ==========================================
 // VIEWING ROUTES (All Authenticated Users)
 // ==========================================
-// 1. Get Sessions (Open to everyone, controller filters by role)
-router.get("/my", authenticateToken, sessionController.getMySessions);
 
-// 2. Create Bulk Sessions (Strictly Admin Only)
+// 1. Get Sessions (Uses the bulletproof query we wrote)
+router.get("/my", authenticateToken, getMyTimetable);
+
+// 2. Create Bulk Sessions (Uses the auto-evaluate generator!)
 router.post(
   "/bulk",
   authenticateToken,
   requireRole("admin", "superadmin"),
-  sessionController.createBulkSessions,
+  createBulkTimetables,
 );
 
-// 3. Create Single Session (Strictly Admin Only)
+// 3. Create Single Session
 router.post(
   "/create",
   authenticateToken,
   requireRole("admin", "superadmin"),
-  sessionController.createSession,
+  createTimetable,
 );
 
-// 4. Delete Session (Strictly Admin Only)
+// 4. Delete Session (Deletes linked evaluations too!)
 router.delete(
   "/:id",
   authenticateToken,
   requireRole("admin", "superadmin"),
-  sessionController.deleteSession,
+  deleteTimetable,
 );
+
 // ==========================================
 // DOCUMENT & NOTES ROUTES
 // ==========================================
-// Students upload their proposal/progress documents
 router.post("/:id/documents", requireRole("student", "admin"), uploadDocument);
 router.delete(
   "/:id/documents/:documentId",
   requireRole("student", "admin"),
   deleteDocument,
 );
-
-// Panels leave notes during the session
 router.post("/:id/notes", requireRole("panel", "admin"), addPanelNotes);
 
 // ==========================================
 // EXPERTISE & PANEL MATCHING ROUTES
 // ==========================================
-const expertiseService = require("../services/expertiseService");
-
-// Get expertise for a specific panel
-router.get("/expertise/:userId", requireRole("admin"), async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const expertise = await expertiseService.fetchUserExpertise(userId);
-
-    res.json({
-      success: true,
-      userId,
-      expertise,
-      count: expertise.length,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Error fetching expertise",
-      error: error.message,
-    });
-  }
-});
-
-// Get panel recommendations for a student based on research title
-router.post("/match-expertise", requireRole("admin"), async (req, res) => {
-  try {
-    const { researchTitle, studentId } = req.body;
-
-    if (!researchTitle) {
-      return res.status(400).json({
-        success: false,
-        message: "Research title is required",
-      });
+router.get(
+  "/expertise/:userId",
+  requireRole("admin", "superadmin"),
+  async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const expertise = await expertiseService.fetchUserExpertise(userId);
+      res.json({ success: true, userId, expertise, count: expertise.length });
+    } catch (error) {
+      res
+        .status(500)
+        .json({
+          success: false,
+          message: "Error fetching expertise",
+          error: error.message,
+        });
     }
+  },
+);
 
-    // Get all panels
-    const User = require("../models/User");
-    const panels = await User.find({ role: "panel" }).select("userId name");
-
-    // Fetch expertise for each panel
-    const panelsWithExpertise = await Promise.all(
-      panels.map(async (panel) => {
-        const expertise = await expertiseService.fetchUserExpertise(
-          panel.userId,
-        );
-        return {
-          ...panel.toObject(),
-          expertise,
-        };
-      }),
-    );
-
-    // Get recommendations
-    const recommendations = expertiseService.getPanelRecommendations(
-      researchTitle,
-      panelsWithExpertise,
-    );
-
-    // Filter out student's supervisor if provided
-    let filteredRecommendations = recommendations;
-    if (studentId) {
-      const student = await User.findById(studentId).populate("supervisorId");
-      if (student && student.supervisorId) {
-        filteredRecommendations = recommendations.filter(
-          (rec) =>
-            rec.panelId.toString() !== student.supervisorId._id.toString(),
-        );
-      }
-    }
-
-    res.json({
-      success: true,
-      researchTitle,
-      recommendations: filteredRecommendations,
-      totalPanels: panels.length,
-      matchedPanels: filteredRecommendations.length,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Error matching expertise",
-      error: error.message,
-    });
-  }
-});
+// AI Gemini Panel Matcher
+router.post(
+  "/match-expertise",
+  requireRole("admin", "superadmin"),
+  matchingController.matchExpertise,
+);
 
 // ==========================================
 // SCHEDULING & ADMIN ROUTES (STRICT)
 // ==========================================
-// Only Admins can create, update, or delete sessions
-router.post("/", requireRole("admin"), createTimetable);
-router.put("/:id", requireRole("admin"), updateTimetable);
-router.delete("/:id", requireRole("admin"), deleteTimetable);
-router.post("/bulk", requireRole("admin"), createBulkTimetables);
 
-// Panel Assignment (Admin only) - Maps 2 panels to 1 student
+// Update Timetable (Contains the Magic Panel Swap logic!)
+router.put(
+  "/:id",
+  authenticateToken,
+  requireRole("admin", "superadmin"),
+  updateTimetable,
+);
+
+// Backup GET routes
+router.get(
+  "/",
+  authenticateToken,
+  requireRole("admin", "superadmin"),
+  getTimetables,
+);
+router.get("/:id", authenticateToken, getTimetableById);
+
+// ==========================================
+// EVALUATION ROUTES
+// ==========================================
 router.post(
   "/submit",
   authenticateToken,
@@ -174,16 +129,6 @@ router.get(
   authenticateToken,
   evaluationController.searchHistoricalComments,
 );
-
 router.get("/", authenticateToken, evaluationController.getAllEvaluations);
-// Panel Assignment (Admin only) - Maps 2 panels to 1 student
-router.post("/assign-panel", requireRole("admin"), assignPanelToStudent);
-
-router.put(
-  "/:id",
-  authenticateToken,
-  requireRole("admin"),
-  sessionController.updateSession,
-);
 
 module.exports = router;

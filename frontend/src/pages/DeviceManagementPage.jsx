@@ -270,13 +270,14 @@ export default function DeviceManagementPage() {
 
                     <div className="space-y-1 text-sm text-gray-600">
                       <div className="flex items-center gap-2">
-                        {device.trustStatus ? (
+                        {/* FIX: Checking device.trusted instead of device.trustStatus */}
+                        {device.trusted ? (
                           <CheckCircle className="w-4 h-4 text-green-600" />
                         ) : (
                           <AlertTriangle className="w-4 h-4 text-orange-600" />
                         )}
                         <span>
-                          {device.trustStatus
+                          {device.trusted
                             ? "Trusted Device (Keys Saved)"
                             : "Untrusted Device (Temporary Session)"}
                         </span>

@@ -89,6 +89,7 @@ exports.getMySessions = async (req, res) => {
       .populate({
         path: "studentId",
         select: "name matricNumber program researchTitle supervisorId",
+        select: "name matricNumber program researchTitle supervisorId email",
         populate: { path: "supervisorId", select: "name" }, // 👈 Gets the SV!
       })
       .populate("panel1Id", "name expertiseTags")
@@ -166,12 +167,9 @@ exports.createBulkSessions = async (req, res) => {
         sessionData;
 
       if (!panel1Id || !panel2Id) {
-        return res
-          .status(400)
-          .json({
-            error:
-              "Both Panel 1 and Panel 2 must be provided for every student.",
-          });
+        return res.status(400).json({
+          error: "Both Panel 1 and Panel 2 must be provided for every student.",
+        });
       }
 
       // 1. Conflict of Interest Check
@@ -179,11 +177,9 @@ exports.createBulkSessions = async (req, res) => {
       if (student && student.supervisorId) {
         const svIdStr = student.supervisorId.toString();
         if (svIdStr === panel1Id || svIdStr === panel2Id) {
-          return res
-            .status(400)
-            .json({
-              error: `Conflict of Interest: Supervisor cannot evaluate student ${student.name}.`,
-            });
+          return res.status(400).json({
+            error: `Conflict of Interest: Supervisor cannot evaluate student ${student.name}.`,
+          });
         }
       }
 
@@ -237,13 +233,11 @@ exports.createBulkSessions = async (req, res) => {
       await Evaluation.insertMany(pendingEvaluations);
     }
 
-    res
-      .status(201)
-      .json({
-        success: true,
-        message: `${createdSessions.length} sessions created successfully!`,
-        count: createdSessions.length,
-      });
+    res.status(201).json({
+      success: true,
+      message: `${createdSessions.length} sessions created successfully!`,
+      count: createdSessions.length,
+    });
   } catch (error) {
     console.error("Bulk Creation Error:", error);
     res.status(500).json({ success: false, error: error.message });

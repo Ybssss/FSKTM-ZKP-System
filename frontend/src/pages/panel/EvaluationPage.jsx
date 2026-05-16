@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   ClipboardCheck,
   Eye,
@@ -8,6 +9,8 @@ import {
   FileText,
   AlertCircle,
   Calendar,
+  Lock,
+  ShieldAlert,
 } from "lucide-react";
 import api from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
@@ -23,6 +26,10 @@ const SCALE = [
 export default function EvaluationPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+
+  const { id: urlId } = useParams();
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const [evaluations, setEvaluations] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -58,6 +65,48 @@ export default function EvaluationPage() {
     }
   };
 
+  // Send Unlock Request to Admin Dashboard
+  const handleUnlockRequest = async () => {
+    if (!selectedEval) return;
+
+    const reason = window.prompt(
+      "Please provide a reason for requesting this document to be unlocked (e.g., 'Need to correct a calculation error'):",
+    );
+
+    if (!reason) return; // User cancelled the prompt
+
+    try {
+      const payload = {
+        targetEvaluationId: selectedEval._id,
+        owningPanelId:
+          selectedEval.evaluatorId?._id || selectedEval.evaluatorId,
+        studentId: selectedEval.studentId?._id || selectedEval.studentId,
+        reason: `[UNLOCK REQUEST]: ${reason}`, // Prefix so Admins know it's an unlock request
+      };
+
+      const res = await api.post("/feedback/permissions/request", payload);
+      if (res.data.success) {
+        alert(
+          "✅ Unlock request sent to the Administration. You will be able to edit once approved.",
+        );
+      }
+    } catch (err) {
+      alert(
+        err.response?.data?.message ||
+          "Failed to send unlock request. You may already have a pending request.",
+      );
+    }
+  };
+
+  useEffect(() => {
+    if (urlId && evaluations.length > 0 && !selectedEval) {
+      const targetEval = evaluations.find((ev) => ev._id === urlId);
+      if (targetEval) {
+        openEvaluationModal(targetEval);
+      }
+    }
+  }, [urlId, evaluations]);
+
   const calculateTotalScore = () => {
     if (!selectedEval?.rubricId?.criteria) return 0;
 
@@ -70,16 +119,12 @@ export default function EvaluationPage() {
     let maxPossible = 0;
 
     quantitativeCriteria.forEach((crit) => {
-      // Multiply the selected raw score (0-4) by the criterion's weight (e.g. 5, 10, 20)
       const rawScore = scores[crit.key] || 0;
       const weight = crit.weight || 0;
-
-      // We calculate points earned out of the weighted max.
       totalEarned += (rawScore / (crit.maxScore || 4)) * weight;
-      maxPossible += weight; // Should ideally sum up to 100%
+      maxPossible += weight;
     });
 
-    // Ensure it's a clean percentage out of 100
     return maxPossible > 0 ? ((totalEarned / maxPossible) * 100).toFixed(2) : 0;
   };
 
@@ -125,7 +170,7 @@ export default function EvaluationPage() {
       }
 
       await api.post("/evaluations/submit", payload);
-      alert("✅ Evaluation submitted successfully!");
+      alert("✅ Evaluation submitted successfully and is now LOCKED.");
       closeModal();
       loadEvaluations();
     } catch (error) {
@@ -141,12 +186,20 @@ export default function EvaluationPage() {
 
   const openEvaluationModal = (ev) => {
     setSelectedEval(ev);
+
+    if (!urlId || urlId !== ev._id) {
+      navigate(`/panel/evaluation/${ev._id}`, {
+        replace: true,
+        state: location.state,
+      });
+    }
+
     if (ev.status === "COMPLETED") {
       if (ev.sessionType === "PROGRESS_ASSESSMENT") {
         setProgressData({
-          summaryOfProgress: ev.summaryOfProgress,
-          commentsForImprovement: ev.commentsForImprovement,
-          overallSuggestions: ev.overallSuggestions,
+          summaryOfProgress: ev.summaryOfProgress || "",
+          commentsForImprovement: ev.commentsForImprovement || "",
+          overallSuggestions: ev.overallSuggestions || "",
         });
       } else {
         setScores(ev.scores || {});
@@ -178,6 +231,12 @@ export default function EvaluationPage() {
     setScores({});
     setQualFeedback({});
     setOverallComments("");
+
+    if (location.state?.returnUrl) {
+      navigate(location.state.returnUrl, { replace: true });
+    } else {
+      navigate("/panel/evaluation", { replace: true });
+    }
   };
 
   const [searchTerm, setSearchTerm] = useState("");
@@ -200,6 +259,18 @@ export default function EvaluationPage() {
     return "text-red-700 bg-red-100 border-red-300";
   };
 
+  // LOCK LOGIC: If it's completed, NO ONE can edit it.
+  // Determine if the logged-in user is the actual author/evaluator of this document
+  const isAuthor =
+    selectedEval?.evaluatorId?._id === user?.id ||
+    selectedEval?.evaluatorId === user?.id;
+
+  // LOCK LOGIC:
+  // 1. If it's completed, it's locked for EVERYONE.
+  // 2. If it's pending, ONLY the actual author can edit it. Admins cannot edit someone else's pending form.
+  const isLocked = selectedEval?.status === "COMPLETED";
+  const canEdit = isAuthor && !isLocked;
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       <div className="flex items-center justify-between mb-8">
@@ -216,7 +287,6 @@ export default function EvaluationPage() {
         </div>
       </div>
 
-      {/* Evaluations Table */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
         {loading ? (
           <div className="p-12 text-center">
@@ -249,7 +319,6 @@ export default function EvaluationPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {/* 🔴 FIX: Map over filtered evaluations instead of all evaluations */}
                 {evaluations
                   .filter(
                     (e) =>
@@ -283,7 +352,6 @@ export default function EvaluationPage() {
                           {ev.evaluatorId?.name}
                         </td>
                       )}
-
                       <td className="p-4 text-center">
                         <span
                           className={`inline-flex px-3 py-1 rounded text-xs font-bold ${ev.status === "COMPLETED" ? "bg-green-100 text-green-700 border border-green-200" : "bg-yellow-100 text-yellow-700 border border-yellow-200"}`}
@@ -291,7 +359,6 @@ export default function EvaluationPage() {
                           {ev.status}
                         </span>
                       </td>
-
                       <td className="p-4 text-center">
                         {ev.sessionType === "PROGRESS_ASSESSMENT" ? (
                           <span className="text-gray-400 text-xs italic">
@@ -307,7 +374,6 @@ export default function EvaluationPage() {
                           <span className="text-gray-400 font-bold">--</span>
                         )}
                       </td>
-
                       <td className="p-4 text-right">
                         <button
                           onClick={() => openEvaluationModal(ev)}
@@ -336,24 +402,20 @@ export default function EvaluationPage() {
         )}
       </div>
 
-      {/* ==================================================== */}
-      {/* FORMAL UTHM EVALUATION MODAL                         */}
-      {/* ==================================================== */}
       {selectedEval && (
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-50 p-4 sm:p-6 lg:p-8 backdrop-blur-sm">
-          {/* 🔴 FIX: Removed absolute/sticky positioning issues. Used standard flex layout. */}
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-75 flex items-center justify-center z-[100] p-4 sm:p-6 lg:p-8 backdrop-blur-sm">
           <div className="bg-white shadow-2xl max-w-5xl w-full h-[90vh] flex flex-col mx-auto rounded-xl overflow-hidden relative">
-            {/* Modal Header (Fixed at the very top of the box) */}
             <div className="px-8 py-5 border-b border-gray-200 flex items-center justify-between bg-white z-20 flex-shrink-0">
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-indigo-100 text-indigo-700 rounded-lg">
                   <ClipboardCheck className="w-6 h-6" />
                 </div>
                 <div>
-                  <h2 className="text-xl font-bold text-gray-900 uppercase tracking-wide">
-                    {selectedEval.status === "PENDING" && !isAdmin
+                  <h2 className="text-xl font-bold text-gray-900 uppercase tracking-wide flex items-center gap-2">
+                    {!isAdmin && !isLocked
                       ? "Conduct Evaluation"
                       : "Official Evaluation Report"}
+                    {isLocked && <Lock className="w-4 h-4 text-red-500" />}
                   </h2>
                   <p className="text-sm font-semibold text-indigo-600">
                     {selectedEval.rubricId?.name ||
@@ -369,9 +431,29 @@ export default function EvaluationPage() {
               </button>
             </div>
 
-            {/* Scrollable Content Area */}
             <div className="p-8 overflow-y-auto flex-1 bg-gray-50">
-              {/* --- FORMAL UTHM HEADER BLOCK --- */}
+              {/* LOCK WARNING BANNER */}
+              {isLocked && (
+                <div className="mb-6 bg-red-50 border border-red-200 p-4 rounded-lg flex items-start gap-3">
+                  <ShieldAlert className="w-6 h-6 text-red-600 shrink-0" />
+                  <div>
+                    <h3 className="font-bold text-red-900">Document Locked</h3>
+                    <p className="text-sm text-red-800 mt-1">
+                      This evaluation has been officially submitted and is
+                      secured. If you need to revise your scores or remarks, you
+                      must submit a formal Unlock Request to the Administration.
+                    </p>
+                    <button
+                      onClick={handleUnlockRequest}
+                      className="mt-3 bg-red-600 text-white px-4 py-2 rounded text-xs font-bold hover:bg-red-700 transition-colors shadow-sm"
+                    >
+                      <Lock className="w-3 h-3 inline mr-1" /> Request Unlock to
+                      Edit
+                    </button>
+                  </div>
+                </div>
+              )}
+
               <div className="border border-gray-300 mb-8 rounded-lg overflow-hidden bg-white shadow-sm">
                 <div className="bg-gray-100 px-4 py-2 border-b border-gray-300">
                   <span className="font-bold text-gray-800 uppercase text-sm tracking-widest">
@@ -426,12 +508,12 @@ export default function EvaluationPage() {
                         Evaluation Status
                       </p>
                       <span
-                        className={`inline-block px-3 py-1 rounded text-xs font-bold ${selectedEval.status === "COMPLETED" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}`}
+                        className={`inline-block px-3 py-1 rounded text-xs font-bold ${isLocked ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}`}
                       >
                         {selectedEval.status}
                       </span>
                     </div>
-                    {selectedEval.status === "COMPLETED" &&
+                    {isLocked &&
                       selectedEval.sessionType !== "PROGRESS_ASSESSMENT" && (
                         <div className="text-right">
                           <p className="text-xs font-bold text-gray-500 uppercase mb-1">
@@ -457,7 +539,6 @@ export default function EvaluationPage() {
                 </div>
               )}
 
-              {/* --- EVALUATION FORM --- */}
               <form id="evalForm" onSubmit={handleSubmit}>
                 {selectedEval.sessionType === "PROGRESS_ASSESSMENT" && (
                   <div className="space-y-6">
@@ -474,9 +555,7 @@ export default function EvaluationPage() {
                           </label>
                           <textarea
                             required
-                            disabled={
-                              selectedEval.status === "COMPLETED" || isAdmin
-                            }
+                            disabled={!canEdit}
                             rows="4"
                             className="w-full border border-gray-300 rounded-lg p-4 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-800"
                             value={progressData.summaryOfProgress}
@@ -494,9 +573,7 @@ export default function EvaluationPage() {
                           </label>
                           <textarea
                             required
-                            disabled={
-                              selectedEval.status === "COMPLETED" || isAdmin
-                            }
+                            disabled={!canEdit}
                             rows="4"
                             className="w-full border border-gray-300 rounded-lg p-4 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-800"
                             value={progressData.commentsForImprovement}
@@ -514,9 +591,7 @@ export default function EvaluationPage() {
                           </label>
                           <textarea
                             required
-                            disabled={
-                              selectedEval.status === "COMPLETED" || isAdmin
-                            }
+                            disabled={!canEdit}
                             rows="4"
                             className="w-full border border-gray-300 rounded-lg p-4 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-800"
                             value={progressData.overallSuggestions}
@@ -553,7 +628,6 @@ export default function EvaluationPage() {
                           </span>
                         </div>
 
-                        {/* QUANTITATIVE CRITERIA */}
                         <div className="space-y-6 mb-8">
                           {selectedEval.rubricId.criteria
                             ?.filter((c) => c.type === "quantitative")
@@ -594,13 +668,10 @@ export default function EvaluationPage() {
                                           return (
                                             <td
                                               key={s.value}
-                                              className={`p-4 align-top transition-colors relative 
-                                              ${selectedEval.status === "PENDING" && !isAdmin ? "cursor-pointer hover:bg-blue-50" : ""} 
-                                              ${isSelected ? "bg-indigo-50 border-t-4 border-t-indigo-600" : ""}`}
+                                              className={`p-4 align-top transition-colors relative ${!isAdmin && !isLocked ? "cursor-pointer hover:bg-blue-50" : ""} ${isSelected ? "bg-indigo-50 border-t-4 border-t-indigo-600" : ""}`}
                                               onClick={() =>
-                                                selectedEval.status ===
-                                                  "PENDING" &&
                                                 !isAdmin &&
+                                                !isLocked &&
                                                 handleScoreChange(
                                                   crit.key,
                                                   s.value,
@@ -612,10 +683,7 @@ export default function EvaluationPage() {
                                                   type="radio"
                                                   name={crit.key}
                                                   required
-                                                  disabled={
-                                                    selectedEval.status ===
-                                                      "COMPLETED" || isAdmin
-                                                  }
+                                                  disabled={!canEdit}
                                                   checked={isSelected}
                                                   onChange={() =>
                                                     handleScoreChange(
@@ -623,7 +691,7 @@ export default function EvaluationPage() {
                                                       s.value,
                                                     )
                                                   }
-                                                  className="w-5 h-5 accent-indigo-600 mb-3 cursor-pointer"
+                                                  className="w-5 h-5 accent-indigo-600 mb-3 cursor-pointer disabled:opacity-60"
                                                 />
                                                 <p
                                                   className={`text-xs text-justify leading-relaxed ${isSelected ? "text-indigo-900 font-bold" : "text-gray-600 font-medium"}`}
@@ -643,7 +711,7 @@ export default function EvaluationPage() {
                             ))}
                         </div>
 
-                        {selectedEval.status === "PENDING" && (
+                        {canEdit && (
                           <div className="bg-gradient-to-r from-gray-900 to-indigo-900 text-white p-6 rounded-xl flex justify-between items-center mb-8 shadow-xl">
                             <div>
                               <span className="block text-lg font-bold uppercase tracking-widest text-indigo-300">
@@ -659,7 +727,6 @@ export default function EvaluationPage() {
                           </div>
                         )}
 
-                        {/* QUALITATIVE CRITERIA */}
                         <div className="border border-gray-300 bg-white rounded-lg overflow-hidden shadow-sm mb-8">
                           <div className="bg-gray-100 px-5 py-3 border-b border-gray-300">
                             <span className="font-bold text-gray-800 uppercase text-sm tracking-widest">
@@ -684,10 +751,7 @@ export default function EvaluationPage() {
                                   )}
                                   <textarea
                                     required
-                                    disabled={
-                                      selectedEval.status === "COMPLETED" ||
-                                      isAdmin
-                                    }
+                                    disabled={!canEdit}
                                     rows="4"
                                     className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-800"
                                     placeholder="Write your detailed feedback here..."
@@ -712,9 +776,7 @@ export default function EvaluationPage() {
                               </p>
                               <textarea
                                 required
-                                disabled={
-                                  selectedEval.status === "COMPLETED" || isAdmin
-                                }
+                                disabled={!canEdit}
                                 rows="5"
                                 className="w-full border border-gray-300 rounded-lg p-3 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-800"
                                 placeholder="Final remarks..."
@@ -733,19 +795,17 @@ export default function EvaluationPage() {
               </form>
             </div>
 
-            {/* Modal Footer (Fixed at the bottom of the box) */}
             <div className="px-8 py-4 border-t border-gray-200 flex justify-end gap-3 bg-white z-20 flex-shrink-0">
               <button
-                type="button"
                 onClick={closeModal}
+                type="button"
                 className="px-6 py-2.5 bg-gray-100 border border-gray-300 text-gray-700 font-bold hover:bg-gray-200 rounded-lg transition-colors"
               >
-                {selectedEval.status === "PENDING" && !isAdmin
-                  ? "Cancel"
-                  : "Close Document"}
+                {!isAdmin && !isLocked ? "Cancel" : "Close Document"}
               </button>
 
-              {selectedEval.status === "PENDING" && !isAdmin && (
+              {/* ONLY show submit button if NOT locked */}
+              {canEdit && (
                 <button
                   type="submit"
                   form="evalForm"

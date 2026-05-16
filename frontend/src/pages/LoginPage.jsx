@@ -140,10 +140,16 @@ export default function LoginPage() {
                 setUserId(e.target.value);
                 setError("");
               }}
-              placeholder="Enter your user ID (e.g., STU001, ADMIN001)"
+              placeholder="Enter your user ID (e.g., STU001, admin)"
               required
               disabled={loading}
-              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100 uppercase"
+              /* 🔴 FIX: Removed 'uppercase' class. Added inline style and HTML5 overrides to ensure pure case-sensitivity */
+              style={{ textTransform: "none" }}
+              autoCapitalize="none"
+              autoComplete="off"
+              autoCorrect="off"
+              spellCheck="false"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 disabled:bg-gray-100"
             />
           </div>
 

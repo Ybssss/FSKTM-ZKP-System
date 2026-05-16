@@ -49,19 +49,13 @@ function App() {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/" element={<Navigate to="/login" replace />} />
 
-          {/* Staff Routes (SuperAdmin, Admin, Panel, Coordinator, Supervisor) */}
+          {/* Staff Routes (Admin, Panel, Coordinator, Supervisor) */}
           <Route
             path="/panel"
             element={
-              // ✅ ADDED 'superadmin' and 'supervisor' to allowed roles
+              // and 'supervisor' to allowed roles
               <ProtectedRoute
-                allowedRoles={[
-                  "superadmin",
-                  "admin",
-                  "panel",
-                  "coordinator",
-                  "supervisor",
-                ]}
+                allowedRoles={["admin", "panel", "coordinator", "supervisor"]}
               >
                 <PanelLayout />
               </ProtectedRoute>
@@ -69,8 +63,10 @@ function App() {
           >
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<PanelDashboard />} />
+            {/* EVALUATION ROUTES */}
             <Route path="evaluation" element={<EvaluationPage />} />
-            <Route path="evaluation/new" element={<EvaluationPage />} />{" "}
+            <Route path="evaluation/new" element={<EvaluationPage />} />
+            <Route path="evaluation/:id" element={<EvaluationPage />} />{" "}
             <Route path="rubrics" element={<RubricPage />} />
             <Route
               path="historical-feedback"
@@ -97,8 +93,18 @@ function App() {
           >
             <Route index element={<Navigate to="dashboard" replace />} />
             <Route path="dashboard" element={<StudentDashboard />} />
-            <Route path="feedback" element={<FeedbackPage />} />
-            <Route path="evaluation" element={<FeedbackPage />} />
+
+            {/* ROUTING FOR REPORTS */}
+            <Route path="reports" element={<FeedbackPage />} />
+            <Route
+              path="feedback"
+              element={<Navigate to="reports" replace />}
+            />
+            <Route
+              path="evaluation"
+              element={<Navigate to="reports" replace />}
+            />
+
             <Route path="rubrics" element={<StudentRubrics />} />
             <Route path="progress" element={<ProgressPage />} />
             <Route path="schedule" element={<SchedulePage />} />

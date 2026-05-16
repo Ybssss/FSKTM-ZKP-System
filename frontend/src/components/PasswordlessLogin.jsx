@@ -10,6 +10,9 @@ const PasswordlessLogin = () => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
 
+  // NEW: Added state for trusting the device (defaults to true)
+  const [trustDevice, setTrustDevice] = useState(true);
+
   // Update this to match your Express backend URL
   const API_BASE_URL = "http://localhost:5000/api/auth";
 
@@ -44,6 +47,7 @@ const PasswordlessLogin = () => {
       const verifyRes = await axios.post(`${API_BASE_URL}/register/verify`, {
         email,
         registrationResponse,
+        trustDevice, // Send the trust status to backend
       });
 
       setMessage({ type: "success", text: verifyRes.data.message });
@@ -85,6 +89,7 @@ const PasswordlessLogin = () => {
       const verifyRes = await axios.post(`${API_BASE_URL}/login/verify`, {
         email,
         authenticationResponse,
+        trustDevice, // Send the trust status to backend
       });
 
       // SUCCESS! Store the token and redirect
@@ -123,16 +128,39 @@ const PasswordlessLogin = () => {
 
         <div className="mb-4">
           <label className="block text-gray-700 text-sm font-bold mb-2">
-            Email Address
+            User ID / Email
           </label>
           <input
-            type="email"
+            type="text"
+            style={{ textTransform: "none" }}
             className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500"
-            placeholder="e.g., samihah@uthm.edu.my"
+            placeholder="e.g., samihah@uthm.edu.my or STU001"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             disabled={loading}
+            autoCapitalize="none"
+            autoComplete="off"
+            autoCorrect="off"
+            spellCheck="false"
           />
+        </div>
+
+        {/* NEW: Trust Device Checkbox */}
+        <div className="mb-6 flex items-center">
+          <input
+            id="trust-device"
+            type="checkbox"
+            checked={trustDevice}
+            onChange={(e) => setTrustDevice(e.target.checked)}
+            className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+            disabled={loading}
+          />
+          <label
+            htmlFor="trust-device"
+            className="ml-2 text-sm text-gray-700 font-medium"
+          >
+            Trust this device (Save keys securely)
+          </label>
         </div>
 
         {message.text && (
@@ -143,7 +171,7 @@ const PasswordlessLogin = () => {
           </div>
         )}
 
-        <div className="flex flex-col gap-3 mt-6">
+        <div className="flex flex-col gap-3 mt-2">
           <button
             onClick={handleLogin}
             disabled={loading}
