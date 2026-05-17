@@ -7,7 +7,7 @@ const cheerio = require("cheerio");
 const https = require("https");
 
 const User = require("../models/User");
-const Session = require("../models/Session");
+const Timetable = require("../models/Timetable"); // 🔴 FIXED: Replaced deprecated Session model
 const Evaluation = require("../models/Evaluation");
 const Rubric = require("../models/Rubric");
 
@@ -553,8 +553,9 @@ const seedDatabase = async () => {
     await mongoose.connect(MONGO_URI);
     console.log("✅ Database connected.\n");
 
+    // 🔴 FIXED: Cleared Timetables instead of deprecated Sessions
     await Evaluation.deleteMany({});
-    await Session.deleteMany({});
+    await Timetable.deleteMany({});
     await Rubric.deleteMany({});
     await User.deleteMany({});
 
@@ -572,8 +573,8 @@ const seedDatabase = async () => {
       (r) => r.sessionType === "PROGRESS_ASSESSMENT",
     );
 
-    // 2. Create Admins
-    console.log("👨‍💼 Seeding Admins...");
+    // 2. Create Admins (Unified without SuperAdmin)
+    console.log("👨‍💼 Seeding Administrators...");
     const adminUsers = [
       {
         userId: "admin_samihah",
@@ -581,6 +582,8 @@ const seedDatabase = async () => {
         email: "samihah@uthm.edu.my",
         role: "admin",
         registrationCode: "temp",
+        // 🔴 FIXED: Since admins can be assigned to panels now, give them tags!
+        expertiseTags: ["System Architecture", "Software Engineering", "HCI"],
       },
       {
         userId: "admin_pendaftar",
@@ -623,6 +626,7 @@ const seedDatabase = async () => {
               email: `${emailPrefix}${scrapedPanels.length + 1}@uthm.edu.my`,
               role: "panel",
               registrationCode: null,
+              // 🔴 FIXED: Uses the new Array structure for tags
               expertiseTags: ["Information Technology", "FSKTM General"],
             });
           }
@@ -638,28 +642,28 @@ const seedDatabase = async () => {
           name: "PROF. DR. ABD SAMAD",
           email: "abdsamad@uthm.edu.my",
           role: "panel",
-          expertiseTags: ["Software Engineering"],
+          expertiseTags: ["Software Engineering", "AI"],
         },
         {
           userId: "stf_2",
           name: "DR. CIK FERESA",
           email: "feresa@uthm.edu.my",
           role: "panel",
-          expertiseTags: ["Information Security"],
+          expertiseTags: ["Information Security", "Cryptography"],
         },
         {
           userId: "stf_3",
           name: "DR. EZAK FADZRIN",
           email: "ezak@uthm.edu.my",
           role: "panel",
-          expertiseTags: ["Multimedia System"],
+          expertiseTags: ["Multimedia System", "Computer Graphics"],
         },
         {
           userId: "stf_4",
           name: "TS. AHMAD TAJUDIN",
           email: "tajudin@uthm.edu.my",
           role: "panel",
-          expertiseTags: ["Web Tech"],
+          expertiseTags: ["Web Tech", "Networking"],
         },
       );
     }
@@ -710,7 +714,6 @@ const seedDatabase = async () => {
     allUsers = [...allUsers, ...createdStudents];
     const getUserId = (email) => allUsers.find((u) => u.email === email)._id;
 
-    // LINK ASSIGNMENTS PROPERLY IN THE DB SO THEY SHOW IN UI
     console.log("🔗 Saving Panel Assignments to Database...");
     await User.findByIdAndUpdate(getUserId("ali@student.uthm.edu.my"), {
       assignedPanels: [
@@ -731,19 +734,21 @@ const seedDatabase = async () => {
       ],
     });
 
-    // 5. Create Sessions
+    // 5. Create Sessions (Using Timetable Model)
     console.log("📅 Seeding 3 Evaluation Sessions...");
     const tomorrow = new Date();
     tomorrow.setDate(tomorrow.getDate() + 1);
     const nextWeek = new Date();
     nextWeek.setDate(nextWeek.getDate() + 7);
 
+    // 🔴 FIXED: Added rubricId directly to the Timetable schema to prevent frontend errors
     const sessionsData = [
       {
         students: [getUserId("ali@student.uthm.edu.my")],
         panels: [getUserId("samihah@uthm.edu.my"), createdPanels[1]._id],
         title: "Proposal Defense - Muhammad Ali",
         sessionType: "PROPOSAL_DEFENSE",
+        rubricId: proposalRubric._id,
         date: tomorrow,
         startTime: "10:00",
         endTime: "11:00",
@@ -755,6 +760,7 @@ const seedDatabase = async () => {
         panels: [getUserId("samihah@uthm.edu.my"), createdPanels[2]._id],
         title: "Pre-Viva - Siti Nuraisyah",
         sessionType: "PRE_VIVA",
+        rubricId: preVivaRubric._id,
         date: nextWeek,
         startTime: "14:30",
         endTime: "15:30",
@@ -766,6 +772,7 @@ const seedDatabase = async () => {
         panels: [getUserId("samihah@uthm.edu.my"), createdPanels[3]._id],
         title: "Progress Assessment - Chong Wei Ming",
         sessionType: "PROGRESS_ASSESSMENT",
+        rubricId: progressRubric._id,
         date: tomorrow,
         startTime: "09:00",
         endTime: "10:00",
@@ -774,7 +781,6 @@ const seedDatabase = async () => {
       },
     ];
 
-    const Timetable = require("../models/Timetable");
     const createdSessions = await Timetable.create(sessionsData);
 
     // 6. Auto-Create Evaluations
@@ -865,8 +871,8 @@ const seedDatabase = async () => {
         status: "PENDING",
       },
     ];
-    await Evaluation.create(evaluationsData);
 
+    await Evaluation.create(evaluationsData);
     console.log("✅ DATABASE SEEDING COMPLETED SUCCESSFULLY!");
   } catch (error) {
     console.error("❌ Error:", error);

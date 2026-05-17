@@ -12,6 +12,7 @@ exports.assignPanelToStudent = async (req, res) => {
         .status(404)
         .json({ success: false, message: "Student or panel not found" });
 
+    // Use $addToSet to prevent duplicates safely
     if (!student.assignedPanels.includes(panelId)) {
       student.assignedPanels.push(panelId);
       await student.save();
@@ -20,6 +21,7 @@ exports.assignPanelToStudent = async (req, res) => {
       panel.assignedStudents.push(studentId);
       await panel.save();
     }
+
     res.json({
       success: true,
       message: "Panel assigned to student successfully",
@@ -31,7 +33,7 @@ exports.assignPanelToStudent = async (req, res) => {
 
 exports.getMyStudents = async (req, res) => {
   try {
-    const panel = await User.findById(req.user._id).populate(
+    const panel = await User.findById(req.user.id || req.user._id).populate(
       "assignedStudents",
       "name matricNumber program researchTitle",
     );
@@ -45,7 +47,7 @@ exports.getMyStudents = async (req, res) => {
 
 exports.getMyPanels = async (req, res) => {
   try {
-    const student = await User.findById(req.user._id).populate(
+    const student = await User.findById(req.user.id || req.user._id).populate(
       "assignedPanels",
       "name email",
     );
@@ -65,10 +67,19 @@ exports.matchExpertise = async (req, res) => {
         .status(400)
         .json({ error: "Student must have a research title for AI matching." });
 
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.error("CRITICAL: GEMINI_API_KEY is missing from .env file!");
+      return res
+        .status(500)
+        .json({ error: "AI matching is disabled. Server misconfiguration." });
+    }
+
     const student = await User.findById(studentId);
-    const allPanels = await User.find({ role: "panel" }).select(
-      "_id name expertiseTags",
-    );
+
+    const allPanels = await User.find({
+      role: { $in: ["panel", "admin"] },
+    }).select("_id name expertiseTags");
 
     // CONFLICT OF INTEREST BLOCK: Remove SV from AI's view
     const availablePanels = allPanels.filter((panel) => {
@@ -79,11 +90,8 @@ exports.matchExpertise = async (req, res) => {
     if (availablePanels.length === 0)
       return res.status(400).json({ error: "No available panels to match." });
 
-    const apiKey =
-      process.env.GEMINI_API_KEY || "AIzaSyDqOqmnok6T0eGCUPNvGK3jwh-V025Tr18";
     const genAI = new GoogleGenerativeAI(apiKey);
 
-    // 🔴 FIXED: Changed to the hyper-stable 2.0 Flash production model
     const model = genAI.getGenerativeModel({
       model: "gemini-flash-lite-latest",
     });
@@ -100,7 +108,7 @@ exports.matchExpertise = async (req, res) => {
           expertise:
             p.expertiseTags && p.expertiseTags.length > 0
               ? p.expertiseTags.join(", ")
-              : "General",
+              : "Generalist Lecturer",
         })),
       )}
 
