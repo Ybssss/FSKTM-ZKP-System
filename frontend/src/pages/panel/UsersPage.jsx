@@ -44,7 +44,7 @@ const TagInput = ({ tags, setTags, placeholder }) => {
             <button
               type="button"
               onClick={() => removeTag(index)}
-              className="hover:text-red-500 rounded-full p-0.5"
+              className="hover:text-red-500 rounded-full p-0.5 ml-1 transition-colors"
             >
               <X className="w-3 h-3" />
             </button>
@@ -107,7 +107,7 @@ export default function UsersPage() {
   };
 
   const potentialSupervisors = usersList.filter((u) =>
-    ["panel", "admin", "superadmin"].includes(u.role),
+    ["panel", "admin"].includes(u.role),
   );
 
   const openEditModal = (targetUser) => {
@@ -123,7 +123,6 @@ export default function UsersPage() {
       researchTitle: targetUser.researchTitle || "",
       supervisorId:
         targetUser.supervisorId?._id || targetUser.supervisorId || "",
-      // 🔴 Turn array back into comma-separated string for editing
       expertiseTags: targetUser.expertiseTags || [],
     });
     setShowEditModal(true);
@@ -137,8 +136,13 @@ export default function UsersPage() {
       if (payload.role === "student") {
         if (!payload.matricNumber)
           return alert("Matric Number is required for students.");
-        payload.userId = payload.matricNumber.toUpperCase();
-        payload.matricNumber = payload.matricNumber.toUpperCase();
+
+        // 🔴 IDIOT-PROOF: Strip spaces and force uppercase on Create
+        const cleanMatric = payload.matricNumber
+          .replace(/\s+/g, "")
+          .toUpperCase();
+        payload.userId = cleanMatric;
+        payload.matricNumber = cleanMatric;
       } else if (payload.role === "panel" || payload.role === "admin") {
         delete payload.researchTitle;
         delete payload.program;
@@ -176,26 +180,20 @@ export default function UsersPage() {
       }
 
       if (payload.role === "student" && payload.matricNumber) {
-        // 🔴 IDIOT-PROOF: Strip accidental spaces and force uppercase
+        // 🔴 IDIOT-PROOF: Strip accidental spaces and force uppercase on Edit
         payload.matricNumber = payload.matricNumber
           .replace(/\s+/g, "")
           .toUpperCase();
-      } else if (payload.role === "panel") {
+      } else if (payload.role === "panel" || payload.role === "admin") {
         delete payload.researchTitle;
         delete payload.program;
-
-        payload.expertiseTags = payload.expertiseInput
-          ? payload.expertiseInput
-              .split(",")
-              .map((tag) => tag.trim())
-              .filter(Boolean)
-          : [];
       }
 
       if (!payload.supervisorId) payload.supervisorId = null;
 
       await api.put(`/users/${payload.id}`, payload);
-      // HANDOVER: If they just demoted themselves, log them out instantly!
+
+      // 🔴 HANDOVER: If they just demoted themselves, log them out instantly!
       if (
         payload.id === (user.id || user._id) &&
         payload.role !== payload.originalRole
@@ -255,15 +253,16 @@ export default function UsersPage() {
               name: "",
               email: "",
               role: "",
+              originalRole: "",
               matricNumber: "",
               program: "",
               researchTitle: "",
               supervisorId: "",
-              expertiseInput: "",
+              expertiseTags: [],
             });
             setShowCreateModal(true);
           }}
-          className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold shadow-sm flex items-center gap-2"
+          className="px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 font-semibold shadow-sm flex items-center gap-2 transition-transform hover:scale-[1.02]"
         >
           <UserPlus className="w-5 h-5" /> Create New User
         </button>
@@ -273,7 +272,7 @@ export default function UsersPage() {
         <div className="bg-green-50 border-2 border-green-500 rounded-xl p-6 shadow-lg mb-6 relative z-10 animate-fade-in-down">
           <button
             onClick={() => setNewCredentials(null)}
-            className="absolute top-4 right-4 text-green-700 hover:text-green-900 bg-green-100 p-1 rounded-full"
+            className="absolute top-4 right-4 text-green-700 hover:text-green-900 bg-green-100 p-1 rounded-full transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -294,16 +293,32 @@ export default function UsersPage() {
                   <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
                     Secure Registration Code
                   </p>
-                  <p className="font-mono text-3xl font-black text-indigo-600 tracking-widest bg-indigo-50 px-3 py-1 rounded border border-indigo-100 w-max">
-                    {newCredentials.registrationCode}
-                  </p>
+                  <div className="flex items-center gap-3">
+                    <p className="font-mono text-3xl font-black text-indigo-600 tracking-widest bg-indigo-50 px-3 py-1 rounded border border-indigo-100 w-max">
+                      {newCredentials.registrationCode}
+                    </p>
+                    <button
+                      onClick={() => {
+                        navigator.clipboard.writeText(
+                          `User ID: ${newCredentials.userId}\nRegistration Code: ${newCredentials.registrationCode}`,
+                        );
+                        alert("Copied to clipboard!");
+                      }}
+                      className="p-2 text-indigo-600 hover:bg-indigo-100 rounded transition-colors"
+                      title="Copy to clipboard"
+                    >
+                      <Copy className="w-5 h-5" />
+                    </button>
+                  </div>
                 </div>
                 <div className="bg-blue-50 p-6 rounded-xl border border-blue-200 flex flex-col justify-center items-center text-center h-full">
-                  <Mail className="w-8 h-8 text-blue-600 mb-2" />
+                  <div className="bg-white p-3 rounded-full shadow-sm mb-3">
+                    <Mail className="w-8 h-8 text-blue-600" />
+                  </div>
                   <h4 className="text-base font-bold text-blue-900 mb-2">
                     Automated Email Dispatched
                   </h4>
-                  <p className="text-sm text-blue-800">
+                  <p className="text-sm text-blue-800 font-medium">
                     Instructions emailed to{" "}
                     <strong>{newCredentials.email}</strong>.
                   </p>
@@ -361,12 +376,15 @@ export default function UsersPage() {
                     </td>
                     <td className="p-4">
                       <span
-                        className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${u.role === "admin" || u.role === "superadmin" ? "bg-red-100 text-red-800" : "bg-indigo-100 text-indigo-800"}`}
+                        className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${
+                          u.role === "admin"
+                            ? "bg-red-100 text-red-800"
+                            : "bg-indigo-100 text-indigo-800"
+                        }`}
                       >
                         {u.role}
                       </span>
 
-                      {/* 🔴 NEW: Displays tags as beautiful Pills! */}
                       {(u.role === "panel" || u.role === "admin") &&
                         u.expertiseTags &&
                         u.expertiseTags.length > 0 && (
@@ -420,7 +438,6 @@ export default function UsersPage() {
                           </span>
                         )}
 
-                        {/* 🔴 IDIOT-PROOF: Hierarchy Protection */}
                         <div className="flex gap-3 mt-1">
                           <button
                             onClick={() => openEditModal(u)}
@@ -483,6 +500,7 @@ export default function UsersPage() {
                   <option value="student">Student</option>
                 </select>
               </div>
+
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">
                   Full Name *
@@ -497,6 +515,7 @@ export default function UsersPage() {
                   className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
+
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">
                   Email Address *
@@ -525,10 +544,12 @@ export default function UsersPage() {
                       onChange={(e) =>
                         setFormData({
                           ...formData,
-                          matricNumber: e.target.value.toUpperCase(),
+                          matricNumber: e.target.value
+                            .replace(/\s+/g, "")
+                            .toUpperCase(),
                         })
                       }
-                      className="w-full border-2 border-indigo-200 rounded p-2 uppercase font-bold"
+                      className="w-full border-2 border-indigo-200 rounded p-2 uppercase font-bold focus:ring-2 focus:ring-indigo-500 bg-indigo-50"
                     />
                   </div>
                   <div>
@@ -543,7 +564,7 @@ export default function UsersPage() {
                           researchTitle: e.target.value,
                         })
                       }
-                      className="w-full border rounded p-2"
+                      className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500"
                       rows="2"
                     />
                   </div>
@@ -559,7 +580,7 @@ export default function UsersPage() {
                           supervisorId: e.target.value,
                         })
                       }
-                      className="w-full border rounded p-2 bg-white"
+                      className="w-full border rounded p-2 bg-white focus:ring-2 focus:ring-indigo-500"
                     >
                       <option value="">-- No Supervisor --</option>
                       {potentialSupervisors.map((sv) => (
@@ -570,7 +591,7 @@ export default function UsersPage() {
                     </select>
                   </div>
                 </>
-              ) : (formData.role === "panel" || formData.role === "admin") && (
+              ) : formData.role === "panel" || formData.role === "admin" ? (
                 <>
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">
@@ -583,7 +604,7 @@ export default function UsersPage() {
                       onChange={(e) =>
                         setFormData({ ...formData, userId: e.target.value })
                       }
-                      className="w-full border rounded p-2"
+                      className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
                   <div>
@@ -591,52 +612,31 @@ export default function UsersPage() {
                       Expertise / Specialty
                     </label>
                     <p className="text-[10px] text-gray-500 font-bold uppercase mb-2">
-                      Separate skills with commas (e.g. AI, Cyber Security, HCI)
+                      Type a specialty and press ENTER to add it.
                     </p>
-                    <textarea
-                      rows="2"
-                      value={formData.expertiseInput}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          expertiseInput: e.target.value,
-                        })
+                    <TagInput
+                      tags={formData.expertiseTags}
+                      setTags={(newTags) =>
+                        setFormData({ ...formData, expertiseTags: newTags })
                       }
-                      className="w-full border border-gray-300 rounded p-3 font-semibold text-gray-800 focus:ring-2 focus:ring-indigo-500"
-                      placeholder="e.g. Artificial Intelligence, Data Mining"
+                      placeholder="e.g. Artificial Intelligence"
                     />
                   </div>
                 </>
-              ) : (
-                formData.role !== "" && (
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">
-                      System User ID *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={formData.userId}
-                      onChange={(e) =>
-                        setFormData({ ...formData, userId: e.target.value })
-                      }
-                      className="w-full border rounded p-2"
-                    />
-                  </div>
-                )
-              )}
+              ) : null}
+
               <div className="pt-4 flex justify-end gap-3 border-t mt-6">
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="px-5 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded font-bold"
+                  className="px-5 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded font-bold transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={!formData.role}
-                  className="px-6 py-2 bg-indigo-600 text-white font-bold rounded shadow hover:bg-indigo-700 disabled:bg-gray-400"
+                  className="px-6 py-2 bg-indigo-600 text-white font-bold rounded shadow hover:bg-indigo-700 transition-colors disabled:bg-gray-400"
                 >
                   Create Account
                 </button>
@@ -709,6 +709,7 @@ export default function UsersPage() {
                   className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
+
               <div>
                 <label className="block text-sm font-bold text-gray-700 mb-1">
                   Email Address *
@@ -736,10 +737,12 @@ export default function UsersPage() {
                       onChange={(e) =>
                         setFormData({
                           ...formData,
-                          matricNumber: e.target.value.toUpperCase(),
+                          matricNumber: e.target.value
+                            .replace(/\s+/g, "")
+                            .toUpperCase(),
                         })
                       }
-                      className="w-full border rounded p-2 uppercase font-bold"
+                      className="w-full border rounded p-2 uppercase font-bold focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
                   <div>
@@ -755,7 +758,7 @@ export default function UsersPage() {
                           researchTitle: e.target.value,
                         })
                       }
-                      className="w-full border rounded p-2"
+                      className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
                   <div>
@@ -770,7 +773,7 @@ export default function UsersPage() {
                           supervisorId: e.target.value,
                         })
                       }
-                      className="w-full border rounded p-2 bg-white"
+                      className="w-full border rounded p-2 bg-white focus:ring-2 focus:ring-indigo-500"
                     >
                       <option value="">-- No Supervisor --</option>
                       {potentialSupervisors.map((sv) => (
@@ -791,8 +794,6 @@ export default function UsersPage() {
                   <p className="text-[10px] text-gray-500 font-bold uppercase mb-2">
                     Type a specialty and press ENTER to add it.
                   </p>
-
-                  {/* DYNAMIC TAG INPUT */}
                   <TagInput
                     tags={formData.expertiseTags}
                     setTags={(newTags) =>
@@ -807,13 +808,13 @@ export default function UsersPage() {
                 <button
                   type="button"
                   onClick={() => setShowEditModal(false)}
-                  className="px-5 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded font-bold"
+                  className="px-5 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded font-bold transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-6 py-2 bg-indigo-600 text-white font-bold rounded shadow hover:bg-indigo-700"
+                  className="px-6 py-2 bg-indigo-600 text-white font-bold rounded shadow hover:bg-indigo-700 transition-colors"
                 >
                   Save Changes
                 </button>
