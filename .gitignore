@@ -21,3 +21,8 @@ backups/
 # OS/Editor files
 .DS_Store
 .vscode/
+
+# Google service account keys
+backend/src/config/fluid-catfish-354607-8e98018544b3.json
+backend/src/config/*service-account*.json
+backend/src/config/google-service-account*.json

@@ -15,6 +15,9 @@ import {
   History,
   Eye,
   ShieldAlert,
+  Upload,
+  Trash2,
+  ExternalLink,
 } from "lucide-react";
 import api from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
@@ -39,6 +42,13 @@ export default function SessionDetailPage() {
   const [loading, setLoading] = useState(true);
   const [attendanceActive, setAttendanceActive] = useState(false);
   const [attendanceCode, setAttendanceCode] = useState("");
+  const [uploadingMaterial, setUploadingMaterial] = useState(false);
+  const [materialForm, setMaterialForm] = useState({
+    title: "",
+    type: "other",
+    description: "",
+    file: null,
+  });
 
   useEffect(() => {
     loadSessionData();
@@ -174,6 +184,91 @@ export default function SessionDetailPage() {
     navigate(`/panel/evaluation/${evalId}`, {
       state: { returnUrl: location.pathname },
     });
+  };
+
+  const resetMaterialForm = () => {
+    setMaterialForm({
+      title: "",
+      type: "other",
+      description: "",
+      file: null,
+    });
+  };
+
+  const handleMaterialUpload = async (e) => {
+    e.preventDefault();
+
+    try {
+      if (!materialForm.file) {
+        alert("Please choose a file first.");
+        return;
+      }
+
+      const cleanTitle = materialForm.title.replace(/\s+/g, " ").trim();
+
+      if (!cleanTitle) {
+        alert("Please enter a material title.");
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append("file", materialForm.file);
+      formData.append("title", cleanTitle);
+      formData.append("type", materialForm.type);
+      formData.append("description", materialForm.description || "");
+
+      setUploadingMaterial(true);
+
+      const res = await api.post(`/timetables/${id}/documents`, formData, {
+        headers: {
+          "Content-Type": "multipart/form-data",
+        },
+      });
+
+      if (res.data.success) {
+        setSession(res.data.timetable);
+        resetMaterialForm();
+        alert("Material uploaded successfully.");
+      }
+    } catch (error) {
+      alert(
+        error.response?.data?.message ||
+          error.response?.data?.error ||
+          "Failed to upload material.",
+      );
+    } finally {
+      setUploadingMaterial(false);
+    }
+  };
+
+  const handleMaterialDelete = async (documentId) => {
+    if (!window.confirm("Delete this material from the session?")) return;
+
+    try {
+      const res = await api.delete(`/timetables/${id}/documents/${documentId}`);
+
+      if (res.data.success) {
+        setSession(res.data.timetable);
+      }
+    } catch (error) {
+      alert(
+        error.response?.data?.message ||
+          error.response?.data?.error ||
+          "Failed to delete material.",
+      );
+    }
+  };
+
+  const canUploadMaterial =
+    isStudent &&
+    session?.student &&
+    String(session.student._id || session.student) === String(user?.id);
+
+  const canDeleteMaterial = (doc) => {
+    const uploadedById =
+      typeof doc.uploadedBy === "object" ? doc.uploadedBy?._id : doc.uploadedBy;
+
+    return isAdmin || String(uploadedById) === String(user?.id);
   };
 
   if (loading)
@@ -361,6 +456,157 @@ export default function SessionDetailPage() {
           <p className="text-gray-500 text-sm">
             Panel examiners are not assigned yet.
           </p>
+        )}
+      </div>
+
+      {/* SESSION MATERIALS */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+          <div>
+            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <FileText className="w-5 h-5 text-indigo-600" />
+              Helpful Materials for This Session
+            </h2>
+            <p className="text-sm text-gray-500 mt-1">
+              Students may upload supporting files for panel review.
+            </p>
+          </div>
+        </div>
+
+        {canUploadMaterial && (
+          <form
+            onSubmit={handleMaterialUpload}
+            className="mb-6 bg-indigo-50 border border-indigo-100 rounded-xl p-4 space-y-4"
+          >
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <input
+                type="text"
+                value={materialForm.title}
+                onChange={(e) =>
+                  setMaterialForm((prev) => ({
+                    ...prev,
+                    title: e.target.value,
+                  }))
+                }
+                maxLength={120}
+                placeholder="Material title, e.g. Proposal slides"
+                className="w-full border border-indigo-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500"
+              />
+
+              <select
+                value={materialForm.type}
+                onChange={(e) =>
+                  setMaterialForm((prev) => ({
+                    ...prev,
+                    type: e.target.value,
+                  }))
+                }
+                className="w-full border border-indigo-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500"
+              >
+                <option value="report">Report</option>
+                <option value="slides">Slides</option>
+                <option value="supplementary">Supplementary</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+
+            <textarea
+              value={materialForm.description}
+              onChange={(e) =>
+                setMaterialForm((prev) => ({
+                  ...prev,
+                  description: e.target.value,
+                }))
+              }
+              rows={2}
+              placeholder="Optional description"
+              className="w-full border border-indigo-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-indigo-500"
+            />
+
+            <input
+              type="file"
+              accept=".pdf,.doc,.docx,.ppt,.pptx,.png,.jpg,.jpeg"
+              onChange={(e) =>
+                setMaterialForm((prev) => ({
+                  ...prev,
+                  file: e.target.files?.[0] || null,
+                }))
+              }
+              className="w-full text-sm bg-white border border-indigo-200 rounded-lg p-3"
+            />
+
+            <button
+              type="submit"
+              disabled={uploadingMaterial}
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 disabled:bg-gray-400"
+            >
+              <Upload className="w-4 h-4" />
+              {uploadingMaterial ? "Uploading..." : "Upload to Google Drive"}
+            </button>
+          </form>
+        )}
+
+        {session.studentDocuments?.length > 0 ? (
+          <div className="space-y-3">
+            {session.studentDocuments.map((doc) => (
+              <div
+                key={doc._id}
+                className="p-4 rounded-lg border border-gray-200 bg-gray-50 flex flex-col md:flex-row md:items-center md:justify-between gap-4"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="font-bold text-gray-900">{doc.title}</p>
+                    <span className="px-2 py-0.5 bg-indigo-100 text-indigo-700 text-xs font-bold rounded uppercase">
+                      {doc.type || "other"}
+                    </span>
+                  </div>
+
+                  {doc.description && (
+                    <p className="text-sm text-gray-600 mt-1">
+                      {doc.description}
+                    </p>
+                  )}
+
+                  <p className="text-xs text-gray-500 mt-2">
+                    Uploaded by{" "}
+                    {doc.uploadedBy?.name ||
+                      doc.uploadedBy?.userId ||
+                      "student"}{" "}
+                    {doc.uploadedAt
+                      ? `on ${new Date(doc.uploadedAt).toLocaleDateString("en-MY")}`
+                      : ""}
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <a
+                    href={doc.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 px-4 py-2 bg-white border border-indigo-200 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-50"
+                  >
+                    <ExternalLink className="w-4 h-4" />
+                    Open
+                  </a>
+
+                  {canDeleteMaterial(doc) && (
+                    <button
+                      type="button"
+                      onClick={() => handleMaterialDelete(doc._id)}
+                      className="inline-flex items-center gap-1 px-4 py-2 bg-red-50 border border-red-200 text-red-700 rounded-lg text-sm font-bold hover:bg-red-100"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center text-gray-500 bg-gray-50 border border-dashed border-gray-200 rounded-lg p-6">
+            No materials uploaded yet.
+          </div>
         )}
       </div>
 

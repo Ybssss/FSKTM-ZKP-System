@@ -1,6 +1,10 @@
 const Timetable = require("../models/Timetable");
 const User = require("../models/User");
 const Evaluation = require("../models/Evaluation");
+const {
+  uploadToGoogleDrive,
+  deleteFromGoogleDrive,
+} = require("../services/googleDriveService");
 
 exports.createTimetable = async (req, res) => {
   try {
@@ -47,6 +51,10 @@ exports.getTimetables = async (req, res) => {
         populate: { path: "supervisorId", select: "name" },
       })
       .populate("panels", "name userId email expertiseTags")
+      .populate(
+        "studentDocuments.uploadedBy",
+        "name userId matricNumber email role",
+      )
       .sort({ date: -1, startTime: -1 });
 
     const formatted = timetables.map(formatTimetable);
@@ -78,6 +86,10 @@ exports.getMyTimetable = async (req, res) => {
         populate: { path: "supervisorId", select: "name" },
       })
       .populate("panels", "name userId email expertiseTags")
+      .populate(
+        "studentDocuments.uploadedBy",
+        "name userId matricNumber email role",
+      )
       .sort({ date: -1, startTime: -1 });
 
     const formatted = timetables.map(formatTimetable);
@@ -102,7 +114,11 @@ exports.getTimetableById = async (req, res) => {
         select: "name userId matricNumber researchTitle",
         populate: { path: "supervisorId", select: "name" },
       })
-      .populate("panels", "name userId email expertiseTags");
+      .populate("panels", "name userId email expertiseTags")
+      .populate(
+        "studentDocuments.uploadedBy",
+        "name userId matricNumber email role",
+      );
 
     if (!timetable)
       return res
@@ -241,10 +257,191 @@ exports.deleteTimetable = async (req, res) => {
 
 // Required placeholders for routing
 exports.uploadDocument = async (req, res) => {
-  res.json({ success: true });
+  try {
+    const { id } = req.params;
+    const { title, type, description } = req.body;
+
+    const timetable = await Timetable.findById(id).select("students status");
+
+    if (!timetable) {
+      return res.status(404).json({
+        success: false,
+        message: "Session not found.",
+      });
+    }
+
+    const userId = String(req.user.id || req.user._id);
+    const isAdmin = req.user.role === "admin";
+    const isAssignedStudent = timetable.students.some(
+      (studentId) => String(studentId) === userId,
+    );
+
+    if (!isAdmin && !isAssignedStudent) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Only the assigned student can upload materials for this session.",
+      });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({
+        success: false,
+        message: "Please choose a file to upload.",
+      });
+    }
+
+    const cleanTitle = String(title || req.file.originalname || "")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (!cleanTitle) {
+      return res.status(400).json({
+        success: false,
+        message: "Document title is required.",
+      });
+    }
+
+    if (cleanTitle.length > 120) {
+      return res.status(400).json({
+        success: false,
+        message: "Document title must not exceed 120 characters.",
+      });
+    }
+
+    const allowedTypes = ["report", "slides", "supplementary", "other"];
+    const cleanType = allowedTypes.includes(type) ? type : "other";
+
+    const uploaded = await uploadToGoogleDrive(req.file);
+
+    const documentRecord = {
+      title: cleanTitle,
+      url: uploaded.webViewLink,
+      driveFileId: uploaded.id,
+      mimeType: uploaded.mimeType || req.file.mimetype,
+      source: "google-drive",
+      type: cleanType,
+      uploadedBy: req.user.id,
+      uploadedAt: new Date(),
+      fileSize: uploaded.size
+        ? `${uploaded.size} bytes`
+        : `${req.file.size} bytes`,
+      description: String(description || "").trim(),
+    };
+
+    const updatedTimetable = await Timetable.findByIdAndUpdate(
+      id,
+      {
+        $push: {
+          studentDocuments: documentRecord,
+        },
+      },
+      {
+        new: true,
+        runValidators: true,
+      },
+    )
+      .populate({
+        path: "students",
+        select: "name userId matricNumber researchTitle",
+        populate: { path: "supervisorId", select: "name" },
+      })
+      .populate("panels", "name userId email expertiseTags")
+      .populate(
+        "studentDocuments.uploadedBy",
+        "name userId matricNumber email role",
+      );
+
+    res.json({
+      success: true,
+      message: "Material uploaded to Google Drive successfully.",
+      timetable: formatTimetable(updatedTimetable),
+      document: documentRecord,
+    });
+  } catch (error) {
+    console.error("Upload document error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to upload material.",
+      error: error.message,
+    });
+  }
 };
 exports.deleteDocument = async (req, res) => {
-  res.json({ success: true });
+  try {
+    const { id, documentId } = req.params;
+
+    const timetable = await Timetable.findById(id).select("studentDocuments");
+
+    if (!timetable) {
+      return res.status(404).json({
+        success: false,
+        message: "Session not found.",
+      });
+    }
+
+    const targetDocument = timetable.studentDocuments.id(documentId);
+
+    if (!targetDocument) {
+      return res.status(404).json({
+        success: false,
+        message: "Document not found.",
+      });
+    }
+
+    const userId = String(req.user.id || req.user._id);
+    const isAdmin = req.user.role === "admin";
+    const isOwner =
+      targetDocument.uploadedBy && String(targetDocument.uploadedBy) === userId;
+
+    if (!isAdmin && !isOwner) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only delete materials uploaded by yourself.",
+      });
+    }
+
+    await deleteFromGoogleDrive(targetDocument.driveFileId);
+
+    const updatedTimetable = await Timetable.findByIdAndUpdate(
+      id,
+      {
+        $pull: {
+          studentDocuments: {
+            _id: documentId,
+          },
+        },
+      },
+      {
+        new: true,
+      },
+    )
+      .populate({
+        path: "students",
+        select: "name userId matricNumber researchTitle",
+        populate: { path: "supervisorId", select: "name" },
+      })
+      .populate("panels", "name userId email expertiseTags")
+      .populate(
+        "studentDocuments.uploadedBy",
+        "name userId matricNumber email role",
+      );
+
+    res.json({
+      success: true,
+      message: "Material deleted successfully.",
+      timetable: formatTimetable(updatedTimetable),
+    });
+  } catch (error) {
+    console.error("Delete document error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete material.",
+      error: error.message,
+    });
+  }
 };
 exports.addPanelNotes = async (req, res) => {
   res.json({ success: true });
