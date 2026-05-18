@@ -748,6 +748,14 @@ const seedDatabase = async () => {
         { panelId: createdPanels[3]._id },
       ],
     });
+
+    await User.findByIdAndUpdate(getUserId("meiling@student.uthm.edu.my"), {
+      assignedPanels: [
+        { panelId: createdPanels[1]._id },
+        { panelId: createdPanels[2]._id },
+      ],
+    });
+
     const syncPanelStudentAssignments = async (studentId, panelIds) => {
       for (const panelId of panelIds) {
         await User.findByIdAndUpdate(panelId, {
@@ -775,11 +783,7 @@ const seedDatabase = async () => {
       [createdPanels[1]._id, createdPanels[2]._id],
     );
     // 5. Create Sessions (Using Timetable Model)
-    console.log("📅 Seeding 3 Evaluation Sessions...");
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const nextWeek = new Date();
-    nextWeek.setDate(nextWeek.getDate() + 7);
+    console.log("📅 Seeding 4 Evaluation Sessions...");
 
     // 🔴 FIXED: Added rubricId directly to the Timetable schema to prevent frontend errors
     const yesterday = new Date();
@@ -877,7 +881,7 @@ const seedDatabase = async () => {
       return map;
     };
     const evaluationsData = [
-      // 1. PENDING Proposal Defense
+      // Case 1: Ali upcoming proposal defense, both pending
       {
         sessionId: createdSessions[0]._id,
         rubricId: proposalRubric._id,
@@ -897,7 +901,7 @@ const seedDatabase = async () => {
         status: "PENDING",
       },
 
-      // 2. COMPLETED Pre-Viva
+      // Case 2: Siti completed Pre-Viva, both panels completed
       {
         sessionId: createdSessions[1]._id,
         rubricId: preVivaRubric._id,
@@ -907,7 +911,7 @@ const seedDatabase = async () => {
         sessionType: "PRE_VIVA",
         status: "COMPLETED",
         totalMarks: 76.25,
-        scores: {
+        scores: makeScoreMapFromValues(preVivaRubric, {
           crit_a_title: 3,
           crit_b_abs: 4,
           crit_c_prob: 3,
@@ -924,13 +928,13 @@ const seedDatabase = async () => {
           crit_n_ref2: 2,
           crit_o_pres2: 3,
           crit_p_delib: 3,
-        },
-        qualitativeFeedback: {
-          crit_qual_chairperson:
-            "PASS. The candidate has demonstrated solid understanding, effective research skills, and adequate scholarly contribution. Minor improvements in the literature review structure would enhance clarity further.",
-        },
+        }),
+        qualitativeFeedback: makeQualitativeMap(
+          preVivaRubric,
+          "PASS. The candidate demonstrates solid understanding and adequate scholarly contribution. Minor improvements are required in literature structure and methodological explanation.",
+        ),
         overallComments:
-          "The thesis demonstrates strong alignment with the National Educational Code, particularly in aspects of responsible digital practices, analytical thinking, and ethical conduct.",
+          "The candidate demonstrates strong understanding and is ready to proceed with minor corrections.",
       },
       {
         sessionId: createdSessions[1]._id,
@@ -939,10 +943,35 @@ const seedDatabase = async () => {
         evaluatorId: createdPanels[2]._id,
         semester: "Semester 1, 2025/2026",
         sessionType: "PRE_VIVA",
-        status: "PENDING",
+        status: "COMPLETED",
+        totalMarks: 81.5,
+        scores: makeScoreMapFromValues(preVivaRubric, {
+          crit_a_title: 4,
+          crit_b_abs: 3,
+          crit_c_prob: 3,
+          crit_d_obj: 4,
+          crit_e_lit: 3,
+          crit_f_meth: 3,
+          crit_g_res: 3,
+          crit_h_find: 4,
+          crit_i_eth: 3,
+          crit_j_contrib: 3,
+          crit_k_conc: 3,
+          crit_l_org2: 4,
+          crit_m_lang2: 3,
+          crit_n_ref2: 3,
+          crit_o_pres2: 3,
+          crit_p_delib: 4,
+        }),
+        qualitativeFeedback: makeQualitativeMap(
+          preVivaRubric,
+          "PASS with minor amendments. The contribution is acceptable, but the candidate should improve the abstract, literature synthesis, and conclusion flow.",
+        ),
+        overallComments:
+          "Good research maturity. The candidate should refine presentation of findings and thesis structure.",
       },
 
-      // 3. PENDING Progress Assessment
+      // Case 3: Chong completed qualitative-only Progress Assessment
       {
         sessionId: createdSessions[2]._id,
         rubricId: progressRubric._id,
@@ -950,7 +979,13 @@ const seedDatabase = async () => {
         evaluatorId: getUserId("samihah@uthm.edu.my"),
         semester: "Semester 1, 2025/2026",
         sessionType: "PROGRESS_ASSESSMENT",
-        status: "PENDING",
+        status: "COMPLETED",
+        summaryOfProgress:
+          "The student has completed the system architecture, core backend API, and initial frontend integration.",
+        commentsForImprovement:
+          "The student should improve evaluation workflow validation and ensure consistent data formatting across routes.",
+        overallSuggestions:
+          "Proceed with usability testing and strengthen documentation for the ZKP authentication flow.",
       },
       {
         sessionId: createdSessions[2]._id,
@@ -959,6 +994,53 @@ const seedDatabase = async () => {
         evaluatorId: createdPanels[3]._id,
         semester: "Semester 1, 2025/2026",
         sessionType: "PROGRESS_ASSESSMENT",
+        status: "COMPLETED",
+        summaryOfProgress:
+          "The student has shown consistent progress and has prepared a working prototype for demonstration.",
+        commentsForImprovement:
+          "More testing is required for attendance, session details, and role-based UI hiding.",
+        overallSuggestions:
+          "Continue improving demo data coverage and prepare screenshots for final documentation.",
+      },
+
+      // Case 4: Mei Ling pending publication, one completed and one pending
+      {
+        sessionId: createdSessions[3]._id,
+        rubricId: proposalRubric._id,
+        studentId: getUserId("meiling@student.uthm.edu.my"),
+        evaluatorId: createdPanels[1]._id,
+        semester: "Semester 1, 2025/2026",
+        sessionType: "PROPOSAL_DEFENSE",
+        status: "COMPLETED",
+        totalMarks: 68.0,
+        scores: makeScoreMapFromValues(proposalRubric, {
+          crit_a_title: 3,
+          crit_b_exec_summary: 2,
+          crit_c_problem: 2,
+          crit_d_objective: 3,
+          crit_e_literature: 2,
+          crit_f_methodology: 2,
+          crit_g_prelim: 2,
+          crit_h_ethics: 3,
+          crit_i_org: 3,
+          crit_j_lang: 3,
+          crit_k_ref: 2,
+          crit_l_pres: 3,
+        }),
+        qualitativeFeedback: makeQualitativeMap(
+          proposalRubric,
+          "The research direction is promising but the methodology and research questions require refinement.",
+        ),
+        overallComments:
+          "The student needs to sharpen the problem statement and justify the selected methodology.",
+      },
+      {
+        sessionId: createdSessions[3]._id,
+        rubricId: proposalRubric._id,
+        studentId: getUserId("meiling@student.uthm.edu.my"),
+        evaluatorId: createdPanels[2]._id,
+        semester: "Semester 1, 2025/2026",
+        sessionType: "PROPOSAL_DEFENSE",
         status: "PENDING",
       },
     ];
@@ -986,33 +1068,6 @@ const seedDatabase = async () => {
       },
     ]);
 
-    console.log("\n🧪 DEMO ACCOUNTS");
-    console.log("Admin: admin_samihah / registration code: temp");
-    console.log(
-      "Student Ali: AW240001 / code: 111111 / upcoming proposal pending",
-    );
-    console.log(
-      "Student Siti: AW240002 / code: 222222 / completed scored Pre-Viva report",
-    );
-    console.log(
-      "Student Chong: AW240003 / code: 333333 / completed qualitative Progress report",
-    );
-    console.log(
-      "Student Mei Ling: AW240004 / code: 444444 / pending publication case",
-    );
-    console.log(
-      "Panel 1:",
-      createdPanels[1]?.userId,
-      "/",
-      createdPanels[1]?.email,
-    );
-    console.log(
-      "Panel 2:",
-      createdPanels[2]?.userId,
-      "/",
-      createdPanels[2]?.email,
-    );
-    console.log("✅ DATABASE SEEDING COMPLETED SUCCESSFULLY!");
     console.log("🔐 Seeding permission request demo cases...");
 
     const sitiCompletedEvalBySamihah = createdEvaluations.find(
@@ -1054,6 +1109,33 @@ const seedDatabase = async () => {
         reason: "Demo approved request for historical feedback vault.",
       });
     }
+    console.log("\n🧪 DEMO ACCOUNTS");
+    console.log("Admin: admin_samihah / registration code: temp");
+    console.log(
+      "Student Ali: AW240001 / code: 111111 / upcoming proposal pending",
+    );
+    console.log(
+      "Student Siti: AW240002 / code: 222222 / completed scored Pre-Viva report",
+    );
+    console.log(
+      "Student Chong: AW240003 / code: 333333 / completed qualitative Progress report",
+    );
+    console.log(
+      "Student Mei Ling: AW240004 / code: 444444 / pending publication case",
+    );
+    console.log(
+      "Panel 1:",
+      createdPanels[1]?.userId,
+      "/",
+      createdPanels[1]?.email,
+    );
+    console.log(
+      "Panel 2:",
+      createdPanels[2]?.userId,
+      "/",
+      createdPanels[2]?.email,
+    );
+    console.log("✅ DATABASE SEEDING COMPLETED SUCCESSFULLY!");
   } catch (error) {
     console.error("❌ Error:", error);
     process.exit(1);
