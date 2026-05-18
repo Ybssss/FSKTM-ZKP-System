@@ -18,12 +18,16 @@ const authenticateToken = async (req, res, next) => {
     );
 
     // 1. Find the user using the MongoDB ObjectId stored in the JWT payload.
+    // STRICT DEVICE VALIDATION
+    // decoded.id = MongoDB ObjectId
+    // decoded.userId = public user ID / matric number / staff ID
     const user = await User.findById(decoded.id);
 
     if (!user) {
-      return res
-        .status(401)
-        .json({ success: false, message: "User no longer exists." });
+      return res.status(401).json({
+        success: false,
+        message: "User no longer exists.",
+      });
     }
 
     // 2. Check if the device issuing this token was removed or logged out

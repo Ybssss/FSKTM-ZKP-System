@@ -1,6 +1,56 @@
 const Timetable = require("../models/Timetable");
 const User = require("../models/User");
 const Evaluation = require("../models/Evaluation");
+const cleanText = (value = "", max = 500) =>
+  String(value)
+    .normalize("NFKC")
+    .replace(/[<>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
+
+const cleanArray = (value) =>
+  Array.isArray(value) ? value.filter(Boolean) : [];
+
+const allowedSessionTypes = [
+  "PROPOSAL_DEFENSE",
+  "PROGRESS_ASSESSMENT",
+  "PRE_VIVA",
+];
+
+const allowedSessionStatuses = [
+  "scheduled",
+  "ongoing",
+  "completed",
+  "cancelled",
+];
+
+const buildTimetablePayload = (body, userId) => {
+  const sessionType = cleanText(body.sessionType, 50);
+
+  if (!allowedSessionTypes.includes(sessionType)) {
+    throw new Error("Invalid session type.");
+  }
+
+  const status = allowedSessionStatuses.includes(body.status)
+    ? body.status
+    : "scheduled";
+
+  return {
+    sessionType,
+    title: cleanText(body.title || `${sessionType} Session`, 150),
+    description: cleanText(body.description || "", 1000),
+    date: body.date,
+    startTime: cleanText(body.startTime || body.time, 20),
+    endTime: cleanText(body.endTime, 20),
+    venue: cleanText(body.venue, 500),
+    rubricId: body.rubricId,
+    students: cleanArray(body.students),
+    panels: cleanArray(body.panels),
+    status,
+    createdBy: userId,
+  };
+};
 const {
   uploadToGoogleDrive,
   deleteFromGoogleDrive,
@@ -8,14 +58,20 @@ const {
 
 exports.createTimetable = async (req, res) => {
   try {
-    if (req.user.role !== "admin" && req.user.role !== "superadmin")
-      return res.status(403).json({ success: false, message: "Unauthorized" });
-    const timetable = await Timetable.create({
-      ...req.body,
-      createdBy: req.user.id,
-      status: req.body.status || "scheduled",
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized",
+      });
+    }
+
+    const payload = buildTimetablePayload(req.body, req.user.id);
+    const timetable = await Timetable.create(payload);
+
+    res.status(201).json({
+      success: true,
+      timetable: formatTimetable(timetable),
     });
-    res.status(201).json({ success: true, timetable });
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -190,8 +246,76 @@ exports.createBulkTimetables = async (req, res) => {
 exports.updateTimetable = async (req, res) => {
   try {
     const { id } = req.params;
-    const updates = req.body;
+    const updates = {};
+
+    if (req.body.sessionType) {
+      const sessionType = cleanText(req.body.sessionType, 50);
+      if (!allowedSessionTypes.includes(sessionType)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid session type.",
+        });
+      }
+      updates.sessionType = sessionType;
+    }
+
+    if (req.body.title !== undefined) {
+      updates.title = cleanText(req.body.title, 150);
+    }
+
+    if (req.body.description !== undefined) {
+      updates.description = cleanText(req.body.description, 1000);
+    }
+
+    if (req.body.date !== undefined) {
+      updates.date = req.body.date;
+    }
+
+    if (req.body.startTime !== undefined) {
+      updates.startTime = cleanText(req.body.startTime, 20);
+    }
+
+    if (req.body.time !== undefined) {
+      updates.startTime = cleanText(req.body.time, 20);
+    }
+
+    if (req.body.endTime !== undefined) {
+      updates.endTime = cleanText(req.body.endTime, 20);
+    }
+
+    if (req.body.venue !== undefined) {
+      updates.venue = cleanText(req.body.venue, 500);
+    }
+
+    if (req.body.rubricId !== undefined) {
+      updates.rubricId = req.body.rubricId;
+    }
+
+    if (req.body.panel1Id !== undefined) {
+      updates.panel1Id = req.body.panel1Id;
+    }
+
+    if (req.body.panel2Id !== undefined) {
+      updates.panel2Id = req.body.panel2Id;
+    }
+
+    if (req.body.status !== undefined) {
+      if (!allowedSessionStatuses.includes(req.body.status)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid session status.",
+        });
+      }
+      updates.status = req.body.status;
+    }
     const existingSession = await Timetable.findById(id);
+
+    if (!existingSession) {
+      return res.status(404).json({
+        success: false,
+        message: "Timetable not found.",
+      });
+    }
 
     // Reconstruct the array for updating
     const oldP1 = existingSession.panels?.[0]?.toString();
@@ -326,7 +450,7 @@ exports.uploadDocument = async (req, res) => {
       fileSize: uploaded.size
         ? `${uploaded.size} bytes`
         : `${req.file.size} bytes`,
-      description: String(description || "").trim(),
+      description: cleanText(description || "", 500),
     };
 
     const updatedTimetable = await Timetable.findByIdAndUpdate(

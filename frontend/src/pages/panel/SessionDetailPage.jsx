@@ -415,6 +415,71 @@ export default function SessionDetailPage() {
         </div>
       </div>
 
+      {/* QUICK ACTIONS */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h2 className="text-lg font-bold text-gray-900 mb-4">Quick Actions</h2>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          {onlineMeetingUrl && (
+            <a
+              href={onlineMeetingUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-4 py-3 bg-blue-50 text-blue-700 rounded-lg font-bold border border-blue-100 hover:bg-blue-100 flex items-center gap-2"
+            >
+              <Video className="w-4 h-4" />
+              Join Meeting
+            </a>
+          )}
+
+          {isStudent && (
+            <button
+              type="button"
+              onClick={() =>
+                document
+                  .getElementById("session-material-upload")
+                  ?.scrollIntoView({ behavior: "smooth" })
+              }
+              className="px-4 py-3 bg-indigo-50 text-indigo-700 rounded-lg font-bold border border-indigo-100 hover:bg-indigo-100 flex items-center gap-2"
+            >
+              <Upload className="w-4 h-4" />
+              Upload Material
+            </button>
+          )}
+
+          {isStaff && evaluations.some((e) => e.status === "PENDING") && (
+            <button
+              type="button"
+              onClick={() => {
+                const pendingEval = evaluations.find(
+                  (e) => e.status === "PENDING",
+                );
+                if (pendingEval) goToEvaluation(pendingEval._id);
+              }}
+              className="px-4 py-3 bg-green-50 text-green-700 rounded-lg font-bold border border-green-100 hover:bg-green-100 flex items-center gap-2"
+            >
+              <FileText className="w-4 h-4" />
+              Evaluate Now
+            </button>
+          )}
+
+          {isStaff && historicalEvals.length > 0 && (
+            <button
+              type="button"
+              onClick={() =>
+                document
+                  .getElementById("historical-feedback-vault")
+                  ?.scrollIntoView({ behavior: "smooth" })
+              }
+              className="px-4 py-3 bg-gray-50 text-gray-700 rounded-lg font-bold border border-gray-200 hover:bg-gray-100 flex items-center gap-2"
+            >
+              <History className="w-4 h-4" />
+              Historical Vault
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* PANEL EXAMINERS - visible to students and staff */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
@@ -460,7 +525,10 @@ export default function SessionDetailPage() {
       </div>
 
       {/* SESSION MATERIALS */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+      <div
+        id="session-material-upload"
+        className="bg-white rounded-xl shadow-sm border border-gray-200 p-6"
+      >
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
           <div>
             <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
@@ -736,7 +804,10 @@ export default function SessionDetailPage() {
       )}
 
       {isStaff && (
-        <div className="bg-gray-900 rounded-xl shadow-lg border border-gray-700 overflow-hidden mt-8">
+        <div
+          id="historical-feedback-vault"
+          className="bg-gray-900 rounded-xl shadow-lg border border-gray-700 overflow-hidden mt-8"
+        >
           {/* HISTORICAL FEEDBACK VAULT */}
           <div className="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">

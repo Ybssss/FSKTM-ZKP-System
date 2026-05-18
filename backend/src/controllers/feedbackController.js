@@ -1,6 +1,15 @@
 const Evaluation = require("../models/Evaluation");
 const User = require("../models/User");
 const PermissionRequest = require("../models/PermissionRequest");
+const escapeRegex = (value = "") =>
+  String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const cleanText = (value = "") =>
+  String(value)
+    .normalize("NFKC")
+    .replace(/[<>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
 // @desc    Search feedback/evaluations
 // @route   GET /api/feedback/search
@@ -15,12 +24,14 @@ exports.searchFeedback = async (req, res) => {
 
     // Search by student name or matric number
     if (query && query.trim() !== "") {
+      const safeQuery = escapeRegex(cleanText(query)).slice(0, 80);
+
       const students = await User.find({
         role: "student",
         $or: [
-          { name: new RegExp(query, "i") },
-          { matricNumber: new RegExp(query, "i") },
-          { userId: new RegExp(query, "i") },
+          { name: new RegExp(safeQuery, "i") },
+          { matricNumber: new RegExp(safeQuery, "i") },
+          { userId: new RegExp(safeQuery, "i") },
         ],
       }).select("_id");
 

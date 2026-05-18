@@ -4,16 +4,39 @@ require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-const evaluationController = require("./controllers/evaluationController");
-const { authenticateToken } = require("./middleware/auth");
 // Initialize express app
 const app = express();
 const expertiseRoutes = require("./routes/expertiseRoutes");
-// Middleware
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+const helmet = require("helmet");
+const mongoSanitize = require("express-mongo-sanitize");
 
-// Allow requests from all for now to prevent deployment blocks)
+// Middleware
+app.use(
+  helmet({
+    crossOriginResourcePolicy: false,
+  }),
+);
+
+app.use(
+  express.json({
+    limit: "2mb",
+  }),
+);
+
+app.use(
+  express.urlencoded({
+    extended: true,
+    limit: "2mb",
+  }),
+);
+
+// Blocks MongoDB operator injection such as $ne, $gt, $where
+app.use(
+  mongoSanitize({
+    replaceWith: "_",
+  }),
+);
+
 app.use(
   cors({
     origin: ["https://fsktm-zkp-system.vercel.app", "http://localhost:5173"],
@@ -67,7 +90,6 @@ app.use("/api/feedback", feedbackRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/qr", qrRoutes);
 app.use("/api/analytics", analyticsRoutes); // ← NEW: Register analytics route
-app.use("/api/rubrics", rubricRoutes);
 app.use("/api", expertiseRoutes);
 // Root route
 app.get("/", (req, res) => {

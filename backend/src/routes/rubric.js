@@ -3,6 +3,53 @@ const express = require("express");
 const router = express.Router();
 const { authenticateToken } = require("../middleware/auth");
 const Rubric = require("../models/Rubric");
+const cleanText = (value = "", max = 1000) =>
+  String(value)
+    .normalize("NFKC")
+    .replace(/[<>]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, max);
+
+const allowedSessionTypes = [
+  "PROPOSAL_DEFENSE",
+  "PROGRESS_ASSESSMENT",
+  "PRE_VIVA",
+];
+
+const allowedCriterionTypes = ["quantitative", "qualitative"];
+
+const buildRubricPayload = (body) => {
+  const sessionType = cleanText(body.sessionType, 50);
+
+  if (!allowedSessionTypes.includes(sessionType)) {
+    throw new Error("Invalid rubric session type.");
+  }
+
+  const criteria = Array.isArray(body.criteria)
+    ? body.criteria.map((criterion, index) => ({
+        key: cleanText(criterion.key || `criterion_${index + 1}`, 80),
+        title: cleanText(criterion.title, 250),
+        type: allowedCriterionTypes.includes(criterion.type)
+          ? criterion.type
+          : "quantitative",
+        weight: Number(criterion.weight || 0),
+        maxScore: Number(criterion.maxScore || 4),
+        description: cleanText(criterion.description || "", 1000),
+        exemplary: cleanText(criterion.exemplary || "", 2000),
+        proficient: cleanText(criterion.proficient || "", 2000),
+        satisfactory: cleanText(criterion.satisfactory || "", 2000),
+        foundational: cleanText(criterion.foundational || "", 2000),
+        novice: cleanText(criterion.novice || "", 2000),
+      }))
+    : [];
+
+  return {
+    name: cleanText(body.name, 150),
+    sessionType,
+    criteria,
+  };
+};
 
 router.use(authenticateToken);
 
@@ -62,16 +109,17 @@ router.get("/:id", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     // Role check
-    if (req.user.role !== "admin" && req.user.role !== "panel") {
+    if (req.user.role !== "admin") {
       return res.status(403).json({
         success: false,
-        message: "Only admins and panels can create rubrics",
+        message: "Only admins can create rubrics",
       });
     }
 
     console.log("📝 Creating rubric:", req.body.name);
 
-    const rubric = await Rubric.create(req.body);
+    const rubricPayload = buildRubricPayload(req.body);
+    const rubric = await Rubric.create(rubricPayload);
 
     console.log("✅ Rubric created:", rubric._id);
 
@@ -95,19 +143,25 @@ router.post("/", async (req, res) => {
 // @access  Private (Admin, Panel)
 router.put("/:id", async (req, res) => {
   try {
-    if (req.user.role !== "admin" && req.user.role !== "panel") {
+    if (req.user.role !== "admin") {
       return res.status(403).json({
         success: false,
-        message: "Only admins and panels can update rubrics",
+        message: "Only admins can update rubrics",
       });
     }
 
     console.log("📝 Updating rubric:", req.params.id);
 
-    const rubric = await Rubric.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    });
+    const rubricPayload = buildRubricPayload(req.body);
+
+    const rubric = await Rubric.findByIdAndUpdate(
+      req.params.id,
+      rubricPayload,
+      {
+        new: true,
+        runValidators: true,
+      },
+    );
 
     if (!rubric) {
       return res.status(404).json({

@@ -1,7 +1,6 @@
 const express = require("express");
 const router = express.Router();
 const { authenticateToken, requireRole } = require("../middleware/auth");
-const evaluationController = require("../controllers/evaluationController");
 const multer = require("multer");
 const os = require("os");
 
@@ -93,9 +92,5 @@ router.post(
 router.put("/:id", requireRole(["admin"]), updateTimetable);
 router.get("/", requireRole(["admin"]), getTimetables);
 router.get("/:id", getTimetableById);
-
-router.post("/submit", evaluationController.submitEvaluation);
-router.get("/search", evaluationController.searchHistoricalComments);
-router.get("/", evaluationController.getAllEvaluations);
 
 module.exports = router;
