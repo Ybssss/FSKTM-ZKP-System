@@ -28,17 +28,19 @@ router.get("/student/:studentId", authenticateToken, async (req, res) => {
     const studentId = req.params.studentId;
 
     // Ensure panels can only see their own students' evals, and students can only see their own
-    if (
-      req.user.role === "student" &&
-      req.user.id !== studentId &&
-      req.user.userId !== studentId
-    ) {
-      return res
-        .status(403)
-        .json({
-          success: false,
-          message: "Access denied. You can only view your own records.",
-        });
+    if (req.user.role === "student") {
+      const loggedInId = (req.user.id || req.user._id).toString();
+      const requestedId = studentId.toString();
+
+      // Allow if either the MongoDB ID matches or the UTHM Matric Number (userId) matches
+      if (loggedInId !== requestedId && req.user.userId !== requestedId) {
+        return res
+          .status(403)
+          .json({
+            success: false,
+            message: "Access denied. You can only view your own records.",
+          });
+      }
     }
 
     const evaluations = await Evaluation.find({ studentId })

@@ -34,7 +34,10 @@ export default function TimetableManagementPage() {
   const [activeTab, setActiveTab] = useState("list");
   const [searchTerm, setSearchTerm] = useState("");
   const [isSaving, setIsSaving] = useState(false);
-  const [slotDuration, setSlotDuration] = useState(60);
+  const [slotDuration, setSlotDuration] = useState(() => {
+    const saved = localStorage.getItem("admin_slot_duration");
+    return saved ? parseInt(saved, 10) : 60;
+  });
 
   const [bulkConfig, setBulkConfig] = useState({
     rubricId: "",
@@ -60,6 +63,14 @@ export default function TimetableManagementPage() {
   useEffect(() => {
     loadData();
   }, []);
+
+  const handleDurationChange = (e) => {
+    const val = parseInt(e.target.value, 10);
+    setSlotDuration(val);
+    if (!isNaN(val) && val > 0) {
+      localStorage.setItem("admin_slot_duration", val);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -549,17 +560,21 @@ export default function TimetableManagementPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
-                    Slot Duration
+                    Slot Duration (Minutes)
                   </label>
-                  <select
+                  <input
+                    type="number"
+                    min="5"
+                    max="240"
+                    step="5"
                     value={slotDuration}
-                    onChange={(e) => setSlotDuration(parseInt(e.target.value))}
-                    className="w-full p-2 border rounded-lg bg-gray-50 font-semibold text-indigo-700"
-                  >
-                    <option value={30}>30 Minutes</option>
-                    <option value={45}>45 Minutes</option>
-                    <option value={60}>1 Hour</option>
-                  </select>
+                    onChange={handleDurationChange}
+                    className="w-full p-2 border border-gray-300 rounded-lg bg-white font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500"
+                    placeholder="e.g., 60"
+                  />
+                  <p className="text-[10px] text-gray-500 mt-1 font-semibold uppercase">
+                    Your preference is automatically saved.
+                  </p>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-600 uppercase mb-1">

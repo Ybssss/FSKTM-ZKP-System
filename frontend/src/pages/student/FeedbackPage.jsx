@@ -13,6 +13,7 @@ export default function FeedbackPage() {
   const [groupedEvaluations, setGroupedEvaluations] = useState([]);
   const [pendingCount, setPendingCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [openedReportId, setOpenedReportId] = useState(null);
 
   useEffect(() => {
     fetchMyEvaluations();
@@ -28,10 +29,15 @@ export default function FeedbackPage() {
 
       const grouped = {};
       rawEvals.forEach((ev) => {
-        const groupKey = `${ev.sessionType}_${ev.semester}`;
+        const sessionId =
+          typeof ev.sessionId === "object" ? ev.sessionId?._id : ev.sessionId;
+
+        const groupKey =
+          sessionId || `${ev.sessionType}_${ev.semester || "Unknown"}`;
 
         if (!grouped[groupKey]) {
           grouped[groupKey] = {
+            sessionId: sessionId || null,
             sessionType: ev.sessionType,
             semester: ev.semester || "Unknown",
             date: ev.createdAt,
@@ -106,6 +112,9 @@ export default function FeedbackPage() {
             }),
           );
           completed.push({
+            id:
+              group.sessionId ||
+              `${group.sessionType || "UNKNOWN"}_${group.semester || "Unknown"}`,
             ...group,
             finalAverage: (group.totalSum / group.evalCount).toFixed(2),
             averagedCriteria,
@@ -175,143 +184,191 @@ export default function FeedbackPage() {
           </p>
         </div>
       ) : (
-        <div className="space-y-12">
-          {groupedEvaluations.map((result, idx) => (
-            <div
-              key={idx}
-              className="bg-white rounded-xl shadow-xl border border-gray-200 overflow-hidden"
-            >
-              {/* DOCUMENT HEADER */}
-              <div className="bg-indigo-900 p-8 text-white flex flex-col md:flex-row justify-between items-center gap-6 border-b-4 border-indigo-500">
-                <div className="text-center md:text-left">
-                  <span className="inline-block px-3 py-1 bg-white/10 rounded text-xs font-bold tracking-widest uppercase mb-3 border border-white/20">
-                    {result.rubricName}
-                  </span>
-                  <h2 className="text-3xl font-black uppercase tracking-wide">
-                    {result.sessionType?.replace("_", " ")}
-                  </h2>
-                  <p className="text-indigo-200 font-medium mt-2 flex items-center justify-center md:justify-start gap-2">
-                    <CheckCircle2 className="w-4 h-4 text-green-400" />{" "}
-                    Officially Finalized • {result.semester}
-                  </p>
-                </div>
-                {result.sessionType !== "PROGRESS_ASSESSMENT" && (
-                  <div className="bg-white text-gray-900 px-8 py-5 rounded-xl text-center shadow-2xl min-w-[180px] border-2 border-indigo-100">
-                    <p className="text-[10px] font-bold uppercase tracking-widest mb-1 text-gray-400">
-                      Combined Final Grade
-                    </p>
-                    <p className="text-5xl font-black text-indigo-700">
-                      {result.finalAverage}%
-                    </p>
-                  </div>
-                )}
-              </div>
+        <div className="space-y-4">
+          {groupedEvaluations.map((result, idx) => {
+            const isOpen = openedReportId === result.id;
 
-              <div className="p-8 bg-gray-50">
-                {/* SECTION A */}
-                <div className="border border-gray-300 mb-8 rounded-lg overflow-hidden bg-white shadow-sm">
-                  <div className="bg-gray-100 px-4 py-2 border-b border-gray-300">
-                    <span className="font-bold text-gray-800 uppercase text-sm tracking-widest">
-                      Section A: Candidate's & Examiners' Details
-                    </span>
+            return (
+              <div
+                key={result.id || idx}
+                className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden"
+              >
+                {/* SUMMARY HEADER - shown first */}
+                <div className="p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-bold text-indigo-600 uppercase tracking-widest">
+                      {result.rubricName}
+                    </p>
+                    <h3 className="text-xl font-bold text-gray-900 mt-1">
+                      {result.sessionType?.replaceAll("_", " ")}
+                    </h3>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {result.semester} • {result.panels.length} panel(s) •{" "}
+                      {new Date(result.date).toLocaleDateString("en-MY")}
+                    </p>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2">
-                    <div className="p-4 border-b md:border-b-0 md:border-r border-gray-300">
-                      <p className="text-xs font-bold text-gray-500 uppercase mb-1">
-                        Candidate's Name
-                      </p>
-                      <p className="font-bold text-gray-900 text-lg">
-                        {user.name}
-                      </p>
-                    </div>
-                    <div className="p-4 border-b border-gray-300 bg-gray-50">
-                      <p className="text-xs font-bold text-gray-500 uppercase mb-1">
-                        Matric Number
-                      </p>
-                      <p className="font-mono font-bold text-gray-900 text-lg">
-                        {user.matricNumber || user.userId}
-                      </p>
-                    </div>
-                    <div className="p-4 border-t border-gray-300 md:col-span-2">
-                      <p className="text-xs font-bold text-gray-500 uppercase mb-2">
-                        Panel of Examiners
-                      </p>
-                      <ul className="flex flex-wrap gap-3">
-                        {result.panels.map((panel, i) => (
-                          <li
-                            key={i}
-                            className="bg-indigo-50 text-indigo-800 px-3 py-1.5 rounded-md text-sm font-bold border border-indigo-100"
-                          >
-                            {panel}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
+
+                  <div className="flex items-center gap-3">
+                    {result.sessionType !== "PROGRESS_ASSESSMENT" && (
+                      <div className="text-right">
+                        <p className="text-xs text-gray-500 font-bold uppercase">
+                          Final Average
+                        </p>
+                        <p className="text-2xl font-black text-indigo-700">
+                          {result.finalAverage}%
+                        </p>
+                      </div>
+                    )}
+
+                    <button
+                      onClick={() =>
+                        setOpenedReportId(isOpen ? null : result.id)
+                      }
+                      className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700"
+                    >
+                      {isOpen ? "Hide Details" : "View Details"}
+                    </button>
                   </div>
                 </div>
 
-                {/* SECTION B */}
-                {result.sessionType !== "PROGRESS_ASSESSMENT" && (
-                  <div className="border border-gray-300 mb-8 rounded-lg overflow-hidden bg-white shadow-sm">
-                    <div className="bg-gray-100 px-4 py-2 border-b border-gray-300">
-                      <span className="font-bold text-gray-800 uppercase text-sm tracking-widest">
-                        Section B: Averaged Criteria Breakdown
-                      </span>
+                {isOpen && (
+                  <>
+                    {/* DOCUMENT HEADER */}
+                    <div className="bg-indigo-900 p-8 text-white flex flex-col md:flex-row justify-between items-center gap-6 border-b-4 border-indigo-500">
+                      <div className="text-center md:text-left">
+                        <span className="inline-block px-3 py-1 bg-white/10 rounded text-xs font-bold tracking-widest uppercase mb-3 border border-white/20">
+                          {result.rubricName}
+                        </span>
+                        <h2 className="text-3xl font-black uppercase tracking-wide">
+                          {result.sessionType?.replaceAll("_", " ")}
+                        </h2>
+                        <p className="text-indigo-200 font-medium mt-2 flex items-center justify-center md:justify-start gap-2">
+                          <CheckCircle2 className="w-4 h-4 text-green-400" />{" "}
+                          Officially Finalized • {result.semester}
+                        </p>
+                      </div>
+                      {result.sessionType !== "PROGRESS_ASSESSMENT" && (
+                        <div className="bg-white text-gray-900 px-8 py-5 rounded-xl text-center shadow-2xl min-w-[180px] border-2 border-indigo-100">
+                          <p className="text-[10px] font-bold uppercase tracking-widest mb-1 text-gray-400">
+                            Combined Final Grade
+                          </p>
+                          <p className="text-5xl font-black text-indigo-700">
+                            {result.finalAverage}%
+                          </p>
+                        </div>
+                      )}
                     </div>
-                    <div className="divide-y divide-gray-100">
-                      {result.averagedCriteria.map((crit, i) => (
-                        <div
-                          key={i}
-                          className="flex justify-between items-center p-4 hover:bg-gray-50"
-                        >
-                          <p className="font-bold text-gray-800">{crit.name}</p>
-                          <div className="text-right">
-                            <span className="text-xl font-black text-indigo-700">
-                              {crit.average}
-                            </span>
-                            <span className="text-sm text-gray-400 font-bold">
-                              {" "}
-                              / {crit.maxScore}
-                            </span>
+
+                    <div className="p-8 bg-gray-50">
+                      {/* SECTION A */}
+                      <div className="border border-gray-300 mb-8 rounded-lg overflow-hidden bg-white shadow-sm">
+                        <div className="bg-gray-100 px-4 py-2 border-b border-gray-300">
+                          <span className="font-bold text-gray-800 uppercase text-sm tracking-widest">
+                            Section A: Candidate's & Examiners' Details
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2">
+                          <div className="p-4 border-b md:border-b-0 md:border-r border-gray-300">
+                            <p className="text-xs font-bold text-gray-500 uppercase mb-1">
+                              Candidate's Name
+                            </p>
+                            <p className="font-bold text-gray-900 text-lg">
+                              {user.name}
+                            </p>
+                          </div>
+                          <div className="p-4 border-b border-gray-300 bg-gray-50">
+                            <p className="text-xs font-bold text-gray-500 uppercase mb-1">
+                              Matric Number
+                            </p>
+                            <p className="font-mono font-bold text-gray-900 text-lg">
+                              {user.matricNumber || user.userId}
+                            </p>
+                          </div>
+                          <div className="p-4 border-t border-gray-300 md:col-span-2">
+                            <p className="text-xs font-bold text-gray-500 uppercase mb-2">
+                              Panel of Examiners
+                            </p>
+                            <ul className="flex flex-wrap gap-3">
+                              {result.panels.map((panel, i) => (
+                                <li
+                                  key={i}
+                                  className="bg-indigo-50 text-indigo-800 px-3 py-1.5 rounded-md text-sm font-bold border border-indigo-100"
+                                >
+                                  {panel}
+                                </li>
+                              ))}
+                            </ul>
                           </div>
                         </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                      </div>
 
-                {/* SECTION C */}
-                <div className="border border-gray-300 rounded-lg overflow-hidden bg-white shadow-sm">
-                  <div className="bg-gray-100 px-4 py-2 border-b border-gray-300">
-                    <span className="font-bold text-gray-800 uppercase text-sm tracking-widest">
-                      Section C: Combined Panel Remarks
-                    </span>
-                  </div>
-                  <div className="p-6 space-y-6">
-                    {result.remarks.length === 0 ? (
-                      <p className="text-gray-500 italic">
-                        No formal remarks provided.
-                      </p>
-                    ) : (
-                      result.remarks.map((rem, i) => (
-                        <div
-                          key={i}
-                          className="bg-gray-50 p-5 rounded-lg border border-gray-200"
-                        >
-                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 border-b border-gray-200 pb-2">
-                            Remarks by {rem.panel}
-                          </p>
-                          <p className="text-gray-800 leading-relaxed font-medium whitespace-pre-wrap">
-                            "{rem.text}"
-                          </p>
+                      {/* SECTION B */}
+                      {result.sessionType !== "PROGRESS_ASSESSMENT" && (
+                        <div className="border border-gray-300 mb-8 rounded-lg overflow-hidden bg-white shadow-sm">
+                          <div className="bg-gray-100 px-4 py-2 border-b border-gray-300">
+                            <span className="font-bold text-gray-800 uppercase text-sm tracking-widest">
+                              Section B: Averaged Criteria Breakdown
+                            </span>
+                          </div>
+                          <div className="divide-y divide-gray-100">
+                            {result.averagedCriteria.map((crit, i) => (
+                              <div
+                                key={i}
+                                className="flex justify-between items-center p-4 hover:bg-gray-50"
+                              >
+                                <p className="font-bold text-gray-800">
+                                  {crit.name}
+                                </p>
+                                <div className="text-right">
+                                  <span className="text-xl font-black text-indigo-700">
+                                    {crit.average}
+                                  </span>
+                                  <span className="text-sm text-gray-400 font-bold">
+                                    {" "}
+                                    / {crit.maxScore}
+                                  </span>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         </div>
-                      ))
-                    )}
-                  </div>
-                </div>
+                      )}
+
+                      {/* SECTION C */}
+                      <div className="border border-gray-300 rounded-lg overflow-hidden bg-white shadow-sm">
+                        <div className="bg-gray-100 px-4 py-2 border-b border-gray-300">
+                          <span className="font-bold text-gray-800 uppercase text-sm tracking-widest">
+                            Section C: Combined Panel Remarks
+                          </span>
+                        </div>
+                        <div className="p-6 space-y-6">
+                          {result.remarks.length === 0 ? (
+                            <p className="text-gray-500 italic">
+                              No formal remarks provided.
+                            </p>
+                          ) : (
+                            result.remarks.map((rem, i) => (
+                              <div
+                                key={i}
+                                className="bg-gray-50 p-5 rounded-lg border border-gray-200"
+                              >
+                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 border-b border-gray-200 pb-2">
+                                  Remarks by {rem.panel}
+                                </p>
+                                <p className="text-gray-800 leading-relaxed font-medium whitespace-pre-wrap">
+                                  "{rem.text}"
+                                </p>
+                              </div>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -168,6 +168,17 @@ export const userAPI = {
     });
     return response.data;
   },
+  getMyProfile: async () => {
+    const response = await api.get("/users/me/profile");
+    return response.data;
+  },
+
+  updateMyResearchTitle: async (researchTitle) => {
+    const response = await api.patch("/users/me/research-title", {
+      researchTitle,
+    });
+    return response.data;
+  },
 };
 
 // ==========================================

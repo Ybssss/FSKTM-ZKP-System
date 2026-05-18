@@ -7,9 +7,11 @@ const cheerio = require("cheerio");
 const https = require("https");
 
 const User = require("../models/User");
-const Timetable = require("../models/Timetable"); // 🔴 FIXED: Replaced deprecated Session model
+const Timetable = require("../models/Timetable");
 const Evaluation = require("../models/Evaluation");
 const Rubric = require("../models/Rubric");
+const Attendance = require("../models/Attendance");
+const PermissionRequest = require("../models/PermissionRequest");
 
 const envPath = path.join(__dirname, "../../.env");
 dotenv.config({ path: envPath });
@@ -553,7 +555,9 @@ const seedDatabase = async () => {
     await mongoose.connect(MONGO_URI);
     console.log("✅ Database connected.\n");
 
-    // 🔴 FIXED: Cleared Timetables instead of deprecated Sessions
+    //Cleared Timetables instead of deprecated Sessions
+    await PermissionRequest.deleteMany({});
+    await Attendance.deleteMany({});
     await Evaluation.deleteMany({});
     await Timetable.deleteMany({});
     await Rubric.deleteMany({});
@@ -681,7 +685,7 @@ const seedDatabase = async () => {
         name: "Muhammad Ali",
         email: "ali@student.uthm.edu.my",
         role: "student",
-        registrationCode: null,
+        registrationCode: "111111",
         program: "Master of Information Technology",
         researchTitle: "Optimization of Zero-Knowledge Proofs",
         supervisorId: createdPanels[0]._id,
@@ -692,7 +696,7 @@ const seedDatabase = async () => {
         name: "Siti Nuraisyah",
         email: "siti@student.uthm.edu.my",
         role: "student",
-        registrationCode: null,
+        registrationCode: "222222",
         program: "PhD in Computer Science",
         researchTitle: "Advanced Deep Learning Models",
         supervisorId: createdPanels[1]._id,
@@ -703,10 +707,21 @@ const seedDatabase = async () => {
         name: "Chong Wei Ming",
         email: "chong@student.uthm.edu.my",
         role: "student",
-        registrationCode: null,
+        registrationCode: "333333",
         program: "Master of Software Engineering",
         researchTitle: "Blockchain Healthcare Systems",
         supervisorId: createdPanels[2]._id,
+      },
+      {
+        userId: "AW240004",
+        matricNumber: "AW240004",
+        name: "Tan Mei Ling",
+        email: "meiling@student.uthm.edu.my",
+        role: "student",
+        registrationCode: "444444",
+        program: "Master of Information Security",
+        researchTitle: "Secure Online Evaluation Workflow Using ZKP",
+        supervisorId: createdPanels[1]._id,
       },
     ];
 
@@ -733,7 +748,32 @@ const seedDatabase = async () => {
         { panelId: createdPanels[3]._id },
       ],
     });
+    const syncPanelStudentAssignments = async (studentId, panelIds) => {
+      for (const panelId of panelIds) {
+        await User.findByIdAndUpdate(panelId, {
+          $addToSet: { assignedStudents: studentId },
+        });
+      }
+    };
+    await syncPanelStudentAssignments(getUserId("ali@student.uthm.edu.my"), [
+      getUserId("samihah@uthm.edu.my"),
+      createdPanels[1]._id,
+    ]);
 
+    await syncPanelStudentAssignments(getUserId("siti@student.uthm.edu.my"), [
+      getUserId("samihah@uthm.edu.my"),
+      createdPanels[2]._id,
+    ]);
+
+    await syncPanelStudentAssignments(getUserId("chong@student.uthm.edu.my"), [
+      getUserId("samihah@uthm.edu.my"),
+      createdPanels[3]._id,
+    ]);
+
+    await syncPanelStudentAssignments(
+      getUserId("meiling@student.uthm.edu.my"),
+      [createdPanels[1]._id, createdPanels[2]._id],
+    );
     // 5. Create Sessions (Using Timetable Model)
     console.log("📅 Seeding 3 Evaluation Sessions...");
     const tomorrow = new Date();
@@ -742,7 +782,17 @@ const seedDatabase = async () => {
     nextWeek.setDate(nextWeek.getDate() + 7);
 
     // 🔴 FIXED: Added rubricId directly to the Timetable schema to prevent frontend errors
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 2);
+
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const nextWeek = new Date();
+    nextWeek.setDate(nextWeek.getDate() + 7);
+
     const sessionsData = [
+      // Case 1: Upcoming proposal defense, evaluations pending
       {
         students: [getUserId("ali@student.uthm.edu.my")],
         panels: [getUserId("samihah@uthm.edu.my"), createdPanels[1]._id],
@@ -752,31 +802,49 @@ const seedDatabase = async () => {
         date: tomorrow,
         startTime: "10:00",
         endTime: "11:00",
-        venue: "Bilik Seminar 1",
+        venue: "meet.google.com/ali-proposal-demo",
         status: "scheduled",
       },
+
+      // Case 2: Completed Pre-Viva, official report should publish
       {
         students: [getUserId("siti@student.uthm.edu.my")],
         panels: [getUserId("samihah@uthm.edu.my"), createdPanels[2]._id],
         title: "Pre-Viva - Siti Nuraisyah",
         sessionType: "PRE_VIVA",
         rubricId: preVivaRubric._id,
-        date: nextWeek,
+        date: yesterday,
         startTime: "14:30",
         endTime: "15:30",
-        venue: "Makmal Komputer 3",
-        status: "scheduled",
+        venue: "https://teams.microsoft.com/l/meetup-join/siti-previva-demo",
+        status: "completed",
       },
+
+      // Case 3: Completed qualitative-only Progress Assessment
       {
         students: [getUserId("chong@student.uthm.edu.my")],
         panels: [getUserId("samihah@uthm.edu.my"), createdPanels[3]._id],
         title: "Progress Assessment - Chong Wei Ming",
         sessionType: "PROGRESS_ASSESSMENT",
         rubricId: progressRubric._id,
-        date: tomorrow,
+        date: yesterday,
         startTime: "09:00",
         endTime: "10:00",
-        venue: "Online (Webex)",
+        venue: "zoom.us/j/1234567890",
+        status: "completed",
+      },
+
+      // Case 4: Pending publication, only one panel completed
+      {
+        students: [getUserId("meiling@student.uthm.edu.my")],
+        panels: [createdPanels[1]._id, createdPanels[2]._id],
+        title: "Proposal Defense - Tan Mei Ling",
+        sessionType: "PROPOSAL_DEFENSE",
+        rubricId: proposalRubric._id,
+        date: nextWeek,
+        startTime: "11:30",
+        endTime: "12:30",
+        venue: "https://meet.google.com/meiling-proposal-demo",
         status: "scheduled",
       },
     ];
@@ -785,6 +853,29 @@ const seedDatabase = async () => {
 
     // 6. Auto-Create Evaluations
     console.log("📋 Seeding evaluations linked to Rubrics...");
+    const makeScoreMapFromValues = (rubric, values = {}) => {
+      const map = {};
+
+      rubric.criteria
+        .filter((criterion) => criterion.type === "quantitative")
+        .forEach((criterion) => {
+          map[criterion.key] = values[criterion.key] ?? 3;
+        });
+
+      return map;
+    };
+
+    const makeQualitativeMap = (rubric, text) => {
+      const map = {};
+
+      rubric.criteria
+        .filter((criterion) => criterion.type === "qualitative")
+        .forEach((criterion) => {
+          map[criterion.key] = text;
+        });
+
+      return map;
+    };
     const evaluationsData = [
       // 1. PENDING Proposal Defense
       {
@@ -872,8 +963,97 @@ const seedDatabase = async () => {
       },
     ];
 
-    await Evaluation.create(evaluationsData);
+    const createdEvaluations = await Evaluation.create(evaluationsData);
+    console.log("🧾 Seeding attendance records...");
+
+    await Attendance.create([
+      {
+        timetableId: createdSessions[1]._id,
+        studentId: getUserId("siti@student.uthm.edu.my"),
+        status: "present",
+        checkInTime: new Date(),
+      },
+      {
+        timetableId: createdSessions[2]._id,
+        studentId: getUserId("chong@student.uthm.edu.my"),
+        status: "present",
+        checkInTime: new Date(),
+      },
+      {
+        timetableId: createdSessions[3]._id,
+        studentId: getUserId("meiling@student.uthm.edu.my"),
+        status: "absent",
+      },
+    ]);
+
+    console.log("\n🧪 DEMO ACCOUNTS");
+    console.log("Admin: admin_samihah / registration code: temp");
+    console.log(
+      "Student Ali: AW240001 / code: 111111 / upcoming proposal pending",
+    );
+    console.log(
+      "Student Siti: AW240002 / code: 222222 / completed scored Pre-Viva report",
+    );
+    console.log(
+      "Student Chong: AW240003 / code: 333333 / completed qualitative Progress report",
+    );
+    console.log(
+      "Student Mei Ling: AW240004 / code: 444444 / pending publication case",
+    );
+    console.log(
+      "Panel 1:",
+      createdPanels[1]?.userId,
+      "/",
+      createdPanels[1]?.email,
+    );
+    console.log(
+      "Panel 2:",
+      createdPanels[2]?.userId,
+      "/",
+      createdPanels[2]?.email,
+    );
     console.log("✅ DATABASE SEEDING COMPLETED SUCCESSFULLY!");
+    console.log("🔐 Seeding permission request demo cases...");
+
+    const sitiCompletedEvalBySamihah = createdEvaluations.find(
+      (ev) =>
+        ev.studentId.toString() ===
+          getUserId("siti@student.uthm.edu.my").toString() &&
+        ev.evaluatorId.toString() ===
+          getUserId("samihah@uthm.edu.my").toString() &&
+        ev.status === "COMPLETED",
+    );
+
+    const chongCompletedEvalBySamihah = createdEvaluations.find(
+      (ev) =>
+        ev.studentId.toString() ===
+          getUserId("chong@student.uthm.edu.my").toString() &&
+        ev.evaluatorId.toString() ===
+          getUserId("samihah@uthm.edu.my").toString() &&
+        ev.status === "COMPLETED",
+    );
+
+    if (sitiCompletedEvalBySamihah) {
+      await PermissionRequest.create({
+        requestingPanelId: createdPanels[1]._id,
+        targetEvaluationId: sitiCompletedEvalBySamihah._id,
+        owningPanelId: getUserId("samihah@uthm.edu.my"),
+        studentId: getUserId("siti@student.uthm.edu.my"),
+        status: "PENDING",
+        reason: "Demo pending request for historical feedback vault.",
+      });
+    }
+
+    if (chongCompletedEvalBySamihah) {
+      await PermissionRequest.create({
+        requestingPanelId: createdPanels[2]._id,
+        targetEvaluationId: chongCompletedEvalBySamihah._id,
+        owningPanelId: getUserId("samihah@uthm.edu.my"),
+        studentId: getUserId("chong@student.uthm.edu.my"),
+        status: "APPROVED",
+        reason: "Demo approved request for historical feedback vault.",
+      });
+    }
   } catch (error) {
     console.error("❌ Error:", error);
     process.exit(1);

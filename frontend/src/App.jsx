@@ -30,7 +30,6 @@ import PanelAttendancePage from "./pages/panel/PanelAttendancePage";
 // Student Pages
 import StudentDashboard from "./pages/student/StudentDashboard";
 import FeedbackPage from "./pages/student/FeedbackPage";
-import ProgressPage from "./pages/student/ProgressPage";
 import SchedulePage from "./pages/student/SchedulePage";
 import AttendancePage from "./pages/student/AttendancePage";
 import StudentRubrics from "./pages/student/StudentRubrics";
@@ -106,7 +105,10 @@ function App() {
             />
 
             <Route path="rubrics" element={<StudentRubrics />} />
-            <Route path="progress" element={<ProgressPage />} />
+            <Route
+              path="progress"
+              element={<Navigate to="dashboard" replace />}
+            />
             <Route path="schedule" element={<SchedulePage />} />
             <Route path="schedule/:id" element={<SessionDetailPage />} />
             <Route path="sessions/:id" element={<SessionDetailPage />} />

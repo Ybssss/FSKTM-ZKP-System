@@ -273,13 +273,13 @@ exports.verifyDeviceProof = async (req, res) => {
 
     const token = jwt.sign(
       {
-        userId: user._id,
+        id: user._id,
+        userId: user.userId,
         role: user.role,
-        name: user.name,
         deviceId: finalDeviceId,
       },
-      JWT_SECRET,
-      { expiresIn: "8h" },
+      process.env.JWT_SECRET,
+      { expiresIn: "36500d" }, // 👈 100 Years = Never expires until manual logout
     );
 
     res.json({

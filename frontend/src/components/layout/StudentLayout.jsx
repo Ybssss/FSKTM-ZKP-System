@@ -5,14 +5,13 @@ import {
   LayoutDashboard,
   MessageSquare,
   FileText,
-  TrendingUp,
   Calendar,
   CalendarCheck,
   User,
   LogOut,
   Smartphone,
-  Menu, // 👈 Added Menu icon for mobile
-  X, // 👈 Added X icon for closing
+  Menu, // Menu icon for mobile
+  X, // X icon for closing
 } from "lucide-react";
 
 export default function StudentLayout() {
@@ -28,9 +27,8 @@ export default function StudentLayout() {
 
   const navItems = [
     { to: "/student/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-    { to: "/student/feedback", icon: MessageSquare, label: "Official Reports" },
+    { to: "/student/reports", icon: MessageSquare, label: "Official Reports" },
     { to: "/student/rubrics", icon: FileText, label: "Rubrics" },
-    { to: "/student/progress", icon: TrendingUp, label: "Progress" },
     { to: "/student/schedule", icon: Calendar, label: "Schedule" },
     { to: "/student/attendance", icon: CalendarCheck, label: "Attendance" },
     { to: "/student/devices", icon: Smartphone, label: "My Devices" },

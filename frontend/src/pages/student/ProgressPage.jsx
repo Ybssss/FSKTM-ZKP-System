@@ -38,14 +38,15 @@ export default function ProgressPage() {
           };
         }
         // Add up the scores
-        grouped[groupKey].totalSum += ev.totalScore ?? ev.overallScore ?? 0;
+        grouped[groupKey].totalSum +=
+          ev.totalMarks ?? ev.totalScore ?? ev.overallScore ?? 0;
         grouped[groupKey].evalCount += 1;
       });
 
       // 2. Filter ONLY fully graded sessions (2 panels)
       const processedData = [];
       Object.values(grouped).forEach((group) => {
-        if (group.evalCount >= 2) {
+        if (group.evalCount >= 2 && group.totalSum > 0) {
           processedData.push({
             name: group.sessionName,
             score: parseFloat((group.totalSum / group.evalCount).toFixed(1)),

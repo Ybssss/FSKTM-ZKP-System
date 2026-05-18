@@ -4,9 +4,7 @@ require("dotenv").config();
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-const sessionController = require("./controllers/sessionController");
 const evaluationController = require("./controllers/evaluationController");
-const { getAssignments } = require("./controllers/userController"); // or authController
 const { authenticateToken } = require("./middleware/auth");
 // Initialize express app
 const app = express();
@@ -153,32 +151,5 @@ process.on("SIGINT", () => {
     });
   });
 });
-
-// 1. Timetables / Sessions
-app.post(
-  "/api/timetables/create",
-  authenticateToken,
-  sessionController.createSession,
-);
-app.get(
-  "/api/timetables/my",
-  authenticateToken,
-  sessionController.getMySessions,
-);
-
-// 2. Evaluations
-app.get(
-  "/api/evaluations",
-  authenticateToken,
-  evaluationController.getAllEvaluations,
-);
-app.post(
-  "/api/evaluations/submit",
-  authenticateToken,
-  evaluationController.submitEvaluation,
-);
-
-// 3. Users / Assignments (Fixes the 500 error!)
-app.get("/api/users/assignments", authenticateToken, getAssignments);
 
 module.exports = app;

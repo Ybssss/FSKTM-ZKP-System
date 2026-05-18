@@ -1,15 +1,10 @@
 import React, { useState, useEffect } from "react";
-import { useAuth } from "../../contexts/AuthContext";
-import api from "../../services/api"; // 👈 FIXED IMPORT
+import api from "../../services/api";
 import { useNavigate } from "react-router-dom";
 import {
   Calendar,
   Clock,
   MapPin,
-  Upload,
-  FileText,
-  AlertCircle,
-  CheckCircle,
   ChevronDown,
   ChevronUp,
   ExternalLink,
@@ -17,12 +12,10 @@ import {
 } from "lucide-react";
 
 export default function SchedulePage() {
-  const { user } = useAuth();
   const navigate = useNavigate();
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [uploadingDoc, setUploadingDoc] = useState(null);
   const [expandedId, setExpandedId] = useState(null);
 
   useEffect(() => {
@@ -36,7 +29,10 @@ export default function SchedulePage() {
       // 👈 FIXED AXIOS CALL
       const response = await api.get("/timetables/my");
       const sessionsData =
-        response.data.timetables || response.data.sessions || [];
+        response.data.timetables ||
+        response.data.sessions ||
+        response.data.data ||
+        [];
       setSessions(sessionsData);
     } catch (error) {
       console.error("❌ Error fetching sessions:", error);
@@ -46,35 +42,18 @@ export default function SchedulePage() {
     }
   };
 
-  const handleFileUpload = async (sessionId, event) => {
-    const file = event.target.files[0];
-    if (!file) return;
+  const isUpcoming = (date) => {
+    if (!date) return false;
 
-    try {
-      setUploadingDoc(sessionId);
-      const formData = new FormData();
-      formData.append("document", file);
-      formData.append("title", file.name);
-      formData.append("description", "Student submission");
+    const sessionDate = new Date(date);
+    if (Number.isNaN(sessionDate.getTime())) return false;
 
-      // 👈 FIXED UPLOAD CALL
-      await api.post(`/timetables/${sessionId}/documents`, formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+    const today = new Date();
+    sessionDate.setHours(0, 0, 0, 0);
+    today.setHours(0, 0, 0, 0);
 
-      alert("Document uploaded successfully!");
-      await fetchSessions();
-    } catch (error) {
-      console.error("❌ Upload failed:", error);
-      alert("Failed to upload document: " + error.message);
-    } finally {
-      setUploadingDoc(null);
-    }
+    return sessionDate >= today;
   };
-
-  const isDeadlinePassed = (deadline) =>
-    deadline && new Date(deadline) < new Date();
-  const isUpcoming = (date) => new Date(date) >= new Date();
   const toggleExpand = (id) => setExpandedId(expandedId === id ? null : id);
 
   if (loading) {
@@ -111,7 +90,7 @@ export default function SchedulePage() {
       <div>
         <h1 className="text-2xl font-bold text-gray-900">My Schedule</h1>
         <p className="text-gray-600 mt-1">
-          View your symposium sessions and upload required documents
+          View your symposium sessions, venue, time, and assigned panels.
         </p>
       </div>
 
@@ -135,13 +114,6 @@ export default function SchedulePage() {
                       {session.sessionType}
                     </p>
                   </div>
-                  {session.deadline && !isDeadlinePassed(session.deadline) && (
-                    <div className="flex items-center gap-2 px-3 py-1 bg-orange-50 text-orange-700 rounded-lg text-sm font-medium border border-orange-200">
-                      <AlertCircle className="w-4 h-4" />
-                      Deadline:{" "}
-                      {new Date(session.deadline).toLocaleDateString()}
-                    </div>
-                  )}
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
@@ -165,60 +137,13 @@ export default function SchedulePage() {
                   )}
                 </div>
 
-                <div className="border-t border-gray-200 pt-4">
-                  <h4 className="font-semibold text-gray-900 mb-3 text-sm">
-                    Your Documents:
-                  </h4>
-                  {session.studentDocuments?.filter(
-                    (d) =>
-                      d.uploadedBy === user.id || d.uploadedBy?._id === user.id,
-                  ).length > 0 ? (
-                    <div className="space-y-2 mb-3">
-                      {session.studentDocuments
-                        .filter(
-                          (d) =>
-                            d.uploadedBy === user.id ||
-                            d.uploadedBy?._id === user.id,
-                        )
-                        .map((doc, idx) => (
-                          <div
-                            key={idx}
-                            className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
-                          >
-                            <div className="flex items-center gap-3">
-                              <FileText className="w-5 h-5 text-gray-600" />{" "}
-                              <p className="text-sm font-medium text-gray-900">
-                                {doc.title}
-                              </p>
-                            </div>
-                            <CheckCircle className="w-5 h-5 text-green-600" />
-                          </div>
-                        ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-500 mb-3">
-                      No documents uploaded yet
-                    </p>
-                  )}
-
-                  {!isDeadlinePassed(session.deadline) && (
-                    <label className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 cursor-pointer transition-colors text-sm">
-                      {uploadingDoc === session._id ? (
-                        <span>Uploading...</span>
-                      ) : (
-                        <>
-                          <Upload className="w-4 h-4" />
-                          <span>Upload Document</span>
-                        </>
-                      )}
-                      <input
-                        type="file"
-                        className="hidden"
-                        onChange={(e) => handleFileUpload(session._id, e)}
-                        disabled={uploadingDoc === session._id}
-                      />
-                    </label>
-                  )}
+                <div className="border-t border-gray-200 pt-4 flex justify-end">
+                  <button
+                    onClick={() => navigate(`/student/sessions/${session._id}`)}
+                    className="px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm"
+                  >
+                    View Session Details <ExternalLink className="w-4 h-4" />
+                  </button>
                 </div>
               </div>
             ))}
@@ -305,8 +230,7 @@ export default function SchedulePage() {
                         }
                         className="px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm"
                       >
-                        View Full Details & Documents{" "}
-                        <ExternalLink className="w-4 h-4" />
+                        View Full Details <ExternalLink className="w-4 h-4" />
                       </button>
                     </div>
                   </div>

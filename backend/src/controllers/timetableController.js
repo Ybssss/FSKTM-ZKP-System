@@ -13,13 +13,11 @@ exports.createTimetable = async (req, res) => {
     });
     res.status(201).json({ success: true, timetable });
   } catch (error) {
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Error creating timetable",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Error creating timetable",
+      error: error.message,
+    });
   }
 };
 
@@ -65,8 +63,13 @@ exports.getMyTimetable = async (req, res) => {
     let query = {};
     const myId = req.user.id || req.user.userId || req.user._id;
 
-    if (req.user.role === "student") query.students = myId;
-    else if (req.user.role === "panel") query.panels = myId;
+    if (req.user.role === "student") {
+      query.students = myId;
+    }
+    // Allow Admins to fetch their personally assigned timetables just like Panels!
+    else if (req.user.role === "panel" || req.user.role === "admin") {
+      query.panels = myId;
+    }
 
     const timetables = await Timetable.find(query)
       .populate({

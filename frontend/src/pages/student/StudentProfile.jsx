@@ -1,20 +1,23 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../../contexts/AuthContext";
-import api from "../../services/api";
+import { userAPI } from "../../services/api";
 import {
   User,
   Mail,
   Shield,
   BookOpen,
   GraduationCap,
-  Award,
   Users,
+  CheckCircle2, // 👈 ADD THIS LINE
 } from "lucide-react";
 
 export default function StudentProfile() {
   const { user } = useAuth();
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [researchTitle, setResearchTitle] = useState("");
+  const [savingTitle, setSavingTitle] = useState(false);
+  const [message, setMessage] = useState("");
 
   useEffect(() => {
     fetchProfile();
@@ -24,8 +27,9 @@ export default function StudentProfile() {
     try {
       setLoading(true);
       // Fetch fresh user data to get populated supervisor
-      const res = await api.get(`/users/${user.id || user._id}`);
-      setProfileData(res.data.user);
+      const res = await userAPI.getMyProfile();
+      setProfileData(res.user);
+      setResearchTitle(res.user?.researchTitle || "");
     } catch (error) {
       console.error("Failed to load profile", error);
     } finally {
@@ -42,6 +46,22 @@ export default function StudentProfile() {
   }
 
   const displayUser = profileData || user;
+  const isZkpSecured =
+    displayUser.zkpRegistered === true || displayUser.zkpActive === true;
+  const normalizedTitle = researchTitle.replace(/\s+/g, " ").trim();
+  const originalTitle = String(displayUser.researchTitle || "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const titleTooShort =
+    normalizedTitle.length > 0 && normalizedTitle.length < 5;
+  const titleTooLong = normalizedTitle.length > 300;
+  const titleUnchanged = normalizedTitle === originalTitle;
+  const canSaveTitle =
+    normalizedTitle.length >= 5 &&
+    normalizedTitle.length <= 300 &&
+    !titleUnchanged &&
+    !savingTitle;
 
   // Safely extract supervisor name
   let svName = "Not Assigned";
@@ -55,6 +75,72 @@ export default function StudentProfile() {
       svName = "Pending System Link";
     }
   }
+
+  const saveResearchTitle = async () => {
+    try {
+      const cleanTitle = researchTitle.replace(/\s+/g, " ").trim();
+
+      setMessage({ type: "", text: "" });
+
+      if (!cleanTitle) {
+        setMessage({
+          type: "error",
+          text: "Research project title cannot be empty.",
+        });
+        return;
+      }
+
+      if (cleanTitle.length < 5) {
+        setMessage({
+          type: "error",
+          text: "Research project title must be at least 5 characters.",
+        });
+        return;
+      }
+
+      if (cleanTitle.length > 300) {
+        setMessage({
+          type: "error",
+          text: "Research project title must not exceed 300 characters.",
+        });
+        return;
+      }
+
+      if (cleanTitle === originalTitle) {
+        setMessage({
+          type: "error",
+          text: "No changes detected. Please edit the title before saving.",
+        });
+        return;
+      }
+
+      const confirmed = window.confirm(
+        "Save this as your Research Project Title?",
+      );
+
+      if (!confirmed) return;
+
+      setSavingTitle(true);
+
+      const res = await userAPI.updateMyResearchTitle(cleanTitle);
+
+      setProfileData(res.user);
+      setResearchTitle(res.user?.researchTitle || "");
+      setMessage({
+        type: "success",
+        text: "Research project title updated successfully.",
+      });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text:
+          error.response?.data?.message ||
+          "Failed to update research project title.",
+      });
+    } finally {
+      setSavingTitle(false);
+    }
+  };
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -135,9 +221,67 @@ export default function StudentProfile() {
                 <p className="text-xs font-bold text-indigo-800 uppercase tracking-widest mb-2 flex items-center gap-2">
                   <BookOpen className="w-4 h-4" /> Research Project Title
                 </p>
-                <p className="font-bold text-gray-900 text-lg leading-snug">
-                  {displayUser.researchTitle || "No title registered yet."}
-                </p>
+
+                <textarea
+                  value={researchTitle}
+                  onChange={(e) => {
+                    setResearchTitle(e.target.value);
+                    setMessage({ type: "", text: "" });
+                  }}
+                  maxLength={300}
+                  rows={3}
+                  className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 text-gray-900 font-medium ${
+                    titleTooShort || titleTooLong
+                      ? "border-red-300 bg-red-50"
+                      : "border-indigo-200"
+                  }`}
+                  placeholder="Enter your research project title"
+                />
+
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-3">
+                  <div>
+                    <p
+                      className={`text-xs font-medium ${
+                        titleTooLong ? "text-red-600" : "text-gray-500"
+                      }`}
+                    >
+                      {normalizedTitle.length}/300 characters
+                    </p>
+
+                    {titleTooShort && (
+                      <p className="text-xs text-red-600 mt-1">
+                        Title must be at least 5 characters.
+                      </p>
+                    )}
+
+                    {titleUnchanged && normalizedTitle.length > 0 && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        No changes detected.
+                      </p>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={saveResearchTitle}
+                    disabled={!canSaveTitle}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+                  >
+                    {savingTitle ? "Saving..." : "Save Title"}
+                  </button>
+                </div>
+
+                {message.text && (
+                  <div
+                    className={`mt-3 rounded-lg px-3 py-2 text-sm font-semibold ${
+                      message.type === "success"
+                        ? "bg-green-100 text-green-800 border border-green-200"
+                        : "bg-red-100 text-red-800 border border-red-200"
+                    }`}
+                  >
+                    {message.text}
+                  </div>
+                )}
               </div>
 
               <div className="bg-blue-50 p-5 rounded-lg border border-blue-100">
@@ -165,7 +309,7 @@ export default function StudentProfile() {
                   account.
                 </p>
               </div>
-              {displayUser.zkpRegistered ? (
+              {isZkpSecured ? (
                 <span className="px-3 py-1 bg-green-100 text-green-800 text-xs font-bold uppercase tracking-wider rounded-full flex items-center gap-1">
                   <CheckCircle2 className="w-3 h-3" /> Secured
                 </span>

@@ -8,7 +8,6 @@ import {
   Users,
   ArrowLeft,
   FileText,
-  CheckCircle2,
   QrCode,
   ClipboardCheck,
   Video,
@@ -16,7 +15,6 @@ import {
   History,
   Eye,
   ShieldAlert,
-  Edit,
 } from "lucide-react";
 import api from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
@@ -27,7 +25,10 @@ export default function SessionDetailPage() {
   const location = useLocation();
   const { user } = useAuth();
 
-  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+  const isAdmin = user?.role === "admin";
+  const isPanel = user?.role === "panel";
+  const isStudent = user?.role === "student";
+  const isStaff = isAdmin || isPanel;
 
   const [session, setSession] = useState(null);
   const [evaluations, setEvaluations] = useState([]);
@@ -55,6 +56,9 @@ export default function SessionDetailPage() {
         []
       ).find((s) => s.id === id || s._id === id);
       setSession(foundSession);
+      if (isStudent) {
+        return;
+      }
 
       const evalRes = await api.get("/evaluations");
       const allEvals = evalRes.data.data || evalRes.data.evaluations || [];
@@ -137,20 +141,27 @@ export default function SessionDetailPage() {
     setAttendanceActive(!attendanceActive);
   };
 
-  const isUrl = (string) => {
+  const getOnlineMeetingUrl = (value) => {
+    const rawValue = String(value || "").trim();
+
+    if (!rawValue) return "";
+
+    const normalizedUrl = /^https?:\/\//i.test(rawValue)
+      ? rawValue
+      : `https://${rawValue}`;
+
     try {
-      new URL(string);
-      return true;
+      new URL(normalizedUrl);
+      return normalizedUrl;
     } catch (_) {
-      return false;
+      return "";
     }
   };
 
   const isAssignedEvaluator = evaluations.some(
     (e) => e.evaluatorId?._id === user.id || e.evaluatorId === user.id,
   );
-  const canViewGateway =
-    isAdmin || isAssignedEvaluator || user?.role === "panel";
+  const canViewGateway = isStaff && (isAdmin || isAssignedEvaluator || isPanel);
 
   const isFutureSession = session
     ? new Date(
@@ -178,13 +189,23 @@ export default function SessionDetailPage() {
       </div>
     );
 
+  const sessionDateValue = session.schedule?.date || session.date;
+  const sessionDate = sessionDateValue ? new Date(sessionDateValue) : null;
+  const hasValidSessionDate =
+    sessionDate && !Number.isNaN(sessionDate.getTime());
+  const onlineMeetingRawValue = session.schedule?.venue || session.venue || "";
+  const onlineMeetingUrl = getOnlineMeetingUrl(onlineMeetingRawValue);
+
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-12">
       <button
-        onClick={() => navigate("/panel/sessions")}
+        onClick={() =>
+          navigate(isStudent ? "/student/schedule" : "/panel/sessions")
+        }
         className="flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-2 font-semibold transition-colors"
       >
-        <ArrowLeft className="w-5 h-5" /> Back to Timetable
+        <ArrowLeft className="w-5 h-5" />
+        {isStudent ? "Back to Schedule" : "Back to Timetable"}
       </button>
 
       {/* SESSION HEADER INFO */}
@@ -194,28 +215,32 @@ export default function SessionDetailPage() {
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
               {session.rubricId?.name ||
                 session.rubric ||
-                session.sessionType?.replace("_", " ")}
+                session.sessionType?.replaceAll("_", " ") ||
+                "Session Details"}
             </h1>
             <span className="inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-green-100 text-green-800 border border-green-200">
               {isFutureSession ? "UPCOMING SESSION" : "IN PROGRESS / PAST"}
             </span>
           </div>
 
-          {(() => {
-            const myPendingEval = evaluations.find(
-              (e) =>
-                (e.evaluatorId?._id === user.id || e.evaluatorId === user.id) &&
-                e.status === "PENDING",
-            );
-            return myPendingEval ? (
-              <button
-                onClick={() => goToEvaluation(myPendingEval._id)}
-                className="mt-4 sm:mt-0 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 font-bold shadow-md transition-transform hover:scale-105"
-              >
-                <FileText className="w-5 h-5" /> Evaluate Now
-              </button>
-            ) : null;
-          })()}
+          {isStaff &&
+            (() => {
+              const myPendingEval = evaluations.find(
+                (e) =>
+                  (e.evaluatorId?._id === user.id ||
+                    e.evaluatorId === user.id) &&
+                  e.status === "PENDING",
+              );
+
+              return myPendingEval ? (
+                <button
+                  onClick={() => goToEvaluation(myPendingEval._id)}
+                  className="mt-4 sm:mt-0 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 font-bold shadow-md transition-transform hover:scale-105"
+                >
+                  <FileText className="w-5 h-5" /> Evaluate Now
+                </button>
+              ) : null;
+            })()}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-sm mt-6 pt-6 border-t border-gray-100">
@@ -226,14 +251,14 @@ export default function SessionDetailPage() {
             <div>
               <p className="text-xs font-bold text-gray-500 uppercase">Date</p>
               <p className="font-semibold text-gray-900">
-                {new Date(
-                  session.schedule?.date || session.date,
-                ).toLocaleDateString("en-MY", {
-                  weekday: "long",
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                })}
+                {hasValidSessionDate
+                  ? sessionDate.toLocaleDateString("en-MY", {
+                      weekday: "long",
+                      year: "numeric",
+                      month: "long",
+                      day: "numeric",
+                    })
+                  : "Date TBA"}
               </p>
             </div>
           </div>
@@ -244,8 +269,11 @@ export default function SessionDetailPage() {
             <div>
               <p className="text-xs font-bold text-gray-500 uppercase">Time</p>
               <p className="font-semibold text-gray-900">
-                {session.schedule?.time || session.time || session.startTime}
-                {session.endTime ? ` - ${session.endTime}` : ""}
+                {session.schedule?.time ||
+                  session.time ||
+                  (session.startTime
+                    ? `${session.startTime}${session.endTime ? ` - ${session.endTime}` : ""}`
+                    : "Time TBA")}
               </p>
             </div>
           </div>
@@ -255,20 +283,20 @@ export default function SessionDetailPage() {
             </div>
             <div>
               <p className="text-xs font-bold text-gray-500 uppercase">
-                Venue / Link
+                Online Meeting
               </p>
               <div className="font-semibold text-gray-900">
-                {isUrl(session.schedule?.venue || session.venue) ? (
+                {onlineMeetingUrl ? (
                   <a
-                    href={session.schedule?.venue || session.venue}
+                    href={onlineMeetingUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="flex items-center gap-1 text-blue-600 hover:underline"
+                    className="inline-flex items-center gap-1 text-blue-600 hover:underline"
                   >
-                    <Video className="w-4 h-4" /> Join Online
+                    <Video className="w-4 h-4" /> Join Online Meeting
                   </a>
                 ) : (
-                  session.schedule?.venue || session.venue || "TBD"
+                  <span className="text-gray-500">Meeting link TBA</span>
                 )}
               </div>
             </div>
@@ -290,6 +318,50 @@ export default function SessionDetailPage() {
             </div>
           </div>
         </div>
+      </div>
+
+      {/* PANEL EXAMINERS - visible to students and staff */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+        <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
+          <Users className="w-5 h-5 text-indigo-600" /> Panel Examiners
+        </h2>
+
+        {session.panels?.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {session.panels.map((panel, index) => (
+              <div
+                key={panel._id || panel.userId || index}
+                className="p-4 rounded-lg border border-gray-200 bg-gray-50"
+              >
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">
+                  Panel {index + 1}
+                </p>
+                <p className="font-bold text-gray-900 mt-1">
+                  {panel.name || "Panel name unavailable"}
+                </p>
+                {panel.email && (
+                  <p className="text-sm text-gray-600 mt-1">{panel.email}</p>
+                )}
+                {panel.expertiseTags?.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {panel.expertiseTags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="px-2 py-1 bg-indigo-50 text-indigo-700 text-xs font-semibold rounded border border-indigo-100"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-500 text-sm">
+            Panel examiners are not assigned yet.
+          </p>
+        )}
       </div>
 
       {canViewGateway && (
@@ -341,161 +413,165 @@ export default function SessionDetailPage() {
         </div>
       )}
 
-      {/* CURRENT SESSION EXAMINER SUBMISSIONS */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-          <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
-            <ClipboardCheck className="w-5 h-5 text-indigo-600" /> Current
-            Session Submissions
-          </h2>
-        </div>
-
-        {evaluations.length === 0 ? (
-          <div className="p-8 text-center text-gray-500 font-bold">
-            No evaluation rubrics linked to this session yet.
+      {isStaff && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          {/* CURRENT SESSION EXAMINER SUBMISSIONS */}
+          <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
+            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <ClipboardCheck className="w-5 h-5 text-indigo-600" /> Current
+              Session Submissions
+            </h2>
           </div>
-        ) : (
-          <div className="divide-y divide-gray-100">
-            {evaluations.map((ev) => (
-              <div
-                key={ev._id}
-                className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white hover:bg-gray-50 transition-colors"
-              >
-                <div>
-                  <p className="font-bold text-gray-900 text-lg">
-                    {ev.evaluatorId?.name || "Unknown Panel"}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {ev.evaluatorId?.email}
-                  </p>
-                </div>
 
-                <div className="flex items-center gap-4">
-                  {ev.status === "COMPLETED" ? (
-                    <>
-                      <div className="text-right">
-                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
-                          Final Score
-                        </p>
-                        <p
-                          className={`px-4 py-1.5 rounded font-black border shadow-sm ${getScoreColor(ev.totalMarks)}`}
-                        >
-                          {ev.sessionType === "PROGRESS_ASSESSMENT"
-                            ? "Text Feedback"
-                            : `${ev.totalMarks?.toFixed(2)}%`}
-                        </p>
-                      </div>
-
-                      {/* 🔴 NEW: Allows panel to view/update their current session eval */}
-                      <button
-                        onClick={() => goToEvaluation(ev._id)}
-                        className="ml-2 flex items-center gap-1 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-4 py-2.5 rounded-lg font-bold text-sm transition-colors"
-                      >
-                        <Eye className="w-4 h-4" /> View / Edit
-                      </button>
-                    </>
-                  ) : (
-                    <span
-                      className={`flex items-center gap-1.5 px-4 py-2.5 rounded-lg font-bold text-sm ${isFutureSession ? "text-gray-700 bg-gray-100 border border-gray-300" : "text-orange-700 bg-orange-50 border border-orange-200"}`}
-                    >
-                      {isFutureSession ? (
-                        <Lock className="w-4 h-4" />
-                      ) : (
-                        <Clock className="w-4 h-4" />
-                      )}
-                      {isFutureSession
-                        ? "Session Not Yet Started"
-                        : "Pending Submission"}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* HISTORICAL FEEDBACK VAULT */}
-      <div className="bg-gray-900 rounded-xl shadow-lg border border-gray-700 overflow-hidden mt-8">
-        <div className="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            <History className="w-5 h-5 text-indigo-400" /> Historical Feedback
-            Vault
-          </h2>
-          <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest bg-gray-800 px-3 py-1 rounded-full border border-gray-700 hidden sm:block">
-            Anti-Plagiarism & Progression Check
-          </span>
-        </div>
-
-        {historicalEvals.length === 0 ? (
-          <div className="p-8 text-center text-gray-400 font-medium">
-            No previous completed evaluations found for this candidate.
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-800">
-            {historicalEvals.map((ev) => {
-              const isOwner =
-                ev.evaluatorId?._id === user.id || ev.evaluatorId === user.id;
-              const isGranted = isAdmin || isOwner;
-              const request = permissions.find(
-                (p) => p.targetEvaluationId === ev._id,
-              );
-
-              return (
+          {evaluations.length === 0 ? (
+            <div className="p-8 text-center text-gray-500 font-bold">
+              No evaluation rubrics linked to this session yet.
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-100">
+              {evaluations.map((ev) => (
                 <div
                   key={ev._id}
-                  className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gray-900 hover:bg-gray-800 transition-colors"
+                  className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white hover:bg-gray-50 transition-colors"
                 >
                   <div>
-                    <p className="font-bold text-gray-100 text-lg flex items-center gap-2">
-                      {ev.sessionType?.replace("_", " ")}
-                      {!isGranted && request?.status !== "APPROVED" && (
-                        <Lock className="w-4 h-4 text-gray-500" />
-                      )}
+                    <p className="font-bold text-gray-900 text-lg">
+                      {ev.evaluatorId?.name || "Unknown Panel"}
                     </p>
-                    <p className="text-sm text-gray-400 mt-1">
-                      Evaluator:{" "}
-                      <span className="text-gray-300 font-semibold">
-                        {ev.evaluatorId?.name || "Unknown"}
-                      </span>
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      Date:{" "}
-                      {new Date(ev.updatedAt || ev.date).toLocaleDateString()}
+                    <p className="text-sm text-gray-500">
+                      {ev.evaluatorId?.email}
                     </p>
                   </div>
 
-                  <div className="flex items-center gap-3">
-                    {isGranted || request?.status === "APPROVED" ? (
-                      <button
-                        onClick={() => goToEvaluation(ev._id)}
-                        className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-md"
-                      >
-                        <Eye className="w-4 h-4" /> View Full Report
-                      </button>
-                    ) : request?.status === "PENDING" ? (
-                      <span className="px-5 py-2.5 bg-gray-800 text-yellow-500 font-bold rounded-lg border border-gray-700 flex items-center gap-2">
-                        <Clock className="w-4 h-4" /> Request Pending...
-                      </span>
-                    ) : request?.status === "REJECTED" ? (
-                      <span className="px-5 py-2.5 bg-gray-800 text-red-500 font-bold rounded-lg border border-gray-700 flex items-center gap-2">
-                        <ShieldAlert className="w-4 h-4" /> Access Denied
-                      </span>
+                  <div className="flex items-center gap-4">
+                    {ev.status === "COMPLETED" ? (
+                      <>
+                        <div className="text-right">
+                          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
+                            Final Score
+                          </p>
+                          <p
+                            className={`px-4 py-1.5 rounded font-black border shadow-sm ${getScoreColor(ev.totalMarks)}`}
+                          >
+                            {ev.sessionType === "PROGRESS_ASSESSMENT"
+                              ? "Text Feedback"
+                              : `${ev.totalMarks?.toFixed(2)}%`}
+                          </p>
+                        </div>
+
+                        {/* 🔴 NEW: Allows panel to view/update their current session eval */}
+                        <button
+                          onClick={() => goToEvaluation(ev._id)}
+                          className="ml-2 flex items-center gap-1 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-4 py-2.5 rounded-lg font-bold text-sm transition-colors"
+                        >
+                          <Eye className="w-4 h-4" /> View / Edit
+                        </button>
+                      </>
                     ) : (
-                      <button
-                        onClick={() => handleRequestAccess(ev)}
-                        className="px-5 py-2.5 bg-gray-800 text-indigo-400 font-bold rounded-lg hover:bg-gray-700 border border-gray-700 transition-colors flex items-center gap-2"
+                      <span
+                        className={`flex items-center gap-1.5 px-4 py-2.5 rounded-lg font-bold text-sm ${isFutureSession ? "text-gray-700 bg-gray-100 border border-gray-300" : "text-orange-700 bg-orange-50 border border-orange-200"}`}
                       >
-                        <Lock className="w-4 h-4" /> Request Access
-                      </button>
+                        {isFutureSession ? (
+                          <Lock className="w-4 h-4" />
+                        ) : (
+                          <Clock className="w-4 h-4" />
+                        )}
+                        {isFutureSession
+                          ? "Session Not Yet Started"
+                          : "Pending Submission"}
+                      </span>
                     )}
                   </div>
                 </div>
-              );
-            })}
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {isStaff && (
+        <div className="bg-gray-900 rounded-xl shadow-lg border border-gray-700 overflow-hidden mt-8">
+          {/* HISTORICAL FEEDBACK VAULT */}
+          <div className="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              <History className="w-5 h-5 text-indigo-400" /> Historical
+              Feedback Vault
+            </h2>
+            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest bg-gray-800 px-3 py-1 rounded-full border border-gray-700 hidden sm:block">
+              Anti-Plagiarism & Progression Check
+            </span>
           </div>
-        )}
-      </div>
+
+          {historicalEvals.length === 0 ? (
+            <div className="p-8 text-center text-gray-400 font-medium">
+              No previous completed evaluations found for this candidate.
+            </div>
+          ) : (
+            <div className="divide-y divide-gray-800">
+              {historicalEvals.map((ev) => {
+                const isOwner =
+                  ev.evaluatorId?._id === user.id || ev.evaluatorId === user.id;
+                const isGranted = isAdmin || isOwner;
+                const request = permissions.find(
+                  (p) => p.targetEvaluationId === ev._id,
+                );
+
+                return (
+                  <div
+                    key={ev._id}
+                    className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gray-900 hover:bg-gray-800 transition-colors"
+                  >
+                    <div>
+                      <p className="font-bold text-gray-100 text-lg flex items-center gap-2">
+                        {ev.sessionType?.replaceAll("_", " ") || "Evaluation"}
+                        {!isGranted && request?.status !== "APPROVED" && (
+                          <Lock className="w-4 h-4 text-gray-500" />
+                        )}
+                      </p>
+                      <p className="text-sm text-gray-400 mt-1">
+                        Evaluator:{" "}
+                        <span className="text-gray-300 font-semibold">
+                          {ev.evaluatorId?.name || "Unknown"}
+                        </span>
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        Date:{" "}
+                        {new Date(ev.updatedAt || ev.date).toLocaleDateString()}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      {isGranted || request?.status === "APPROVED" ? (
+                        <button
+                          onClick={() => goToEvaluation(ev._id)}
+                          className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-md"
+                        >
+                          <Eye className="w-4 h-4" /> View Full Report
+                        </button>
+                      ) : request?.status === "PENDING" ? (
+                        <span className="px-5 py-2.5 bg-gray-800 text-yellow-500 font-bold rounded-lg border border-gray-700 flex items-center gap-2">
+                          <Clock className="w-4 h-4" /> Request Pending...
+                        </span>
+                      ) : request?.status === "REJECTED" ? (
+                        <span className="px-5 py-2.5 bg-gray-800 text-red-500 font-bold rounded-lg border border-gray-700 flex items-center gap-2">
+                          <ShieldAlert className="w-4 h-4" /> Access Denied
+                        </span>
+                      ) : (
+                        <button
+                          onClick={() => handleRequestAccess(ev)}
+                          className="px-5 py-2.5 bg-gray-800 text-indigo-400 font-bold rounded-lg hover:bg-gray-700 border border-gray-700 transition-colors flex items-center gap-2"
+                        >
+                          <Lock className="w-4 h-4" /> Request Access
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -3,7 +3,6 @@ const router = express.Router();
 const { authenticateToken, requireRole } = require("../middleware/auth");
 const evaluationController = require("../controllers/evaluationController");
 
-// Import our updated bulletproof timetable controller
 const {
   createTimetable,
   getTimetables,
@@ -20,115 +19,54 @@ const {
 const matchingController = require("../controllers/matchingController");
 const expertiseService = require("../services/expertiseService");
 
-// All routes require authentication
 router.use(authenticateToken);
 
-// ==========================================
-// VIEWING ROUTES (All Authenticated Users)
-// ==========================================
+router.get("/my", getMyTimetable);
 
-// 1. Get Sessions (Uses the bulletproof query we wrote)
-router.get("/my", authenticateToken, getMyTimetable);
+router.post("/bulk", requireRole(["admin"]), createBulkTimetables);
+router.post("/create", requireRole(["admin"]), createTimetable);
+router.delete("/:id", requireRole(["admin"]), deleteTimetable);
 
-// 2. Create Bulk Sessions (Uses the auto-evaluate generator!)
 router.post(
-  "/bulk",
-  authenticateToken,
-  requireRole("admin", "superadmin"),
-  createBulkTimetables,
+  "/:id/documents",
+  requireRole(["student", "admin"]),
+  uploadDocument,
 );
-
-// 3. Create Single Session
-router.post(
-  "/create",
-  authenticateToken,
-  requireRole("admin", "superadmin"),
-  createTimetable,
-);
-
-// 4. Delete Session (Deletes linked evaluations too!)
-router.delete(
-  "/:id",
-  authenticateToken,
-  requireRole("admin", "superadmin"),
-  deleteTimetable,
-);
-
-// ==========================================
-// DOCUMENT & NOTES ROUTES
-// ==========================================
-router.post("/:id/documents", requireRole("student", "admin"), uploadDocument);
 router.delete(
   "/:id/documents/:documentId",
-  requireRole("student", "admin"),
+  requireRole(["student", "admin"]),
   deleteDocument,
 );
-router.post("/:id/notes", requireRole("panel", "admin"), addPanelNotes);
+router.post("/:id/notes", requireRole(["panel", "admin"]), addPanelNotes);
 
-// ==========================================
-// EXPERTISE & PANEL MATCHING ROUTES
-// ==========================================
-router.get(
-  "/expertise/:userId",
-  requireRole("admin", "superadmin"),
-  async (req, res) => {
-    try {
-      const { userId } = req.params;
-      const expertise = await expertiseService.fetchUserExpertise(userId);
-      res.json({ success: true, userId, expertise, count: expertise.length });
-    } catch (error) {
-      res
-        .status(500)
-        .json({
-          success: false,
-          message: "Error fetching expertise",
-          error: error.message,
-        });
-    }
-  },
-);
+router.get("/expertise/:userId", requireRole(["admin"]), async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const expertise = await expertiseService.fetchUserExpertise(userId);
+    res.json({ success: true, userId, expertise, count: expertise.length });
+  } catch (error) {
+    res
+      .status(500)
+      .json({
+        success: false,
+        message: "Error fetching expertise",
+        error: error.message,
+      });
+  }
+});
 
-// AI Gemini Panel Matcher
 router.post(
   "/match-expertise",
-  requireRole("admin", "superadmin"),
+  requireRole(["admin"]),
   matchingController.matchExpertise,
 );
 
-// ==========================================
-// SCHEDULING & ADMIN ROUTES (STRICT)
-// ==========================================
+router.put("/:id", requireRole(["admin"]), updateTimetable);
+router.get("/", requireRole(["admin"]), getTimetables);
+router.get("/:id", getTimetableById);
 
-// Update Timetable (Contains the Magic Panel Swap logic!)
-router.put(
-  "/:id",
-  authenticateToken,
-  requireRole("admin", "superadmin"),
-  updateTimetable,
-);
-
-// Backup GET routes
-router.get(
-  "/",
-  authenticateToken,
-  requireRole("admin", "superadmin"),
-  getTimetables,
-);
-router.get("/:id", authenticateToken, getTimetableById);
-
-// ==========================================
-// EVALUATION ROUTES
-// ==========================================
-router.post(
-  "/submit",
-  authenticateToken,
-  evaluationController.submitEvaluation,
-);
-router.get(
-  "/search",
-  authenticateToken,
-  evaluationController.searchHistoricalComments,
-);
-router.get("/", authenticateToken, evaluationController.getAllEvaluations);
+router.post("/submit", evaluationController.submitEvaluation);
+router.get("/search", evaluationController.searchHistoricalComments);
+router.get("/", evaluationController.getAllEvaluations);
 
 module.exports = router;

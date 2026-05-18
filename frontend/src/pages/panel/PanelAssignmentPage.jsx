@@ -69,6 +69,10 @@ export default function PanelAssignmentPage() {
         }
       }
       alert(`${student.name} unassigned successfully.`);
+
+      setRecommendations([]);
+      setSelectedPanels([]);
+
       loadData(); // Refresh list
     } catch (err) {
       alert("Failed to unassign.");
@@ -376,22 +380,42 @@ export default function PanelAssignmentPage() {
             )}
           </div>
 
-          <button
-            onClick={handleExpertiseMatching}
-            disabled={matchingExpertise || !researchTitle.trim()}
-            className="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-bold hover:bg-indigo-700 disabled:bg-indigo-300 flex items-center justify-center gap-2 shadow-md transition-colors"
-          >
-            {matchingExpertise ? (
-              <>
-                <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>{" "}
-                Searching Directory...
-              </>
-            ) : (
-              <>
-                <Search className="w-5 h-5" /> Find Expert Panels
-              </>
-            )}
-          </button>
+          {selectedStudentForMatching?.assignedPanels?.length > 0 ? (
+            <div className="bg-orange-50 border border-orange-200 p-4 rounded-xl flex items-start gap-3 shadow-sm mb-4">
+              <UserMinus className="w-6 h-6 text-orange-600 shrink-0" />
+              <div>
+                <h3 className="font-bold text-orange-900">
+                  Student Currently Assigned
+                </h3>
+                <p className="text-sm text-orange-800 mt-1">
+                  This student already has panels assigned. To generate new AI
+                  matches, you must first remove their existing assignments
+                  using the red button on their directory card.
+                </p>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={handleExpertiseMatching}
+              disabled={
+                matchingExpertise ||
+                !researchTitle.trim() ||
+                !selectedStudentForMatching
+              }
+              className="w-full bg-indigo-600 text-white py-3.5 rounded-xl font-bold hover:bg-indigo-700 disabled:bg-indigo-300 flex items-center justify-center gap-2 shadow-md transition-colors"
+            >
+              {matchingExpertise ? (
+                <>
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>{" "}
+                  Searching Directory...
+                </>
+              ) : (
+                <>
+                  <Search className="w-5 h-5" /> Find Expert Panels
+                </>
+              )}
+            </button>
+          )}
 
           {/* RESULTS */}
           <div className="flex-1 overflow-y-auto mt-6 pr-2 pb-24">
