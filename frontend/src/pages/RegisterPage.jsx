@@ -31,6 +31,8 @@ export default function RegisterPage() {
 
       // Pass the registrationCode to the AuthContext
       await register(userId, registrationCode);
+      localStorage.setItem("zkp-device-refresh", String(Date.now()));
+      window.dispatchEvent(new Event("zkp-device-registered"));
 
       console.log("✅ Registration successful!");
       setSuccess(true);

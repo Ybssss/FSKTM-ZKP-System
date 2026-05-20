@@ -34,6 +34,26 @@ export default function DeviceManagementPage() {
 
   useEffect(() => {
     fetchDevices();
+
+    const refreshDevices = () => {
+      fetchDevices();
+    };
+
+    const refreshFromStorage = (event) => {
+      if (event.key === "zkp-device-refresh") {
+        fetchDevices();
+      }
+    };
+
+    window.addEventListener("zkp-device-registered", refreshDevices);
+    window.addEventListener("focus", refreshDevices);
+    window.addEventListener("storage", refreshFromStorage);
+
+    return () => {
+      window.removeEventListener("zkp-device-registered", refreshDevices);
+      window.removeEventListener("focus", refreshDevices);
+      window.removeEventListener("storage", refreshFromStorage);
+    };
   }, []);
 
   const fetchDevices = async () => {
@@ -109,6 +129,10 @@ export default function DeviceManagementPage() {
 
       // 4. Send the encrypted package to the server
       await authAPI.submitEncryptedKey(syncCode, encryptedPayload);
+
+      localStorage.setItem("zkp-device-refresh", String(Date.now()));
+      window.dispatchEvent(new Event("zkp-device-registered"));
+      await fetchDevices();
 
       setSyncStatus("success");
       setTimeout(() => {
@@ -316,7 +340,16 @@ export default function DeviceManagementPage() {
       </div>
 
       {/* QR Scanner Modal */}
-      {showScanner && <DeviceScanner onClose={() => setShowScanner(false)} />}
+      {showScanner && (
+        <DeviceScanner
+          onClose={() => setShowScanner(false)}
+          onDeviceRegistered={async () => {
+            localStorage.setItem("zkp-device-refresh", String(Date.now()));
+            window.dispatchEvent(new Event("zkp-device-registered"));
+            await fetchDevices();
+          }}
+        />
+      )}
 
       {/* 6-DIGIT MANUAL SYNC MODAL */}
       {showSyncModal && (
