@@ -401,28 +401,6 @@ export const qrAPI = {
 };
 
 // ==========================================
-// QR CODE API
-// ==========================================
-export const qrAPI = {
-  generate: async (timetableId) => {
-    const response = await api.post(`/qr/generate/${timetableId}`);
-    return response.data;
-  },
-  verify: async (timetableId, token, studentId) => {
-    const response = await api.post("/qr/verify", {
-      timetableId,
-      token,
-      studentId,
-    });
-    return response.data;
-  },
-  get: async (timetableId) => {
-    const response = await api.get(`/qr/${timetableId}`);
-    return response.data;
-  },
-};
-
-// ==========================================
 // ANALYTICS API - FIXED!
 // ==========================================
 export const analyticsAPI = {
