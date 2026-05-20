@@ -2,9 +2,6 @@
 const mongoose = require("mongoose");
 const dotenv = require("dotenv");
 const path = require("path");
-const axios = require("axios");
-const cheerio = require("cheerio");
-const https = require("https");
 
 const User = require("../models/User");
 const Timetable = require("../models/Timetable");
@@ -599,80 +596,84 @@ const seedDatabase = async () => {
     ];
     let allUsers = await User.create(adminUsers);
 
-    // 3. Scrape FSKTM Lecturers (Panels)
-    console.log("🌐 Fetching FSKTM Lecturers (Panels)...");
-    const scrapedPanels = [];
-    try {
-      const agent = new https.Agent({ rejectUnauthorized: false });
-      const response = await axios.get(
-        "https://community.uthm.edu.my/offices/info/28",
-        { httpsAgent: agent, timeout: 10000 },
-      );
-      const $ = cheerio.load(response.data);
+    // 3. Create Stable Demo Panels
+    console.log("👥 Seeding 5 Demo Panel Accounts...");
 
-      $("a, h4, h5, h6, strong, td, span, div").each((index, element) => {
-        let text = $(element).text().trim().replace(/\s+/g, " ");
-        if (
-          /^(PROF|DR|TS|EN|PN|IR|ASSOC)\.?/i.test(text) &&
-          text.length > 10 &&
-          text.length < 60
-        ) {
-          if (!scrapedPanels.some((p) => p.name === text)) {
-            const cleanName = text
-              .toLowerCase()
-              .replace(/[^a-z ]/g, "")
-              .split(" ");
-            const emailPrefix =
-              cleanName[cleanName.length - 1] || `staff${scrapedPanels.length}`;
-            scrapedPanels.push({
-              userId: `fsktm_stf_${scrapedPanels.length + 1}`,
-              name: text,
-              email: `${emailPrefix}${scrapedPanels.length + 1}@uthm.edu.my`,
-              role: "panel",
-              registrationCode: null,
-              // 🔴 FIXED: Uses the new Array structure for tags
-              expertiseTags: ["Information Technology", "FSKTM General"],
-            });
-          }
-        }
-      });
-    } catch (err) {}
+    const demoPanels = [
+      {
+        userId: "panel_zkp",
+        name: "Dr. Farhan ZKP Security",
+        email: "panel.zkp@uthm.edu.my",
+        role: "panel",
+        profession: "Senior Lecturer",
+        registrationCode: "PANEL001",
+        expertiseTags: [
+          "Zero-Knowledge Proof",
+          "Cryptography",
+          "Passwordless Authentication",
+          "Information Security",
+        ],
+      },
+      {
+        userId: "panel_ai",
+        name: "Dr. Aisyah AI Learning",
+        email: "panel.ai@uthm.edu.my",
+        role: "panel",
+        profession: "Senior Lecturer",
+        registrationCode: "PANEL002",
+        expertiseTags: [
+          "Artificial Intelligence",
+          "Machine Learning",
+          "Deep Learning",
+          "Data Mining",
+        ],
+      },
+      {
+        userId: "panel_blockchain",
+        name: "Dr. Kumar Blockchain Systems",
+        email: "panel.blockchain@uthm.edu.my",
+        role: "panel",
+        profession: "Senior Lecturer",
+        registrationCode: "PANEL003",
+        expertiseTags: [
+          "Blockchain",
+          "Smart Contract",
+          "Healthcare Information Systems",
+          "Distributed Ledger",
+        ],
+      },
+      {
+        userId: "panel_web",
+        name: "Ts. Nurul Web Engineering",
+        email: "panel.web@uthm.edu.my",
+        role: "panel",
+        profession: "Senior Lecturer",
+        registrationCode: "PANEL004",
+        expertiseTags: [
+          "Web Application",
+          "Software Engineering",
+          "React",
+          "Node.js",
+          "Usability Testing",
+        ],
+      },
+      {
+        userId: "panel_network",
+        name: "Ir. Hakim Network Computing",
+        email: "panel.network@uthm.edu.my",
+        role: "panel",
+        profession: "Senior Lecturer",
+        registrationCode: "PANEL005",
+        expertiseTags: [
+          "Computer Networks",
+          "IoT",
+          "Cloud Computing",
+          "Distributed Systems",
+        ],
+      },
+    ];
 
-    // Fallback Panels if Scraper fails
-    if (scrapedPanels.length < 4) {
-      scrapedPanels.push(
-        {
-          userId: "stf_1",
-          name: "PROF. DR. ABD SAMAD",
-          email: "abdsamad@uthm.edu.my",
-          role: "panel",
-          expertiseTags: ["Software Engineering", "AI"],
-        },
-        {
-          userId: "stf_2",
-          name: "DR. CIK FERESA",
-          email: "feresa@uthm.edu.my",
-          role: "panel",
-          expertiseTags: ["Information Security", "Cryptography"],
-        },
-        {
-          userId: "stf_3",
-          name: "DR. EZAK FADZRIN",
-          email: "ezak@uthm.edu.my",
-          role: "panel",
-          expertiseTags: ["Multimedia System", "Computer Graphics"],
-        },
-        {
-          userId: "stf_4",
-          name: "TS. AHMAD TAJUDIN",
-          email: "tajudin@uthm.edu.my",
-          role: "panel",
-          expertiseTags: ["Web Tech", "Networking"],
-        },
-      );
-    }
-
-    const createdPanels = await User.create(scrapedPanels);
+    const createdPanels = await User.create(demoPanels);
     allUsers = [...allUsers, ...createdPanels];
 
     // 4. Create Students and Assign Supervisors
@@ -688,6 +689,8 @@ const seedDatabase = async () => {
         registrationCode: "111111",
         program: "Master of Information Technology",
         researchTitle: "Optimization of Zero-Knowledge Proofs",
+        researchAbstract:
+          "This research focuses on optimizing zero-knowledge proof authentication for passwordless login in a web-based evaluation system. The study evaluates privacy, authentication reliability, and usability for academic assessment workflows.",
         supervisorId: createdPanels[0]._id,
       },
       {
@@ -699,6 +702,9 @@ const seedDatabase = async () => {
         registrationCode: "222222",
         program: "PhD in Computer Science",
         researchTitle: "Advanced Deep Learning Models",
+        researchAbstract:
+          "This research explores advanced deep learning models for intelligent prediction and classification tasks. The study compares model accuracy, interpretability, and deployment suitability in real-world data environments.",
+
         supervisorId: createdPanels[1]._id,
       },
       {
@@ -710,6 +716,9 @@ const seedDatabase = async () => {
         registrationCode: "333333",
         program: "Master of Software Engineering",
         researchTitle: "Blockchain Healthcare Systems",
+        researchAbstract:
+          "This study proposes a blockchain-based healthcare information system to improve data integrity, auditability, and secure sharing between healthcare stakeholders.",
+
         supervisorId: createdPanels[2]._id,
       },
       {
@@ -721,6 +730,8 @@ const seedDatabase = async () => {
         registrationCode: "444444",
         program: "Master of Information Security",
         researchTitle: "Secure Online Evaluation Workflow Using ZKP",
+        researchAbstract:
+          "This research designs a secure online evaluation workflow using zero-knowledge proof authentication. The study focuses on access control, role-based permission, historical evaluation protection, and anti-plagiarism support.",
         supervisorId: createdPanels[1]._id,
       },
     ];
@@ -763,6 +774,55 @@ const seedDatabase = async () => {
         });
       }
     };
+
+    await User.findByIdAndUpdate(getUserId("siti@student.uthm.edu.my"), {
+      $addToSet: {
+        assignedPanels: {
+          $each: [
+            { panelId: createdPanels[0]._id },
+            { panelId: createdPanels[3]._id },
+          ],
+        },
+      },
+    });
+
+    await User.findByIdAndUpdate(getUserId("meiling@student.uthm.edu.my"), {
+      $addToSet: {
+        assignedPanels: {
+          $each: [
+            { panelId: createdPanels[0]._id },
+            { panelId: createdPanels[4]._id },
+          ],
+        },
+      },
+    });
+
+    await User.findByIdAndUpdate(getUserId("ali@student.uthm.edu.my"), {
+      $addToSet: {
+        assignedPanels: {
+          $each: [
+            { panelId: createdPanels[4]._id },
+            { panelId: createdPanels[3]._id },
+          ],
+        },
+      },
+    });
+
+    await syncPanelStudentAssignments(getUserId("siti@student.uthm.edu.my"), [
+      createdPanels[0]._id,
+      createdPanels[3]._id,
+    ]);
+
+    await syncPanelStudentAssignments(
+      getUserId("meiling@student.uthm.edu.my"),
+      [createdPanels[0]._id, createdPanels[4]._id],
+    );
+
+    await syncPanelStudentAssignments(getUserId("ali@student.uthm.edu.my"), [
+      createdPanels[4]._id,
+      createdPanels[3]._id,
+    ]);
+
     await syncPanelStudentAssignments(getUserId("ali@student.uthm.edu.my"), [
       getUserId("samihah@uthm.edu.my"),
       createdPanels[1]._id,
@@ -783,7 +843,7 @@ const seedDatabase = async () => {
       [createdPanels[1]._id, createdPanels[2]._id],
     );
     // 5. Create Sessions (Using Timetable Model)
-    console.log("📅 Seeding 10 Evaluation Sessions...");
+    console.log("📅 Seeding Evaluation Sessions...");
 
     // 🔴 FIXED: Added rubricId directly to the Timetable schema to prevent frontend errors
     const yesterday = new Date();
@@ -954,7 +1014,99 @@ const seedDatabase = async () => {
       },
     ];
 
-    const createdSessions = await Timetable.create(sessionsData);
+    sessionsData.push(
+      {
+        students: [getUserId("siti@student.uthm.edu.my")],
+        panels: [createdPanels[0]._id, createdPanels[3]._id],
+        title: "Demo Access Session - Siti Nuraisyah",
+        sessionType: "PROGRESS_ASSESSMENT",
+        rubricId: progressRubric._id,
+        date: inThreeDays,
+        startTime: "09:00",
+        endTime: "10:00",
+        venue: "https://meet.google.com/demo-siti-zkp-web",
+        status: "scheduled",
+      },
+      {
+        students: [getUserId("meiling@student.uthm.edu.my")],
+        panels: [createdPanels[0]._id, createdPanels[4]._id],
+        title: "Demo Access Session - Tan Mei Ling",
+        sessionType: "PRE_VIVA",
+        rubricId: preVivaRubric._id,
+        date: inTwoWeeks,
+        startTime: "15:00",
+        endTime: "16:00",
+        venue: "https://meet.google.com/demo-meiling-zkp-network",
+        status: "scheduled",
+      },
+      {
+        students: [getUserId("ali@student.uthm.edu.my")],
+        panels: [createdPanels[4]._id, createdPanels[3]._id],
+        title: "Demo Access Session - Muhammad Ali",
+        sessionType: "PROPOSAL_DEFENSE",
+        rubricId: proposalRubric._id,
+        date: inOneMonth,
+        startTime: "14:00",
+        endTime: "15:00",
+        venue: "https://meet.google.com/demo-ali-network-web",
+        status: "scheduled",
+      },
+    );
+
+    const enrichedSessionsData = sessionsData.map((session, index) => {
+      const batchInfo =
+        index < 4
+          ? {
+              batchId: "BATCH-PRS-2026-A",
+              batchName: "FSKTM PRS Demo Batch A",
+              googleMeetLink: "https://meet.google.com/fsktm-prs-demo-a",
+            }
+          : index < 7
+            ? {
+                batchId: "BATCH-PRS-2026-B",
+                batchName: "FSKTM PRS Demo Batch B",
+                googleMeetLink: "https://meet.google.com/fsktm-prs-demo-b",
+              }
+            : {
+                batchId: "BATCH-PRS-2026-C",
+                batchName: "FSKTM PRS Demo Batch C",
+                googleMeetLink: "https://meet.google.com/fsktm-prs-demo-c",
+              };
+
+      return {
+        ...session,
+        batchId: session.batchId || batchInfo.batchId,
+        batchName: session.batchName || batchInfo.batchName,
+        googleMeetLink: session.googleMeetLink || batchInfo.googleMeetLink,
+        venue: batchInfo.googleMeetLink,
+        slotDurationMinutes: session.slotDurationMinutes || 60,
+        breakBetweenSlotsMinutes:
+          session.breakBetweenSlotsMinutes === undefined
+            ? 5
+            : session.breakBetweenSlotsMinutes,
+        createdBy: getUserId("samihah@uthm.edu.my"),
+        studentDocuments: session.studentDocuments || [
+          {
+            title: `${session.title} Demo Report`,
+            url: "https://drive.google.com/",
+            source: "external-link",
+            type: "report",
+            uploadedBy: session.students[0],
+            description: "Seeded demo material for panel review testing.",
+          },
+          {
+            title: `${session.title} Demo Slides`,
+            url: "https://drive.google.com/",
+            source: "external-link",
+            type: "slides",
+            uploadedBy: session.students[0],
+            description: "Seeded demo presentation slides.",
+          },
+        ],
+      };
+    });
+
+    const createdSessions = await Timetable.create(enrichedSessionsData);
 
     const getSessionIdByTitle = (title) => {
       const session = createdSessions.find((s) => s.title === title);
@@ -1338,6 +1490,60 @@ const seedDatabase = async () => {
         sessionType: "PROGRESS_ASSESSMENT",
         status: "PENDING",
       },
+      {
+        sessionId: getSessionIdByTitle("Demo Access Session - Siti Nuraisyah"),
+        rubricId: progressRubric._id,
+        studentId: getUserId("siti@student.uthm.edu.my"),
+        evaluatorId: createdPanels[0]._id,
+        semester: "Semester 1, 2025/2026",
+        sessionType: "PROGRESS_ASSESSMENT",
+        status: "PENDING",
+      },
+      {
+        sessionId: getSessionIdByTitle("Demo Access Session - Siti Nuraisyah"),
+        rubricId: progressRubric._id,
+        studentId: getUserId("siti@student.uthm.edu.my"),
+        evaluatorId: createdPanels[3]._id,
+        semester: "Semester 1, 2025/2026",
+        sessionType: "PROGRESS_ASSESSMENT",
+        status: "PENDING",
+      },
+      {
+        sessionId: getSessionIdByTitle("Demo Access Session - Tan Mei Ling"),
+        rubricId: preVivaRubric._id,
+        studentId: getUserId("meiling@student.uthm.edu.my"),
+        evaluatorId: createdPanels[0]._id,
+        semester: "Semester 1, 2025/2026",
+        sessionType: "PRE_VIVA",
+        status: "PENDING",
+      },
+      {
+        sessionId: getSessionIdByTitle("Demo Access Session - Tan Mei Ling"),
+        rubricId: preVivaRubric._id,
+        studentId: getUserId("meiling@student.uthm.edu.my"),
+        evaluatorId: createdPanels[4]._id,
+        semester: "Semester 1, 2025/2026",
+        sessionType: "PRE_VIVA",
+        status: "PENDING",
+      },
+      {
+        sessionId: getSessionIdByTitle("Demo Access Session - Muhammad Ali"),
+        rubricId: proposalRubric._id,
+        studentId: getUserId("ali@student.uthm.edu.my"),
+        evaluatorId: createdPanels[4]._id,
+        semester: "Semester 1, 2025/2026",
+        sessionType: "PROPOSAL_DEFENSE",
+        status: "PENDING",
+      },
+      {
+        sessionId: getSessionIdByTitle("Demo Access Session - Muhammad Ali"),
+        rubricId: proposalRubric._id,
+        studentId: getUserId("ali@student.uthm.edu.my"),
+        evaluatorId: createdPanels[3]._id,
+        semester: "Semester 1, 2025/2026",
+        sessionType: "PROPOSAL_DEFENSE",
+        status: "PENDING",
+      },
     ];
 
     const createdEvaluations = await Evaluation.create(evaluationsData);
@@ -1437,18 +1643,11 @@ const seedDatabase = async () => {
     console.log(
       "Student Mei Ling: AW240004 / code: 444444 / completed progress + pending publication proposal",
     );
-    console.log(
-      "Panel 1:",
-      createdPanels[1]?.userId,
-      "/",
-      createdPanels[1]?.email,
-    );
-    console.log(
-      "Panel 2:",
-      createdPanels[2]?.userId,
-      "/",
-      createdPanels[2]?.email,
-    );
+    createdPanels.forEach((panel, index) => {
+      console.log(
+        `Panel ${index + 1}: ${panel.userId} / ${panel.email} / code: ${panel.registrationCode}`,
+      );
+    });
     console.log("✅ DATABASE SEEDING COMPLETED SUCCESSFULLY!");
   } catch (error) {
     console.error("❌ Error:", error);

@@ -177,7 +177,15 @@ export const userAPI = {
     const response = await api.patch("/users/me/research-title", {
       researchTitle,
     });
+
     return response.data;
+  },
+
+  updateMyResearchAbstract: async (researchAbstract) => {
+    const res = await api.patch("/users/me/research-abstract", {
+      researchAbstract,
+    });
+    return res.data;
   },
 };
 
@@ -370,6 +378,24 @@ export const attendanceAPI = {
   },
   delete: async (id) => {
     const response = await api.delete(`/attendance/${id}`);
+    return response.data;
+  },
+};
+
+// QR CODE API
+export const qrAPI = {
+  generate: async (timetableId) => {
+    const response = await api.post(`/qr/generate/${timetableId}`);
+    return response.data;
+  },
+
+  verify: async (payload) => {
+    const response = await api.post("/qr/verify", payload);
+    return response.data;
+  },
+
+  get: async (timetableId) => {
+    const response = await api.get(`/qr/${timetableId}`);
     return response.data;
   },
 };

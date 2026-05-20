@@ -54,12 +54,47 @@ export default function AttendancePage() {
     }
   };
 
+  const parseAttendancePayload = (rawValue) => {
+    const raw = String(rawValue || "").trim();
+
+    if (!raw) return {};
+
+    try {
+      const parsed = JSON.parse(raw);
+      return {
+        timetableId: parsed.timetableId,
+        token: parsed.token || parsed.code,
+      };
+    } catch (_) {
+      // Not JSON, continue.
+    }
+
+    try {
+      const parsedUrl = new URL(raw);
+      return {
+        timetableId:
+          parsedUrl.searchParams.get("timetableId") ||
+          parsedUrl.pathname.split("/").filter(Boolean).pop(),
+        token:
+          parsedUrl.searchParams.get("token") ||
+          parsedUrl.searchParams.get("code"),
+      };
+    } catch (_) {
+      // Not URL, treat as manual code.
+    }
+
+    return {
+      code: raw,
+    };
+  };
+
   const handleVerifyCode = async (codeToVerify) => {
     if (!codeToVerify || codeToVerify.length < 6) return;
     try {
       setVerifying(true);
       setMessage({ type: "", text: "" });
-      const res = await api.post("/qr/verify", { code: codeToVerify });
+      const payload = parseAttendancePayload(codeToVerify);
+      const res = await api.post("/qr/verify", payload);
       setMessage({
         type: "success",
         text: res.data.message || "Attendance marked successfully!",
@@ -134,10 +169,8 @@ export default function AttendancePage() {
                 onScan={(result) => {
                   if (result && result.length > 0) {
                     const scannedText = result[0].rawValue;
-                    const extractedCode =
-                      scannedText.split("code=")[1] || scannedText;
-                    setCode(extractedCode);
-                    handleVerifyCode(extractedCode);
+                    setCode(scannedText);
+                    handleVerifyCode(scannedText);
                   }
                 }}
               />

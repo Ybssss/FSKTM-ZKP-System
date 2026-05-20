@@ -109,79 +109,56 @@ export default function PanelAssignmentPage() {
     }
   };
 
-  const handleExpertiseMatching = () => {
-    if (!researchTitle.trim())
+  const handleExpertiseMatching = async () => {
+    if (!selectedStudentForMatching) {
+      return alert("Please select a student first.");
+    }
+
+    const cleanTitle = researchTitle.replace(/\s+/g, " ").trim();
+    const cleanAbstract = String(
+      selectedStudentForMatching.researchAbstract || "",
+    )
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (!cleanTitle && !cleanAbstract) {
       return alert(
-        "Please select a student or enter a research title manually.",
+        "This student has no research title or abstract for matching.",
       );
+    }
 
-    setMatchingExpertise(true);
-    setSelectedPanels([]); // Clear previous selections when searching again
+    try {
+      setMatchingExpertise(true);
+      setSelectedPanels([]);
+      setRecommendations([]);
 
-    setTimeout(() => {
-      const stopwords = [
-        "the",
-        "and",
-        "a",
-        "to",
-        "of",
-        "in",
-        "on",
-        "with",
-        "for",
-        "system",
-        "based",
-      ];
-      const titleWords = researchTitle
-        .toLowerCase()
-        .replace(/[^a-z0-9 ]/g, "")
-        .split(/\s+/)
-        .filter((w) => w.length > 2 && !stopwords.includes(w));
-
-      let matches = [];
-      const svId =
-        selectedStudentForMatching?.supervisorId?._id ||
-        selectedStudentForMatching?.supervisorId;
-
-      panels.forEach((panel) => {
-        if (panel._id === svId) return; // Skip SV
-
-        let score = 0;
-        let matchedTerms = [];
-
-        panel.expertiseTags?.forEach((tag) => {
-          const tagWords = tag
-            .toLowerCase()
-            .replace(/[^a-z0-9 ]/g, "")
-            .split(/\s+/);
-          const hasOverlap = tagWords.some((tagWord) =>
-            titleWords.some(
-              (titleWord) =>
-                tagWord.includes(titleWord) || titleWord.includes(tagWord),
-            ),
-          );
-
-          if (hasOverlap) {
-            score += 35;
-            matchedTerms.push(tag);
-          }
-        });
-
-        if (score === 0) score = Math.floor(Math.random() * 15) + 5;
-
-        matches.push({
-          panelId: panel._id,
-          name: panel.name,
-          email: panel.email,
-          tags: panel.expertiseTags?.join(", ") || "General",
-          match: { score: Math.min(score, 100), matches: matchedTerms },
-        });
+      const res = await api.post("/timetables/match-expertise", {
+        studentId: selectedStudentForMatching._id,
+        researchTitle: cleanTitle,
+        researchAbstract: cleanAbstract,
       });
 
-      matches.sort((a, b) => b.match.score - a.match.score);
-      setRecommendations(matches);
+      const formatted = (res.data.recommendations || []).map((item) => ({
+        panelId: item.panelId,
+        name: item.name,
+        email: item.email,
+        tags: item.expertiseTags?.join(", ") || "General",
+        match: {
+          score: item.score || 0,
+          matches: item.matches || [],
+        },
+      }));
+
+      setRecommendations(formatted);
+    } catch (error) {
+      alert(
+        error.response?.data?.message ||
+          error.response?.data?.error ||
+          "AI matching failed.",
+      );
+    } finally {
       setMatchingExpertise(false);
-    }, 800);
+    }
   };
 
   // NEW: Toggle selection of a panel card
@@ -314,7 +291,11 @@ export default function PanelAssignmentPage() {
                       No Research Title Provided
                     </p>
                   )}
-
+                  {student.researchAbstract && (
+                    <p className="text-[11px] text-gray-500 mt-2 line-clamp-2">
+                      Abstract: {student.researchAbstract}
+                    </p>
+                  )}
                   {viewMode === "assigned" && (
                     <div className="mt-3 pt-3 border-t border-gray-200">
                       <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">

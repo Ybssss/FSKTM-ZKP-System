@@ -7,13 +7,18 @@ const userSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true },
     role: {
       type: String,
-      enum: ["superadmin", "admin", "panel", "student"],
+      enum: ["admin", "panel", "student"],
       required: true,
     },
     // 🔴 FIXED: ADDED THE MISSING UTHM DIRECTORY FIELDS
     matricNumber: { type: String, default: "" },
     profession: { type: String, default: "" },
     researchTitle: { type: String, default: "" },
+    researchAbstract: {
+      type: String,
+      default: "",
+      maxlength: 5000,
+    },
 
     supervisorId: {
       type: mongoose.Schema.Types.ObjectId,

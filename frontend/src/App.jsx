@@ -48,14 +48,11 @@ function App() {
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/" element={<Navigate to="/login" replace />} />
 
-          {/* Staff Routes (Admin, Panel, Coordinator, Supervisor) */}
+          {/* Staff Routes (Admin, Panel) */}
           <Route
             path="/panel"
             element={
-              // and 'supervisor' to allowed roles
-              <ProtectedRoute
-                allowedRoles={["admin", "panel", "coordinator", "supervisor"]}
-              >
+              <ProtectedRoute allowedRoles={["admin", "panel"]}>
                 <PanelLayout />
               </ProtectedRoute>
             }
@@ -65,7 +62,7 @@ function App() {
             {/* EVALUATION ROUTES */}
             <Route path="evaluation" element={<EvaluationPage />} />
             <Route path="evaluation/new" element={<EvaluationPage />} />
-            <Route path="evaluation/:id" element={<EvaluationPage />} />{" "}
+            <Route path="evaluation/:id" element={<EvaluationPage />} />
             <Route path="rubrics" element={<RubricPage />} />
             <Route
               path="historical-feedback"

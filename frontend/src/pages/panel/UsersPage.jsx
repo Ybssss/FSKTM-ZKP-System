@@ -17,14 +17,23 @@ import api from "../../services/api";
 const TagInput = ({ tags, setTags, placeholder }) => {
   const [inputValue, setInputValue] = useState("");
 
+  const addTag = () => {
+    const newTag = inputValue.replace(/\s+/g, " ").trim();
+
+    if (
+      newTag &&
+      !tags.some((tag) => tag.toLowerCase() === newTag.toLowerCase())
+    ) {
+      setTags([...tags, newTag]);
+    }
+
+    setInputValue("");
+  };
+
   const handleKeyDown = (e) => {
     if (e.key === "Enter" || e.key === ",") {
       e.preventDefault();
-      const newTag = inputValue.trim();
-      if (newTag && !tags.includes(newTag)) {
-        setTags([...tags, newTag]);
-      }
-      setInputValue("");
+      addTag();
     }
   };
 
@@ -37,7 +46,7 @@ const TagInput = ({ tags, setTags, placeholder }) => {
       <div className="flex flex-wrap gap-2 mb-2">
         {tags.map((tag, index) => (
           <span
-            key={index}
+            key={`${tag}-${index}`}
             className="bg-indigo-100 text-indigo-800 px-2 py-1 rounded text-xs font-bold flex items-center gap-1"
           >
             {tag}
@@ -51,16 +60,29 @@ const TagInput = ({ tags, setTags, placeholder }) => {
           </span>
         ))}
       </div>
-      <input
-        type="text"
-        value={inputValue}
-        onChange={(e) => setInputValue(e.target.value)}
-        onKeyDown={handleKeyDown}
-        placeholder={
-          tags.length === 0 ? placeholder : "Type and press Enter..."
-        }
-        className="w-full text-sm outline-none bg-transparent"
-      />
+
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={addTag}
+          placeholder={
+            tags.length === 0 ? placeholder : "Type and press Enter..."
+          }
+          className="w-full text-sm outline-none bg-transparent"
+        />
+
+        <button
+          type="button"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={addTag}
+          className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded text-xs font-bold border border-indigo-100 hover:bg-indigo-100"
+        >
+          Add
+        </button>
+      </div>
     </div>
   );
 };
@@ -75,6 +97,8 @@ export default function UsersPage() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [newCredentials, setNewCredentials] = useState(null);
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+  const [resettingUserId, setResettingUserId] = useState("");
 
   const [formData, setFormData] = useState({
     id: "",
@@ -86,6 +110,7 @@ export default function UsersPage() {
     matricNumber: "",
     program: "",
     researchTitle: "",
+    researchAbstract: "",
     supervisorId: "",
     expertiseTags: [],
   });
@@ -121,6 +146,7 @@ export default function UsersPage() {
       matricNumber: targetUser.matricNumber || "",
       program: targetUser.program || "",
       researchTitle: targetUser.researchTitle || "",
+      researchAbstract: targetUser.researchAbstract || "",
       supervisorId:
         targetUser.supervisorId?._id || targetUser.supervisorId || "",
       expertiseTags: targetUser.expertiseTags || [],
@@ -130,39 +156,70 @@ export default function UsersPage() {
 
   const handleCreateSubmit = async (e) => {
     e.preventDefault();
+
+    if (isCreatingUser) return;
+
     try {
+      setIsCreatingUser(true);
+      setNewCredentials(null);
+
       const payload = { ...formData };
 
       if (payload.role === "student") {
-        if (!payload.matricNumber)
-          return alert("Matric Number is required for students.");
+        if (!payload.matricNumber) {
+          alert("Matric Number is required for students.");
+          return;
+        }
 
-        // 🔴 IDIOT-PROOF: Strip spaces and force uppercase on Create
         const cleanMatric = payload.matricNumber
           .replace(/\s+/g, "")
           .toUpperCase();
+
         payload.userId = cleanMatric;
         payload.matricNumber = cleanMatric;
+        payload.expertiseTags = [];
       } else if (payload.role === "panel" || payload.role === "admin") {
+        if (!payload.userId.trim()) {
+          alert("System User ID is required.");
+          return;
+        }
+
+        payload.userId = payload.userId.replace(/\s+/g, "").toUpperCase();
+        payload.expertiseTags = Array.isArray(payload.expertiseTags)
+          ? payload.expertiseTags
+              .map((tag) => String(tag).trim())
+              .filter(Boolean)
+          : [];
+
         delete payload.researchTitle;
+        delete payload.researchAbstract;
         delete payload.program;
+        payload.supervisorId = null;
       }
 
       if (!payload.supervisorId) payload.supervisorId = null;
 
       const res = await api.post("/users", payload);
+
       if (res.data.success) {
         setNewCredentials({
-          email: res.data.user.email,
-          userId: res.data.user.userId,
-          name: res.data.user.name,
+          email: res.data.user?.email || payload.email,
+          userId: res.data.user?.userId || payload.userId,
+          name: res.data.user?.name || payload.name,
           registrationCode: res.data.registrationCode,
+          message: res.data.message,
+          emailStatus: res.data.emailStatus,
         });
+
         setShowCreateModal(false);
-        fetchUsers();
+        await fetchUsers();
+
+        window.scrollTo({ top: 0, behavior: "smooth" });
       }
     } catch (error) {
       alert(error.response?.data?.message || "Failed to create user");
+    } finally {
+      setIsCreatingUser(false);
     }
   };
 
@@ -186,6 +243,7 @@ export default function UsersPage() {
           .toUpperCase();
       } else if (payload.role === "panel" || payload.role === "admin") {
         delete payload.researchTitle;
+        delete payload.researchAbstract;
         delete payload.program;
       }
 
@@ -214,20 +272,33 @@ export default function UsersPage() {
   };
 
   const handleResetZkp = async (userId, name, email) => {
+    if (resettingUserId) return;
+
     if (!window.confirm(`⚠️ WARNING: Erase ${name}'s keys?`)) return;
+
     try {
+      setResettingUserId(userId);
+      setNewCredentials(null);
+
       const res = await api.post(`/users/${userId}/reset-zkp`);
+
       if (res.data.success) {
         setNewCredentials({
-          email: email,
+          email,
           userId: res.data.userId,
           name: res.data.name,
           registrationCode: res.data.registrationCode,
+          message: res.data.message,
+          emailStatus: res.data.emailStatus,
         });
-        fetchUsers();
+
+        await fetchUsers();
+        window.scrollTo({ top: 0, behavior: "smooth" });
       }
     } catch (error) {
       alert(error.response?.data?.message || "Failed to reset user");
+    } finally {
+      setResettingUserId("");
     }
   };
 
@@ -257,6 +328,7 @@ export default function UsersPage() {
               matricNumber: "",
               program: "",
               researchTitle: "",
+              researchAbstract: "",
               supervisorId: "",
               expertiseTags: [],
             });
@@ -316,11 +388,14 @@ export default function UsersPage() {
                     <Mail className="w-8 h-8 text-blue-600" />
                   </div>
                   <h4 className="text-base font-bold text-blue-900 mb-2">
-                    Automated Email Dispatched
+                    Registration Email
                   </h4>
                   <p className="text-sm text-blue-800 font-medium">
-                    Instructions emailed to{" "}
-                    <strong>{newCredentials.email}</strong>.
+                    {newCredentials.message ||
+                      "Registration email is being sent."}
+                  </p>
+                  <p className="text-xs text-blue-700 mt-2">
+                    Receiver: <strong>{newCredentials.email}</strong>
                   </p>
                 </div>
               </div>
@@ -446,12 +521,17 @@ export default function UsersPage() {
                             <Edit className="w-3 h-3" /> Edit Info
                           </button>
                           <button
+                            disabled={Boolean(resettingUserId)}
                             onClick={() =>
                               handleResetZkp(u.userId, u.name, u.email)
                             }
-                            className="text-xs text-red-600 hover:text-red-800 font-bold flex items-center gap-1"
+                            className="text-xs text-red-600 hover:text-red-800 font-bold flex items-center gap-1 disabled:text-gray-400 disabled:cursor-not-allowed"
                           >
-                            {u.zkpRegistered ? "Reset Keys" : "Generate Code"}
+                            {resettingUserId === u.userId
+                              ? "Processing..."
+                              : u.zkpRegistered
+                                ? "Reset Keys"
+                                : "Generate Code"}
                           </button>
                         </div>
                       </div>
@@ -468,7 +548,8 @@ export default function UsersPage() {
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 relative">
             <button
-              onClick={() => setShowCreateModal(false)}
+              disabled={isCreatingUser}
+              onClick={() => !isCreatingUser && setShowCreateModal(false)}
               className="absolute top-4 right-4 text-gray-400 hover:text-gray-700"
             >
               <X className="w-6 h-6" />
@@ -570,6 +651,27 @@ export default function UsersPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">
+                      Research Abstract / Summary Optional
+                    </label>
+                    <textarea
+                      value={formData.researchAbstract}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          researchAbstract: e.target.value,
+                        })
+                      }
+                      maxLength={5000}
+                      className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500"
+                      rows="4"
+                      placeholder="Optional abstract or project summary to improve AI panel matching."
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      {(formData.researchAbstract || "").length}/5000 characters
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">
                       Assign Supervisor
                     </label>
                     <select
@@ -628,17 +730,18 @@ export default function UsersPage() {
               <div className="pt-4 flex justify-end gap-3 border-t mt-6">
                 <button
                   type="button"
-                  onClick={() => setShowCreateModal(false)}
+                  disabled={isCreatingUser}
+                  onClick={() => !isCreatingUser && setShowCreateModal(false)}
                   className="px-5 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded font-bold transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  disabled={!formData.role}
-                  className="px-6 py-2 bg-indigo-600 text-white font-bold rounded shadow hover:bg-indigo-700 transition-colors disabled:bg-gray-400"
+                  disabled={!formData.role || isCreatingUser}
+                  className="px-6 py-2 bg-indigo-600 text-white font-bold rounded shadow hover:bg-indigo-700 transition-colors disabled:bg-gray-400 disabled:cursor-not-allowed"
                 >
-                  Create Account
+                  {isCreatingUser ? "Creating..." : "Create Account"}
                 </button>
               </div>
             </form>
@@ -760,6 +863,27 @@ export default function UsersPage() {
                       }
                       className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500"
                     />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">
+                      Research Abstract / Summary Optional
+                    </label>
+                    <textarea
+                      value={formData.researchAbstract}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          researchAbstract: e.target.value,
+                        })
+                      }
+                      maxLength={5000}
+                      rows="4"
+                      className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500"
+                      placeholder="Optional abstract or project summary to improve AI panel matching."
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      {(formData.researchAbstract || "").length}/5000 characters
+                    </p>
                   </div>
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">

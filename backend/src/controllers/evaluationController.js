@@ -1,5 +1,4 @@
 const Evaluation = require("../models/Evaluation");
-const Session = require("../models/Session");
 const { calculateUTHMGrade } = require("../utils/gradeCalculator");
 const PermissionRequest = require("../models/PermissionRequest");
 
@@ -16,7 +15,8 @@ exports.getAllEvaluations = async (req, res) => {
     const evaluations = await Evaluation.find(query)
       .populate({
         path: "studentId",
-        select: "name email matricNumber researchTitle supervisorId",
+        select:
+          "name email matricNumber program researchTitle researchAbstract supervisorId",
         strictPopulate: false,
       })
       .populate({
@@ -169,7 +169,6 @@ exports.submitEvaluation = async (req, res) => {
     res.status(200).json({
       success: true,
       message: "Evaluation submitted successfully.",
-      data: evaluation,
       data: completedEval,
     });
   } catch (error) {
@@ -199,5 +198,78 @@ exports.searchHistoricalComments = async (req, res) => {
     res.status(200).json({ results });
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+};
+
+const getAuthUserId = (req) => req.user.id || req.user._id;
+
+const isSameId = (a, b) => String(a || "") === String(b || "");
+
+exports.getEvaluationById = async (req, res) => {
+  try {
+    const viewerId = getAuthUserId(req);
+    const viewerRole = req.user.role;
+
+    const evaluation = await Evaluation.findById(req.params.id)
+      .populate(
+        "studentId",
+        "name email matricNumber program researchTitle researchAbstract supervisorId",
+      )
+      .populate("evaluatorId", "name email userId expertiseTags")
+      .populate("rubricId", "name sessionType criteria")
+      .populate({
+        path: "sessionId",
+        select:
+          "title sessionType date startTime endTime venue studentDocuments",
+        populate: {
+          path: "studentDocuments.uploadedBy",
+          select: "name userId matricNumber email role",
+        },
+      });
+
+    if (!evaluation) {
+      return res.status(404).json({
+        success: false,
+        message: "Evaluation not found.",
+      });
+    }
+
+    const evaluatorId = evaluation.evaluatorId?._id || evaluation.evaluatorId;
+    const studentId = evaluation.studentId?._id || evaluation.studentId;
+
+    const isAdmin = viewerRole === "admin";
+    const isOwnerPanel = isSameId(evaluatorId, viewerId);
+    const isStudentOwner =
+      viewerRole === "student" && isSameId(studentId, viewerId);
+
+    const approvedPermission = await PermissionRequest.findOne({
+      requestingPanelId: viewerId,
+      targetEvaluationId: evaluation._id,
+      status: "APPROVED",
+    }).select("_id");
+
+    const hasApprovedAccess = Boolean(approvedPermission);
+
+    if (!isAdmin && !isOwnerPanel && !isStudentOwner && !hasApprovedAccess) {
+      return res.status(403).json({
+        success: false,
+        message: "You do not have permission to view this evaluation.",
+      });
+    }
+
+    const doc = evaluation.toObject();
+    doc.accessGranted = true;
+
+    res.json({
+      success: true,
+      evaluation: doc,
+      data: doc,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch evaluation.",
+      error: error.message,
+    });
   }
 };

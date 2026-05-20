@@ -58,100 +58,229 @@ exports.getMyPanels = async (req, res) => {
 };
 
 // @desc    Use Gemini AI to match Student Research Title with best Panels
-exports.matchExpertise = async (req, res) => {
-  try {
-    const { researchTitle, studentId } = req.body;
+const STOPWORDS = new Set([
+  "the",
+  "and",
+  "for",
+  "with",
+  "from",
+  "into",
+  "using",
+  "based",
+  "system",
+  "study",
+  "research",
+  "approach",
+  "method",
+  "model",
+  "framework",
+  "application",
+  "development",
+  "implementation",
+  "analysis",
+  "design",
+  "of",
+  "in",
+  "on",
+  "to",
+  "a",
+  "an",
+]);
 
-    if (!researchTitle)
-      return res
-        .status(400)
-        .json({ error: "Student must have a research title for AI matching." });
+const synonymGroups = [
+  [
+    "zero",
+    "knowledge",
+    "proof",
+    "zkp",
+    "cryptography",
+    "authentication",
+    "passwordless",
+  ],
+  [
+    "security",
+    "secure",
+    "cybersecurity",
+    "information",
+    "privacy",
+    "encryption",
+  ],
+  ["artificial", "intelligence", "ai", "machine", "learning", "deep", "neural"],
+  ["web", "frontend", "backend", "react", "node", "express", "database"],
+  ["blockchain", "distributed", "ledger", "smart", "contract"],
+  ["image", "vision", "computer", "classification", "recognition"],
+  ["data", "analytics", "mining", "prediction", "classification"],
+  ["network", "iot", "wireless", "sensor", "protocol"],
+];
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.error("CRITICAL: GEMINI_API_KEY is missing from .env file!");
-      return res
-        .status(500)
-        .json({ error: "AI matching is disabled. Server misconfiguration." });
+const normalizeTokens = (value = "") =>
+  String(value)
+    .toLowerCase()
+    .normalize("NFKC")
+    .replace(/[^a-z0-9\s-]/g, " ")
+    .split(/\s+/)
+    .map((word) => word.trim())
+    .filter((word) => word.length > 2 && !STOPWORDS.has(word));
+
+const expandTokens = (tokens) => {
+  const expanded = new Set(tokens);
+
+  for (const group of synonymGroups) {
+    const hasGroupWord = group.some((word) => expanded.has(word));
+    if (hasGroupWord) {
+      group.forEach((word) => expanded.add(word));
+    }
+  }
+
+  return expanded;
+};
+
+const scorePanel = (contextText, panel) => {
+  const contextTokens = expandTokens(normalizeTokens(contextText));
+  const expertiseTags = Array.isArray(panel.expertiseTags)
+    ? panel.expertiseTags.filter(Boolean)
+    : [];
+
+  if (contextTokens.size === 0 || expertiseTags.length === 0) {
+    return {
+      score: 10,
+      matches: [],
+    };
+  }
+
+  let totalScore = 0;
+  const matches = [];
+
+  for (const tag of expertiseTags) {
+    const tagText = String(tag || "").toLowerCase();
+    const tagTokens = normalizeTokens(tagText);
+
+    if (tagTokens.length === 0) continue;
+
+    const expandedTagTokens = expandTokens(tagTokens);
+    const overlappingTokens = [...expandedTagTokens].filter((token) =>
+      contextTokens.has(token),
+    );
+
+    const overlapRatio = overlappingTokens.length / expandedTagTokens.size;
+    const phraseMatched = contextText.toLowerCase().includes(tagText);
+
+    let tagScore = 0;
+
+    if (phraseMatched) {
+      tagScore = 95;
+    } else if (overlapRatio >= 0.75) {
+      tagScore = 85;
+    } else if (overlapRatio >= 0.5) {
+      tagScore = 75;
+    } else if (overlapRatio > 0) {
+      tagScore = Math.max(45, Math.round(overlapRatio * 70));
     }
 
-    const student = await User.findById(studentId);
+    if (tagScore > 0) {
+      totalScore += tagScore;
+      matches.push(tag);
+    }
+  }
+
+  if (matches.length === 0) {
+    return {
+      score: 15,
+      matches: [],
+    };
+  }
+
+  const average = totalScore / matches.length;
+  const coverageBonus = Math.min(matches.length * 5, 15);
+  const finalScore = Math.min(95, Math.round(average + coverageBonus));
+
+  return {
+    score: finalScore,
+    matches,
+  };
+};
+
+exports.matchExpertise = async (req, res) => {
+  try {
+    const { researchTitle, researchAbstract, studentId } = req.body;
+
+    const student = studentId
+      ? await User.findById(studentId).select(
+          "name researchTitle researchAbstract supervisorId",
+        )
+      : null;
+
+    const finalTitle = String(
+      researchTitle || student?.researchTitle || "",
+    ).trim();
+
+    const finalAbstract = String(
+      researchAbstract || student?.researchAbstract || "",
+    ).trim();
+
+    if (!finalTitle && !finalAbstract) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Student must have a research title or abstract for expertise matching.",
+      });
+    }
 
     const allPanels = await User.find({
       role: { $in: ["panel", "admin"] },
-    }).select("_id name expertiseTags");
+    }).select("_id name email userId role expertiseTags");
 
-    // CONFLICT OF INTEREST BLOCK: Remove SV from AI's view
     const availablePanels = allPanels.filter((panel) => {
-      if (!student.supervisorId) return true;
-      return panel._id.toString() !== student.supervisorId.toString();
+      if (!student?.supervisorId) return true;
+      return String(panel._id) !== String(student.supervisorId);
     });
 
-    if (availablePanels.length === 0)
-      return res.status(400).json({ error: "No available panels to match." });
-
-    const genAI = new GoogleGenerativeAI(apiKey);
-
-    const model = genAI.getGenerativeModel({
-      model: "gemini-flash-lite-latest",
-    });
-
-    const prompt = `
-      You are an expert academic routing AI for Universiti Tun Hussein Onn Malaysia (UTHM).
-      
-      Student Research Title: "${researchTitle}"
-
-      Available Panels (JSON format):
-      ${JSON.stringify(
-        availablePanels.map((p) => ({
-          id: p._id.toString(),
-          expertise:
-            p.expertiseTags && p.expertiseTags.length > 0
-              ? p.expertiseTags.join(", ")
-              : "Generalist Lecturer",
-        })),
-      )}
-
-      CRITICAL RULES:
-      1. ONLY select panels whose expertise is HIGHLY RELATED to the research title.
-      2. If a panel's expertise has nothing to do with the title, DO NOT select them. Let them have lower priority. 
-      3. It is perfectly fine to return only 1 ID or an empty array [] if no one is a good match.
-      4. NEVER exceed 2 IDs.
-      5. Return ONLY a valid JSON array of the string IDs. No explanations.
-      Example: ["id1", "id2"] or ["id1"] or []
-    `;
-
-    const result = await model.generateContent(prompt);
-    const responseText = result.response.text().trim();
-
-    let recommendedPanelIds = [];
-    try {
-      const firstBracket = responseText.indexOf("[");
-      const lastBracket = responseText.lastIndexOf("]");
-      if (firstBracket === -1 || lastBracket === -1)
-        throw new Error("No array found");
-
-      const cleanJson = responseText.substring(firstBracket, lastBracket + 1);
-      let parsedIds = JSON.parse(cleanJson);
-
-      recommendedPanelIds = parsedIds
-        .map((id) => String(id))
-        .filter((id) => availablePanels.some((p) => p._id.toString() === id))
-        .slice(0, 2);
-    } catch (parseError) {
-      console.error("Gemini Parse Error:", responseText);
-      return res
-        .status(500)
-        .json({ error: "AI returned malformed data. Please select manually." });
+    if (availablePanels.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No available panels to match.",
+      });
     }
 
-    res
-      .status(200)
-      .json({ success: true, recommendedPanels: recommendedPanelIds });
+    const contextText = `${finalTitle}. ${finalAbstract}`;
+
+    const recommendations = availablePanels
+      .map((panel) => {
+        const match = scorePanel(contextText, panel);
+
+        return {
+          panelId: String(panel._id),
+          name: panel.name,
+          email: panel.email,
+          userId: panel.userId,
+          role: panel.role,
+          expertiseTags: panel.expertiseTags || [],
+          score: match.score,
+          confidence: `${match.score}%`,
+          matches: match.matches,
+        };
+      })
+      .sort((a, b) => b.score - a.score);
+
+    const recommendedPanels = recommendations
+      .filter((item) => item.score >= 30)
+      .slice(0, 2)
+      .map((item) => item.panelId);
+
+    res.status(200).json({
+      success: true,
+      studentId,
+      researchTitle: finalTitle,
+      hasAbstract: Boolean(finalAbstract),
+      recommendedPanels,
+      recommendations,
+    });
   } catch (error) {
     console.error("AI Matching Error:", error);
     res.status(500).json({
-      error: "Failed to communicate with AI Matcher. Servers might be busy.",
+      success: false,
+      message: "Failed to match panel expertise.",
+      error: error.message,
     });
   }
 };

@@ -6,6 +6,11 @@ const timetableSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    rubricId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Rubric",
+      default: null,
+    },
     title: {
       type: String,
       required: true,
@@ -29,6 +34,31 @@ const timetableSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    googleMeetLink: {
+      type: String,
+      default: "",
+    },
+
+    batchName: {
+      type: String,
+      default: "",
+    },
+
+    batchId: {
+      type: String,
+      default: "",
+      index: true,
+    },
+
+    slotDurationMinutes: {
+      type: Number,
+      default: null,
+    },
+
+    breakBetweenSlotsMinutes: {
+      type: Number,
+      default: 5,
+    },
     deadline: {
       type: Date,
     },
@@ -38,7 +68,20 @@ const timetableSchema = new mongoose.Schema(
     attachmentUrl: {
       type: String,
     },
+    qrCode: {
+      type: String,
+      default: "",
+    },
 
+    qrExpiresAt: {
+      type: Date,
+      default: null,
+    },
+
+    qrGeneratedAt: {
+      type: Date,
+      default: null,
+    },
     // NEW: Student Documents for Pre-Review
     studentDocuments: [
       {
@@ -126,9 +169,6 @@ const timetableSchema = new mongoose.Schema(
     qrGenerated: {
       type: Boolean,
       default: false,
-    },
-    qrGeneratedAt: {
-      type: Date,
     },
     remarks: [
       {

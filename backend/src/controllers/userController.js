@@ -26,6 +26,7 @@ exports.createUser = async (req, res) => {
       matricNumber,
       program,
       researchTitle,
+      researchAbstract,
       supervisorId,
       expertiseTags,
     } = req.body;
@@ -37,7 +38,39 @@ exports.createUser = async (req, res) => {
         .json({ success: false, message: "Unauthorized to create users." });
     }
 
-    const existingUser = await User.findOne({ $or: [{ userId }, { email }] });
+    const cleanEmail = String(email || "")
+      .trim()
+      .toLowerCase();
+
+    const cleanUserId =
+      role === "student"
+        ? String(matricNumber || "")
+            .replace(/\s+/g, "")
+            .toUpperCase()
+        : String(userId || "")
+            .replace(/\s+/g, "")
+            .toUpperCase();
+
+    if (!cleanUserId) {
+      return res.status(400).json({
+        success: false,
+        message:
+          role === "student"
+            ? "Matric Number is required for students."
+            : "User ID is required.",
+      });
+    }
+
+    if (!cleanEmail) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required.",
+      });
+    }
+
+    const existingUser = await User.findOne({
+      $or: [{ userId: cleanUserId }, { email: cleanEmail }],
+    });
     if (existingUser)
       return res
         .status(400)
@@ -55,12 +88,8 @@ exports.createUser = async (req, res) => {
             .filter(Boolean)
         : [];
 
-    const cleanEmail = String(email || "")
-      .trim()
-      .toLowerCase();
-
     const newUser = new User({
-      userId: String(userId || "").trim(),
+      userId: cleanUserId,
       name: String(name || "").trim(),
       email: cleanEmail,
       role,
@@ -71,7 +100,17 @@ exports.createUser = async (req, res) => {
           .replace(/\s+/g, "")
           .toUpperCase(),
         program,
-        researchTitle,
+        researchTitle: String(researchTitle || "")
+          .replace(/[<>]/g, "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 300),
+        researchAbstract: String(researchAbstract || "")
+          .normalize("NFKC")
+          .replace(/[<>]/g, "")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 5000),
         supervisorId: supervisorId || null,
       }),
 
@@ -82,25 +121,26 @@ exports.createUser = async (req, res) => {
 
     await newUser.save();
 
-    // ✅ Send Welcome Email
-    let emailStatus = {
+    const emailStatus = {
+      queued: Boolean(cleanEmail),
       sent: false,
       error: null,
     };
 
-    try {
-      await sendRegistrationEmail(
+    if (cleanEmail) {
+      sendRegistrationEmail(
         cleanEmail,
         newUser.name,
         newUser.userId,
         registrationCode,
         false,
-      );
-
-      emailStatus.sent = true;
-    } catch (emailError) {
-      emailStatus.error = emailError.message;
-      console.error("❌ Registration email failed:", emailError.message);
+      )
+        .then((mailResult) => {
+          console.log("✅ Registration email sent:", mailResult);
+        })
+        .catch((emailError) => {
+          console.error("❌ Registration email failed:", emailError.message);
+        });
     }
 
     if (logActivity)
@@ -113,9 +153,9 @@ exports.createUser = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: emailStatus.sent
-        ? "User created successfully and registration email sent."
-        : "User created successfully, but registration email failed to send.",
+      message: emailStatus.queued
+        ? "User created successfully. Registration email is being sent."
+        : "User created successfully. No receiver email was provided.",
       user: newUser,
       registrationCode,
       emailStatus,
@@ -140,13 +180,11 @@ exports.resetZkpRegistration = async (req, res) => {
         .status(404)
         .json({ success: false, message: "User not found." });
 
-    if (
-      creatorRole === "admin" &&
-      ["superadmin", "admin"].includes(userToReset.role)
-    ) {
-      return res
-        .status(403)
-        .json({ success: false, message: "Unauthorized to reset this user." });
+    if (creatorRole !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized to reset this user.",
+      });
     }
 
     const newRegistrationCode =
@@ -160,31 +198,33 @@ exports.resetZkpRegistration = async (req, res) => {
     await userToReset.save();
 
     // ✅ Send Reset Email
-    let emailStatus = {
+    const emailStatus = {
+      queued: Boolean(userToReset.email),
       sent: false,
       error: null,
     };
 
-    try {
-      await sendRegistrationEmail(
+    if (userToReset.email) {
+      sendRegistrationEmail(
         userToReset.email,
         userToReset.name,
         userToReset.userId,
         newRegistrationCode,
         true,
-      );
-
-      emailStatus.sent = true;
-    } catch (emailError) {
-      emailStatus.error = emailError.message;
-      console.error("❌ Reset email failed:", emailError.message);
+      )
+        .then((mailResult) => {
+          console.log("✅ Reset email sent:", mailResult);
+        })
+        .catch((emailError) => {
+          console.error("❌ Reset email failed:", emailError.message);
+        });
     }
 
     res.json({
       success: true,
-      message: emailStatus.sent
-        ? "User ZKP identity reset successfully and email sent."
-        : "User ZKP identity reset successfully, but email failed to send.",
+      message: emailStatus.queued
+        ? "User ZKP identity reset successfully. Reset email is being sent."
+        : "User ZKP identity reset successfully. No receiver email was provided.",
       registrationCode: newRegistrationCode,
       name: userToReset.name,
       userId: userToReset.userId,
@@ -199,14 +239,14 @@ exports.getAssignments = async (req, res) => {
   try {
     const students = await User.find({ role: "student" })
       .select(
-        "name email userId matricNumber program researchTitle supervisorId assignedPanels",
+        "name email userId matricNumber program researchTitle researchAbstract supervisorId assignedPanels",
       )
       .populate("supervisorId", "name email")
       .populate("assignedPanels.panelId", "name email expertiseTags");
 
-    const panels = await User.find({ role: "panel" }).select(
-      "name email userId expertiseTags assignedStudents",
-    );
+    const panels = await User.find({
+      role: { $in: ["panel", "admin"] },
+    }).select("name email userId expertiseTags assignedStudents");
 
     res.status(200).json({
       success: true,
@@ -230,6 +270,7 @@ exports.updateUser = async (req, res) => {
       matricNumber,
       program,
       researchTitle,
+      researchAbstract,
       supervisorId,
       profession,
       role,
@@ -242,12 +283,25 @@ exports.updateUser = async (req, res) => {
       matricNumber,
       program,
       researchTitle,
+      researchAbstract:
+        researchAbstract !== undefined
+          ? String(researchAbstract || "")
+              .normalize("NFKC")
+              .replace(/[<>]/g, "")
+              .replace(/\s+/g, " ")
+              .trim()
+              .slice(0, 5000)
+          : undefined,
       supervisorId,
       profession,
       expertiseTags,
     };
 
-    if (role && (req.user.role === "superadmin" || req.user.role === "admin")) {
+    Object.keys(updateData).forEach((key) => {
+      if (updateData[key] === undefined) delete updateData[key];
+    });
+
+    if (role && req.user.role === "admin") {
       updateData.role = role;
     }
 

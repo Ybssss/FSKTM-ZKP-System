@@ -7,29 +7,6 @@ const userController = require("../controllers/userController");
 router.get("/assignments", authenticateToken, userController.getAssignments);
 router.use(authenticateToken);
 
-router.get("/assignments", async (req, res) => {
-  try {
-    if (req.user.role !== "admin") {
-      return res.status(403).json({ success: false, message: "Access denied" });
-    }
-    const students = await User.find({ role: "student" })
-      .populate("assignedPanels.panelId", "name userId email")
-      .select("name userId matricNumber assignedPanels");
-
-    const panels = await User.find({ role: { $in: ["panel", "admin"] } })
-      .populate("assignedStudents", "name userId matricNumber")
-      .select("name userId email assignedStudents");
-
-    res.json({ success: true, students, panels });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch assignments",
-      error: error.message,
-    });
-  }
-});
-
 router.get("/my-students", async (req, res) => {
   try {
     const myId = req.user.id || req.user.userId || req.user._id;
@@ -42,7 +19,7 @@ router.get("/my-students", async (req, res) => {
     const panel = await User.findById(myId)
       .populate(
         "assignedStudents",
-        "name userId email matricNumber program researchTitle supervisor",
+        "name userId email matricNumber program researchTitle researchAbstract supervisorId",
       )
       .select("assignedStudents");
     res.json({ success: true, students: panel?.assignedStudents || [] });
@@ -55,7 +32,7 @@ router.get("/my-students", async (req, res) => {
 
 router.get("/", async (req, res) => {
   try {
-    const allowedRoles = ["admin", "panel", "coordinator"];
+    const allowedRoles = ["admin", "panel"];
     if (!allowedRoles.includes(req.user.role)) {
       return res
         .status(403)
@@ -74,165 +51,48 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Student: get own profile with supervisor populated
-router.get("/me/profile", async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id)
-      .select(
-        "name userId email role matricNumber researchTitle supervisorId assignedPanels",
-      )
-      .populate("supervisorId", "name userId email")
-      .populate("assignedPanels.panelId", "name userId email");
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found.",
-      });
-    }
-
-    res.json({
-      success: true,
-      user,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch profile.",
-      error: error.message,
-    });
-  }
-});
-
-// Student: update own research project title only
-router.patch("/me/research-title", async (req, res) => {
+router.patch("/me/research-abstract", async (req, res) => {
   try {
     if (req.user.role !== "student") {
       return res.status(403).json({
         success: false,
-        message: "Only students can update their research project title here.",
+        message: "Only students can update their own research abstract.",
       });
     }
 
-    const researchTitle = String(req.body.researchTitle || "").trim();
+    const researchAbstract = String(req.body.researchAbstract || "")
+      .normalize("NFKC")
+      .replace(/[<>]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
 
-    if (!researchTitle) {
+    if (researchAbstract.length > 5000) {
       return res.status(400).json({
         success: false,
-        message: "Research project title cannot be empty.",
-      });
-    }
-
-    if (researchTitle.length > 300) {
-      return res.status(400).json({
-        success: false,
-        message: "Research project title must not exceed 300 characters.",
+        message: "Research abstract must not exceed 5000 characters.",
       });
     }
 
     const user = await User.findByIdAndUpdate(
       req.user.id,
-      {
-        $set: {
-          researchTitle,
-        },
-      },
-      {
-        new: true,
-        runValidators: true,
-      },
-    )
-      .select(
-        "name userId email role matricNumber researchTitle supervisorId assignedPanels",
-      )
-      .populate("supervisorId", "name userId email")
-      .populate("assignedPanels.panelId", "name userId email");
-
-    res.json({
-      success: true,
-      message: "Research project title updated successfully.",
-      user,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Failed to update research project title.",
-      error: error.message,
-    });
-  }
-});
-
-router.get("/me/profile", async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id)
-      .select(
-        "name userId email role matricNumber researchTitle supervisorId assignedPanels zkpRegistered",
-      )
-      .populate("supervisorId", "name userId email")
-      .populate("assignedPanels.panelId", "name userId email");
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found.",
-      });
-    }
-
-    res.json({ success: true, user });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      message: "Failed to fetch profile.",
-      error: error.message,
-    });
-  }
-});
-
-router.patch("/me/research-title", async (req, res) => {
-  try {
-    if (req.user.role !== "student") {
-      return res.status(403).json({
-        success: false,
-        message: "Only students can update their research project title here.",
-      });
-    }
-
-    const researchTitle = String(req.body.researchTitle || "").trim();
-
-    if (!researchTitle) {
-      return res.status(400).json({
-        success: false,
-        message: "Research project title cannot be empty.",
-      });
-    }
-
-    if (researchTitle.length > 300) {
-      return res.status(400).json({
-        success: false,
-        message: "Research project title must not exceed 300 characters.",
-      });
-    }
-
-    const user = await User.findByIdAndUpdate(
-      req.user.id,
-      { $set: { researchTitle } },
+      { $set: { researchAbstract } },
       { new: true, runValidators: true },
     )
       .select(
-        "name userId email role matricNumber researchTitle supervisorId assignedPanels zkpRegistered",
+        "name userId email role matricNumber program researchTitle researchAbstract supervisorId assignedPanels zkpRegistered",
       )
       .populate("supervisorId", "name userId email")
       .populate("assignedPanels.panelId", "name userId email");
 
     res.json({
       success: true,
-      message: "Research project title updated successfully.",
+      message: "Research abstract updated successfully.",
       user,
     });
   } catch (error) {
     res.status(500).json({
       success: false,
-      message: "Failed to update research project title.",
+      message: "Failed to update research abstract.",
       error: error.message,
     });
   }
@@ -243,7 +103,7 @@ router.get("/me/profile", async (req, res) => {
   try {
     const user = await User.findById(req.user.id)
       .select(
-        "name userId email role matricNumber researchTitle supervisorId assignedPanels zkpRegistered",
+        "name userId email role matricNumber program researchTitle researchAbstract supervisorId assignedPanels zkpRegistered",
       )
       .populate("supervisorId", "name userId email")
       .populate("assignedPanels.panelId", "name userId email");
@@ -350,7 +210,7 @@ router.patch("/me/research-title", async (req, res) => {
       },
     )
       .select(
-        "name userId email role matricNumber researchTitle supervisorId assignedPanels zkpRegistered",
+        "name userId email role matricNumber program researchTitle researchAbstract supervisorId assignedPanels zkpRegistered",
       )
       .populate("supervisorId", "name userId email")
       .populate("assignedPanels.panelId", "name userId email");
@@ -389,21 +249,7 @@ router.get("/:id", async (req, res) => {
 // Connect to controller for creation
 router.post("/", userController.createUser);
 
-router.put("/:id", async (req, res) => {
-  try {
-    if (req.user.role !== "admin")
-      return res
-        .status(403)
-        .json({ success: false, message: "Access denied." });
-    const user = await User.findByIdAndUpdate(req.params.id, req.body, {
-      new: true,
-      runValidators: true,
-    }).select("-passwordHash");
-    res.json({ success: true, message: "User updated successfully", user });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Failed to update user" });
-  }
-});
+router.put("/:id", userController.updateUser);
 
 router.delete("/:id", async (req, res) => {
   try {

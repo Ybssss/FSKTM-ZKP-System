@@ -25,6 +25,89 @@ const allowedSessionStatuses = [
   "cancelled",
 ];
 
+const DEFAULT_BREAK_MINUTES = 5;
+
+const toPositiveInt = (value, fallback = null) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
+};
+
+const toNonNegativeInt = (value, fallback = 0) => {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : fallback;
+};
+
+const normalizeDateOnly = (value) => {
+  if (!value) return "";
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value.toISOString().slice(0, 10);
+  }
+
+  const raw = String(value).trim();
+  if (!raw) return "";
+
+  return raw.includes("T") ? raw.slice(0, 10) : raw;
+};
+
+const parseTimeToMinutes = (timeValue) => {
+  const raw = String(timeValue || "").trim();
+  const match = raw.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+
+  if (!match) return null;
+
+  return Number(match[1]) * 60 + Number(match[2]);
+};
+
+const formatMinutesToTime = (minutes) => {
+  const normalizedMinutes = minutes % (24 * 60);
+  const hours = Math.floor(normalizedMinutes / 60);
+  const mins = normalizedMinutes % 60;
+
+  return `${String(hours).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+};
+
+const ensureNotBackdated = (dateValue, startTime) => {
+  const dateOnly = normalizeDateOnly(dateValue);
+  const startMinutes = parseTimeToMinutes(startTime);
+
+  if (!dateOnly) {
+    throw new Error("Session date is required.");
+  }
+
+  if (startMinutes === null) {
+    throw new Error("Valid session start time is required.");
+  }
+
+  const sessionStart = new Date(`${dateOnly}T${startTime}:00`);
+
+  if (Number.isNaN(sessionStart.getTime())) {
+    throw new Error("Invalid session date or start time.");
+  }
+
+  if (sessionStart <= new Date()) {
+    throw new Error(
+      "Session cannot be scheduled in the past. Today is allowed only if the start time is still in the future.",
+    );
+  }
+};
+
+const buildPendingEvaluations = (timetable, payload, semester) => {
+  const studentId = payload.students?.[0];
+
+  if (!studentId || !Array.isArray(payload.panels)) return [];
+
+  return payload.panels.filter(Boolean).map((evaluatorId) => ({
+    sessionId: timetable._id,
+    studentId,
+    evaluatorId,
+    rubricId: payload.rubricId,
+    semester: semester || payload.semester || "",
+    sessionType: payload.sessionType,
+    status: "PENDING",
+  }));
+};
+
 const buildTimetablePayload = (body, userId) => {
   const sessionType = cleanText(body.sessionType, 50);
 
@@ -36,17 +119,53 @@ const buildTimetablePayload = (body, userId) => {
     ? body.status
     : "scheduled";
 
+  const date = normalizeDateOnly(body.date);
+  const startTime = cleanText(body.startTime || body.time, 20);
+  const slotDuration = toPositiveInt(body.slotDurationMinutes, null);
+  let endTime = cleanText(body.endTime, 20);
+
+  if (!endTime && slotDuration) {
+    const startMinutes = parseTimeToMinutes(startTime);
+    if (startMinutes !== null) {
+      endTime = formatMinutesToTime(startMinutes + slotDuration);
+    }
+  }
+
+  if (!endTime) {
+    throw new Error(
+      "Session end time is required or slot duration must be provided.",
+    );
+  }
+
+  ensureNotBackdated(date, startTime);
+
+  const meetingLink = cleanText(body.googleMeetLink || body.venue, 500);
+  const batchName = cleanText(body.batchName || "", 100);
+
   return {
     sessionType,
     title: cleanText(body.title || `${sessionType} Session`, 150),
     description: cleanText(body.description || "", 1000),
-    date: body.date,
-    startTime: cleanText(body.startTime || body.time, 20),
-    endTime: cleanText(body.endTime, 20),
-    venue: cleanText(body.venue, 500),
+    date,
+    startTime,
+    endTime,
+    venue: meetingLink,
+    googleMeetLink: meetingLink,
+    batchName,
+    batchId: cleanText(body.batchId || batchName, 120),
+    slotDurationMinutes: slotDuration,
+    breakBetweenSlotsMinutes: toNonNegativeInt(
+      body.breakBetweenSlotsMinutes,
+      DEFAULT_BREAK_MINUTES,
+    ),
     rubricId: body.rubricId,
-    students: cleanArray(body.students),
-    panels: cleanArray(body.panels),
+    students: cleanArray(body.students).length
+      ? cleanArray(body.students)
+      : [body.studentId].filter(Boolean),
+
+    panels: cleanArray(body.panels).length
+      ? cleanArray(body.panels)
+      : [body.panel1Id, body.panel2Id].filter(Boolean),
     status,
     createdBy: userId,
   };
@@ -68,9 +187,20 @@ exports.createTimetable = async (req, res) => {
     const payload = buildTimetablePayload(req.body, req.user.id);
     const timetable = await Timetable.create(payload);
 
+    const evaluationsToInsert = buildPendingEvaluations(
+      timetable,
+      payload,
+      req.body.semester,
+    );
+
+    if (evaluationsToInsert.length > 0) {
+      await Evaluation.insertMany(evaluationsToInsert);
+    }
+
     res.status(201).json({
       success: true,
       timetable: formatTimetable(timetable),
+      evaluationsCreated: evaluationsToInsert.length,
     });
   } catch (error) {
     res.status(500).json({
@@ -129,10 +259,10 @@ exports.getMyTimetable = async (req, res) => {
 
     if (req.user.role === "student") {
       query.students = myId;
-    }
-    // Allow Admins to fetch their personally assigned timetables just like Panels!
-    else if (req.user.role === "panel" || req.user.role === "admin") {
+    } else if (req.user.role === "panel") {
       query.panels = myId;
+    } else if (req.user.role === "admin") {
+      query = {};
     }
 
     const timetables = await Timetable.find(query)
@@ -191,55 +321,133 @@ exports.getTimetableById = async (req, res) => {
 // 🔴 BULK SCHEDULE GENERATOR
 exports.createBulkTimetables = async (req, res) => {
   try {
-    const { sessions } = req.body;
+    const {
+      sessions,
+      batchName,
+      batchId,
+      googleMeetLink,
+      venue,
+      date,
+      startTime,
+      slotDurationMinutes,
+      breakBetweenSlotsMinutes,
+      semester,
+    } = req.body;
 
-    // Push the React singular inputs safely into the Database schema Arrays
-    const timetablesToInsert = sessions.map((s) => ({
-      sessionType: s.sessionType,
-      rubricId: s.rubricId,
-      title: `${s.sessionType} Session`,
-      date: s.date,
-      startTime: s.time,
-      endTime: s.endTime,
-      venue: s.venue,
-      students: [s.studentId],
-      panels: [s.panel1Id, s.panel2Id].filter(Boolean),
-      status: "scheduled",
-      createdBy: req.user.id,
-    }));
+    if (!Array.isArray(sessions) || sessions.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one session is required for bulk scheduling.",
+      });
+    }
+
+    const duration = toPositiveInt(slotDurationMinutes, null);
+    const breakMinutes = toNonNegativeInt(
+      breakBetweenSlotsMinutes,
+      DEFAULT_BREAK_MINUTES,
+    );
+
+    const baseStartTime = cleanText(
+      startTime || sessions[0]?.startTime || sessions[0]?.time || "",
+      20,
+    );
+    const baseStartMinutes = parseTimeToMinutes(baseStartTime);
+
+    const batchMeetingLink = cleanText(googleMeetLink || venue || "", 500);
+    const cleanBatchName = cleanText(batchName || "", 100);
+    const cleanBatchId = cleanText(
+      batchId || `${cleanBatchName}-${batchMeetingLink}`,
+      150,
+    );
+
+    const timetablesToInsert = sessions.map((s, index) => {
+      const sessionType = cleanText(s.sessionType, 50);
+
+      if (!allowedSessionTypes.includes(sessionType)) {
+        throw new Error(`Invalid session type at row ${index + 1}.`);
+      }
+
+      const sessionDate = normalizeDateOnly(s.date || date);
+
+      let slotStartTime = cleanText(s.startTime || s.time || "", 20);
+      let slotEndTime = cleanText(s.endTime || "", 20);
+
+      if (!slotStartTime && baseStartMinutes !== null && duration) {
+        slotStartTime = formatMinutesToTime(
+          baseStartMinutes + index * (duration + breakMinutes),
+        );
+      }
+
+      if (!slotEndTime && slotStartTime && duration) {
+        const slotStartMinutes = parseTimeToMinutes(slotStartTime);
+        slotEndTime = formatMinutesToTime(slotStartMinutes + duration);
+      }
+
+      ensureNotBackdated(sessionDate, slotStartTime);
+
+      if (!slotEndTime) {
+        throw new Error(
+          `End time is missing at row ${index + 1}. Provide end time or slot duration.`,
+        );
+      }
+
+      return {
+        sessionType,
+        rubricId: s.rubricId,
+        title: cleanText(
+          s.title || `${sessionType.replaceAll("_", " ")} Session`,
+          150,
+        ),
+        date: sessionDate,
+        startTime: slotStartTime,
+        endTime: slotEndTime,
+        venue: cleanText(s.venue || s.googleMeetLink || batchMeetingLink, 500),
+        googleMeetLink: cleanText(
+          s.googleMeetLink || s.venue || batchMeetingLink,
+          500,
+        ),
+        batchName: cleanText(s.batchName || cleanBatchName, 100),
+        batchId: cleanText(s.batchId || cleanBatchId, 150),
+        slotDurationMinutes: duration,
+        breakBetweenSlotsMinutes: breakMinutes,
+        students: [s.studentId].filter(Boolean),
+        panels: [s.panel1Id, s.panel2Id].filter(Boolean),
+        status: "scheduled",
+        createdBy: req.user.id,
+      };
+    });
 
     const createdTimetables = await Timetable.insertMany(timetablesToInsert);
 
-    // Auto-Generate Evaluations
     const evaluationsToInsert = [];
+
     for (let i = 0; i < createdTimetables.length; i++) {
       const session = createdTimetables[i];
-      const orig = sessions[i];
-      if (orig.panel1Id)
-        evaluationsToInsert.push({
-          sessionId: session._id,
-          studentId: orig.studentId,
-          evaluatorId: orig.panel1Id,
-          rubricId: orig.rubricId,
-          sessionType: orig.sessionType,
-          status: "PENDING",
-        });
-      if (orig.panel2Id)
-        evaluationsToInsert.push({
-          sessionId: session._id,
-          studentId: orig.studentId,
-          evaluatorId: orig.panel2Id,
-          rubricId: orig.rubricId,
-          sessionType: orig.sessionType,
-          status: "PENDING",
-        });
-    }
-    if (evaluationsToInsert.length > 0)
-      await Evaluation.insertMany(evaluationsToInsert);
+      const payload = timetablesToInsert[i];
 
-    res.status(201).json({ success: true, count: createdTimetables.length });
+      evaluationsToInsert.push(
+        ...buildPendingEvaluations(session, payload, semester),
+      );
+    }
+
+    if (evaluationsToInsert.length > 0) {
+      await Evaluation.insertMany(evaluationsToInsert);
+    }
+
+    res.status(201).json({
+      success: true,
+      count: createdTimetables.length,
+      evaluationsCreated: evaluationsToInsert.length,
+      batchName: cleanBatchName,
+      batchId: cleanBatchId,
+      breakBetweenSlotsMinutes: breakMinutes,
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Error scheduling" });
+    res.status(500).json({
+      success: false,
+      message: "Error scheduling",
+      error: error.message,
+    });
   }
 };
 
@@ -317,6 +525,39 @@ exports.updateTimetable = async (req, res) => {
       });
     }
 
+    if (req.body.googleMeetLink !== undefined) {
+      updates.googleMeetLink = cleanText(req.body.googleMeetLink, 500);
+      updates.venue = updates.googleMeetLink;
+    }
+
+    if (req.body.batchName !== undefined) {
+      updates.batchName = cleanText(req.body.batchName, 100);
+    }
+
+    if (req.body.batchId !== undefined) {
+      updates.batchId = cleanText(req.body.batchId, 150);
+    }
+
+    if (req.body.slotDurationMinutes !== undefined) {
+      updates.slotDurationMinutes = toPositiveInt(
+        req.body.slotDurationMinutes,
+        existingSession?.slotDurationMinutes || null,
+      );
+    }
+
+    if (req.body.breakBetweenSlotsMinutes !== undefined) {
+      updates.breakBetweenSlotsMinutes = toNonNegativeInt(
+        req.body.breakBetweenSlotsMinutes,
+        DEFAULT_BREAK_MINUTES,
+      );
+    }
+    const effectiveDate = updates.date || existingSession.date;
+    const effectiveStartTime = updates.startTime || existingSession.startTime;
+
+    if (updates.date || updates.startTime) {
+      ensureNotBackdated(effectiveDate, effectiveStartTime);
+    }
+
     // Reconstruct the array for updating
     const oldP1 = existingSession.panels?.[0]?.toString();
     const oldP2 = existingSession.panels?.[1]?.toString();
@@ -353,17 +594,27 @@ exports.updateTimetable = async (req, res) => {
       );
     }
     if (updates.rubricId) {
+      const evaluationUpdate = {
+        rubricId: updates.rubricId,
+      };
+
+      if (updates.sessionType) {
+        evaluationUpdate.sessionType = updates.sessionType;
+      }
+
       await Evaluation.updateMany(
         { sessionId: id, status: "PENDING" },
-        { rubricId: updates.rubricId, sessionType: updates.sessionType },
+        evaluationUpdate,
       );
     }
 
     res.json({ success: true, timetable: formatTimetable(updatedSession) });
   } catch (error) {
-    res
-      .status(500)
-      .json({ success: false, message: "Error updating timetable" });
+    res.status(500).json({
+      success: false,
+      message: "Error updating timetable",
+      error: error.message,
+    });
   }
 };
 

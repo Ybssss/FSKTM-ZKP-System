@@ -16,6 +16,8 @@ export default function StudentProfile() {
   const [profileData, setProfileData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [researchTitle, setResearchTitle] = useState("");
+  const [researchAbstract, setResearchAbstract] = useState("");
+  const [savingAbstract, setSavingAbstract] = useState(false);
   const [savingTitle, setSavingTitle] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -30,6 +32,7 @@ export default function StudentProfile() {
       const res = await userAPI.getMyProfile();
       setProfileData(res.user);
       setResearchTitle(res.user?.researchTitle || "");
+      setResearchAbstract(res.user?.researchAbstract || "");
     } catch (error) {
       console.error("Failed to load profile", error);
     } finally {
@@ -237,7 +240,60 @@ export default function StudentProfile() {
                   }`}
                   placeholder="Enter your research project title"
                 />
+                <div className="bg-blue-50 p-5 rounded-lg border border-blue-100 mt-6">
+                  <p className="text-xs font-bold text-blue-800 uppercase tracking-widest mb-2">
+                    Research Abstract / Summary Optional
+                  </p>
 
+                  <textarea
+                    value={researchAbstract}
+                    onChange={(e) => setResearchAbstract(e.target.value)}
+                    maxLength={5000}
+                    rows={6}
+                    className="w-full p-3 border border-blue-200 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    placeholder="Optional: Enter your research abstract or project summary to improve panel matching accuracy."
+                  />
+
+                  <p className="text-xs text-gray-500 mt-2">
+                    {researchAbstract.length}/5000 characters
+                  </p>
+
+                  <button
+                    type="button"
+                    disabled={savingAbstract}
+                    onClick={async () => {
+                      try {
+                        setSavingAbstract(true);
+
+                        const cleanAbstract = researchAbstract
+                          .replace(/\s+/g, " ")
+                          .trim();
+
+                        const res =
+                          await userAPI.updateMyResearchAbstract(cleanAbstract);
+
+                        setProfileData(res.user);
+                        setResearchAbstract(res.user?.researchAbstract || "");
+                        setMessage({
+                          type: "success",
+                          text: "Research abstract updated successfully.",
+                        });
+                      } catch (error) {
+                        setMessage({
+                          type: "error",
+                          text:
+                            error.response?.data?.message ||
+                            "Failed to update research abstract.",
+                        });
+                      } finally {
+                        setSavingAbstract(false);
+                      }
+                    }}
+                    className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 disabled:bg-gray-400"
+                  >
+                    {savingAbstract ? "Saving..." : "Save Abstract"}
+                  </button>
+                </div>
                 <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-3">
                   <div>
                     <p

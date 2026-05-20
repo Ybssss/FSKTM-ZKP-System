@@ -51,13 +51,38 @@ export default function EvaluationPage() {
 
   useEffect(() => {
     loadEvaluations();
-  }, []);
+  }, [urlId]);
 
   const loadEvaluations = async () => {
     try {
       setLoading(true);
+
       const res = await api.get("/evaluations");
-      setEvaluations(res.data.data || []);
+      let loadedEvaluations = res.data.data || res.data.evaluations || [];
+
+      if (
+        urlId &&
+        !loadedEvaluations.some(
+          (evaluation) => String(evaluation._id) === String(urlId),
+        )
+      ) {
+        try {
+          const detailRes = await api.get(`/evaluations/${urlId}`);
+          const directEvaluation =
+            detailRes.data.evaluation || detailRes.data.data;
+
+          if (directEvaluation) {
+            loadedEvaluations = [directEvaluation, ...loadedEvaluations];
+          }
+        } catch (detailError) {
+          alert(
+            detailError.response?.data?.message ||
+              "You do not have permission to view this historical evaluation.",
+          );
+        }
+      }
+
+      setEvaluations(loadedEvaluations);
     } catch (error) {
       console.error("Error loading evaluation data:", error);
     } finally {

@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { QRCodeSVG } from "qrcode.react";
 import {
   Calendar,
   Clock,
@@ -42,7 +41,12 @@ export default function SessionDetailPage() {
   const [loading, setLoading] = useState(true);
   const [attendanceActive, setAttendanceActive] = useState(false);
   const [attendanceCode, setAttendanceCode] = useState("");
+  const [attendanceQrImage, setAttendanceQrImage] = useState("");
+  const [attendanceExpiresAt, setAttendanceExpiresAt] = useState("");
+  const [attendanceRecords, setAttendanceRecords] = useState([]);
+
   const [uploadingMaterial, setUploadingMaterial] = useState(false);
+
   const [materialForm, setMaterialForm] = useState({
     title: "",
     type: "other",
@@ -66,6 +70,14 @@ export default function SessionDetailPage() {
         []
       ).find((s) => s.id === id || s._id === id);
       setSession(foundSession);
+      if (isStaff) {
+        try {
+          const attendanceRes = await api.get(`/attendance/timetable/${id}`);
+          setAttendanceRecords(attendanceRes.data.attendances || []);
+        } catch (error) {
+          console.warn("Could not load attendance records.");
+        }
+      }
       if (isStudent) {
         return;
       }
@@ -191,10 +203,29 @@ export default function SessionDetailPage() {
     return "text-red-700 bg-red-100";
   };
 
-  const toggleAttendance = () => {
-    if (!attendanceActive)
-      setAttendanceCode(Math.floor(100000 + Math.random() * 900000).toString());
-    setAttendanceActive(!attendanceActive);
+  const toggleAttendance = async () => {
+    if (attendanceActive) {
+      setAttendanceActive(false);
+      setAttendanceCode("");
+      setAttendanceQrImage("");
+      setAttendanceExpiresAt("");
+      return;
+    }
+
+    try {
+      const res = await api.post(`/qr/generate/${id}`);
+
+      setAttendanceCode(res.data.token || "");
+      setAttendanceQrImage(res.data.qrCode || "");
+      setAttendanceExpiresAt(res.data.expiresAt || "");
+      setAttendanceActive(true);
+    } catch (error) {
+      alert(
+        error.response?.data?.message ||
+          error.response?.data?.error ||
+          "Failed to generate attendance QR.",
+      );
+    }
   };
 
   const getOnlineMeetingUrl = (value) => {
@@ -766,10 +797,17 @@ export default function SessionDetailPage() {
             ) : (
               <div className="flex flex-col items-center space-y-4 bg-indigo-50 border border-indigo-100 p-6 rounded-lg">
                 <div className="bg-white p-4 rounded-xl shadow-md">
-                  <QRCodeSVG
-                    value={`https://fsktm-zkp.edu.my/attend/${id}?code=${attendanceCode}`}
-                    size={200}
-                  />
+                  {attendanceQrImage ? (
+                    <img
+                      src={attendanceQrImage}
+                      alt="Attendance QR Code"
+                      className="w-[200px] h-[200px]"
+                    />
+                  ) : (
+                    <p className="text-sm text-gray-500">
+                      QR code unavailable.
+                    </p>
+                  )}
                 </div>
                 <div className="text-center w-full">
                   <p className="text-xs font-bold text-indigo-900 uppercase tracking-widest">
@@ -779,6 +817,12 @@ export default function SessionDetailPage() {
                     {attendanceCode}
                   </p>
                 </div>
+                {attendanceExpiresAt && (
+                  <p className="text-xs text-gray-500 mt-2">
+                    Expires at:{" "}
+                    {new Date(attendanceExpiresAt).toLocaleString("en-MY")}
+                  </p>
+                )}
                 <button
                   onClick={toggleAttendance}
                   className="mt-2 text-sm font-bold text-red-600 hover:text-red-800 bg-white px-4 py-2 rounded shadow-sm border border-red-100"
@@ -788,6 +832,50 @@ export default function SessionDetailPage() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {isStaff && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2">
+            <ClipboardCheck className="w-5 h-5 text-green-600" />
+            Attendance Status
+          </h2>
+
+          {attendanceRecords.length > 0 ? (
+            <div className="space-y-3">
+              {attendanceRecords.map((record) => (
+                <div
+                  key={record._id}
+                  className="flex items-center justify-between p-4 rounded-lg border border-green-200 bg-green-50"
+                >
+                  <div>
+                    <p className="font-bold text-gray-900">
+                      {record.studentId?.name || "Student"}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {record.studentId?.matricNumber || ""}
+                    </p>
+                  </div>
+
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-green-700 uppercase">
+                      {record.status}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      {record.checkInTime
+                        ? new Date(record.checkInTime).toLocaleString("en-MY")
+                        : ""}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-sm text-gray-500 bg-gray-50 border border-dashed border-gray-200 rounded-lg p-4">
+              No attendance has been marked for this session yet.
+            </p>
+          )}
         </div>
       )}
 

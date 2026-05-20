@@ -38,7 +38,7 @@ export default function AdminManagementPage() {
       const res = await api.get("/users");
       const allUsers = res.data.users || [];
       setStudents(allUsers.filter((u) => u.role === "student"));
-      setPanels(allUsers.filter((u) => u.role === "panel"));
+      setPanels(allUsers.filter((u) => ["panel", "admin"].includes(u.role)));
     } catch (err) {
       console.error("Failed to fetch users", err);
     }
@@ -47,8 +47,13 @@ export default function AdminManagementPage() {
   const handleCreateUser = async (e) => {
     e.preventDefault();
     try {
-      await api.post("/users", formData);
-      alert("User created! Code is: TEST-123");
+      const res = await api.post("/users", formData);
+
+      alert(
+        `User created successfully.\nUser ID: ${
+          res.data.user?.userId || formData.userId
+        }\nRegistration Code: ${res.data.registrationCode}`,
+      );
       setFormData({
         userId: "",
         name: "",
@@ -135,11 +140,22 @@ export default function AdminManagementPage() {
       setSelectedStudentIds([student._id]);
       const res = await api.post("/timetables/match-expertise", {
         researchTitle: student.researchTitle,
+        researchAbstract: student.researchAbstract || "",
         studentId: student._id,
       });
       if (res.data.recommendedPanels && res.data.recommendedPanels.length > 0) {
         setAiSuggestions(
-          panels.filter((p) => res.data.recommendedPanels.includes(p._id)),
+          (res.data.recommendations || [])
+            .filter((item) => item.score >= 30)
+            .slice(0, 2)
+            .map((item) => ({
+              _id: item.panelId,
+              name: item.name,
+              email: item.email,
+              expertiseTags: item.expertiseTags || [],
+              matchScore: item.score,
+              matches: item.matches || [],
+            })),
         );
       } else {
         alert("AI could not find any relevant panels.");
@@ -249,9 +265,7 @@ export default function AdminManagementPage() {
             className="w-full p-2 border rounded"
           >
             <option value="">Select Role...</option>
-            {user?.role === "superadmin" && (
-              <option value="admin">Administrator</option>
-            )}
+            <option value="admin">Administrator</option>
             <option value="panel">Panel Member</option>
             <option value="student">Student</option>
           </select>

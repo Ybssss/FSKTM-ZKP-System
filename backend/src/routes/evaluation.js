@@ -34,12 +34,10 @@ router.get("/student/:studentId", authenticateToken, async (req, res) => {
 
       // Allow if either the MongoDB ID matches or the UTHM Matric Number (userId) matches
       if (loggedInId !== requestedId && req.user.userId !== requestedId) {
-        return res
-          .status(403)
-          .json({
-            success: false,
-            message: "Access denied. You can only view your own records.",
-          });
+        return res.status(403).json({
+          success: false,
+          message: "Access denied. You can only view your own records.",
+        });
       }
     }
 
@@ -52,13 +50,11 @@ router.get("/student/:studentId", authenticateToken, async (req, res) => {
     res.json({ success: true, evaluations });
   } catch (error) {
     console.error("Fetch Student Evaluations Error:", error);
-    res
-      .status(500)
-      .json({
-        success: false,
-        message: "Failed to fetch evaluations",
-        error: error.message,
-      });
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch evaluations",
+      error: error.message,
+    });
   }
 });
 
@@ -78,5 +74,7 @@ router.post(
   authenticateToken,
   evaluationController.respondToRequest,
 );
+
+router.get("/:id", authenticateToken, evaluationController.getEvaluationById);
 
 module.exports = router;
