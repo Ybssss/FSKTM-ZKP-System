@@ -24,6 +24,11 @@ router.post("/permissions/respond", feedbackController.respondToRequest);
 
 router.post("/permissions/withdraw", feedbackController.withdrawPermission);
 
+router.post(
+  "/permissions/request-unlock",
+  feedbackController.requestUnlockEvaluation,
+);
+
 // Search feedback
 router.get("/search", feedbackController.searchFeedback);
 

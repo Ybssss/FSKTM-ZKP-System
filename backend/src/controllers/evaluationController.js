@@ -132,10 +132,12 @@ exports.submitEvaluation = async (req, res) => {
         .json({ error: "Pending evaluation not found for this session." });
     }
 
-    if (evaluation.status === "COMPLETED") {
-      return res
-        .status(400)
-        .json({ error: "You have already submitted this evaluation." });
+    if (evaluation.status === "COMPLETED" && !evaluation.isUnlocked) {
+      return res.status(400).json({
+        success: false,
+        error:
+          "This evaluation is locked. Please request unlock approval before revising.",
+      });
     }
 
     // Update with the submitted data based on session type
@@ -153,7 +155,9 @@ exports.submitEvaluation = async (req, res) => {
 
     // Mark as COMPLETED
     evaluation.status = "COMPLETED";
-    await evaluation.save();
+    evaluation.isUnlocked = false;
+    evaluation.lastRelockedAt = new Date();
+
     const savedEvaluation = await evaluation.save();
 
     // Re-populate for the frontend report view

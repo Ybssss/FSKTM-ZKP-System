@@ -553,6 +553,98 @@ exports.requestStudentHistoryAccess = async (req, res) => {
   }
 };
 
+exports.requestUnlockEvaluation = async (req, res) => {
+  try {
+    const requesterId = getAuthUserId(req);
+    const { targetEvaluationId, reason } = req.body;
+
+    if (!targetEvaluationId) {
+      return res.status(400).json({
+        success: false,
+        message: "Target evaluation is required.",
+      });
+    }
+
+    const evaluation = await Evaluation.findById(targetEvaluationId).select(
+      "studentId evaluatorId status isUnlocked",
+    );
+
+    if (!evaluation) {
+      return res.status(404).json({
+        success: false,
+        message: "Evaluation not found.",
+      });
+    }
+
+    if (evaluation.status !== "COMPLETED") {
+      return res.status(400).json({
+        success: false,
+        message: "Only completed evaluations can be requested for unlock.",
+      });
+    }
+
+    if (!isSameId(evaluation.evaluatorId, requesterId)) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Only the original evaluator can request revision access for this evaluation.",
+      });
+    }
+
+    if (evaluation.isUnlocked) {
+      return res.status(400).json({
+        success: false,
+        message: "This evaluation is already unlocked for revision.",
+      });
+    }
+
+    const existing = await PermissionRequest.findOne({
+      requestingPanelId: requesterId,
+      targetEvaluationId,
+      scope: "UNLOCK_EVALUATION",
+      status: { $in: ["PENDING", "APPROVED"] },
+    });
+
+    if (existing?.status === "PENDING") {
+      return res.status(400).json({
+        success: false,
+        message: "You already have a pending unlock request.",
+      });
+    }
+
+    if (existing?.status === "APPROVED") {
+      return res.status(400).json({
+        success: false,
+        message: "Unlock request has already been approved.",
+      });
+    }
+
+    const permission = await PermissionRequest.create({
+      requestingPanelId: requesterId,
+      targetEvaluationId,
+      owningPanelId: evaluation.evaluatorId,
+      studentId: evaluation.studentId,
+      scope: "UNLOCK_EVALUATION",
+      reason: cleanText(
+        reason || "Need to revise submitted evaluation scores or remarks.",
+      ),
+    });
+
+    res.json({
+      success: true,
+      message: "Unlock request sent to administration.",
+      permission,
+    });
+  } catch (error) {
+    console.error("Request Unlock Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to request unlock.",
+      error: error.message,
+    });
+  }
+};
+
 // @desc    Get my permission requests
 // @route   GET /api/feedback/permissions/my
 // @access  Private (Panels)
@@ -604,8 +696,16 @@ exports.respondToRequest = async (req, res) => {
 
     const isAdmin = req.user.role === "admin";
     const isOriginalOwner = isSameId(request.owningPanelId, responderId);
+    const isUnlockRequest = request.scope === "UNLOCK_EVALUATION";
 
-    if (!isAdmin && !isOriginalOwner) {
+    if (isUnlockRequest && !isAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: "Only admin can approve or reject evaluation unlock requests.",
+      });
+    }
+
+    if (!isUnlockRequest && !isAdmin && !isOriginalOwner) {
       return res.status(403).json({
         success: false,
         message:
@@ -627,6 +727,16 @@ exports.respondToRequest = async (req, res) => {
         runValidators: true,
       },
     );
+
+    if (isUnlockRequest && action === "APPROVED") {
+      await Evaluation.findByIdAndUpdate(request.targetEvaluationId, {
+        $set: {
+          isUnlocked: true,
+          unlockedBy: responderId,
+          unlockedAt: new Date(),
+        },
+      });
+    }
 
     res.json({
       success: true,

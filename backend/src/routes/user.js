@@ -418,41 +418,7 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-router.post("/:userId/reset-zkp", async (req, res) => {
-  try {
-    if (req.user.role !== "admin")
-      return res
-        .status(403)
-        .json({ success: false, message: "Access denied." });
-    const targetUser = await User.findOne({ userId: req.params.userId });
-    if (!targetUser)
-      return res
-        .status(404)
-        .json({ success: false, message: "User not found" });
-
-    const registrationCode = Math.floor(
-      100000 + Math.random() * 900000,
-    ).toString();
-    targetUser.zkpPublicKey = null;
-    targetUser.zkpRegistered = false;
-    targetUser.zkpChallenge = null;
-    targetUser.registrationCode = registrationCode;
-
-    if (typeof targetUser.logoutAllDevices === "function")
-      targetUser.logoutAllDevices();
-    await targetUser.save();
-
-    res.json({
-      success: true,
-      message: "ZKP reset successfully",
-      userId: targetUser.userId,
-      name: targetUser.name,
-      registrationCode,
-    });
-  } catch (error) {
-    res.status(500).json({ success: false, message: "Failed to reset ZKP" });
-  }
-});
+router.post("/:userId/reset-zkp", userController.resetZkpRegistration);
 
 router.post("/assign-panel", async (req, res) => {
   try {

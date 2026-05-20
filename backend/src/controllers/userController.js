@@ -27,6 +27,7 @@ exports.createUser = async (req, res) => {
       program,
       researchTitle,
       supervisorId,
+      expertiseTags,
     } = req.body;
     const creatorRole = req.user.role;
 
@@ -45,24 +46,62 @@ exports.createUser = async (req, res) => {
     const registrationCode =
       "REG-" + Math.floor(100000 + Math.random() * 900000);
 
+    const cleanExpertiseTags = Array.isArray(expertiseTags)
+      ? expertiseTags.map((tag) => String(tag || "").trim()).filter(Boolean)
+      : typeof expertiseTags === "string"
+        ? expertiseTags
+            .split(",")
+            .map((tag) => tag.trim())
+            .filter(Boolean)
+        : [];
+
+    const cleanEmail = String(email || "")
+      .trim()
+      .toLowerCase();
+
     const newUser = new User({
-      userId,
-      name,
-      email,
+      userId: String(userId || "").trim(),
+      name: String(name || "").trim(),
+      email: cleanEmail,
       role,
       registrationCode,
+
       ...(role === "student" && {
-        matricNumber,
+        matricNumber: String(matricNumber || "")
+          .replace(/\s+/g, "")
+          .toUpperCase(),
         program,
         researchTitle,
-        supervisorId,
+        supervisorId: supervisorId || null,
+      }),
+
+      ...(["panel", "admin"].includes(role) && {
+        expertiseTags: cleanExpertiseTags,
       }),
     });
 
     await newUser.save();
 
     // ✅ Send Welcome Email
-    sendRegistrationEmail(email, name, userId, registrationCode, false);
+    let emailStatus = {
+      sent: false,
+      error: null,
+    };
+
+    try {
+      await sendRegistrationEmail(
+        cleanEmail,
+        newUser.name,
+        newUser.userId,
+        registrationCode,
+        false,
+      );
+
+      emailStatus.sent = true;
+    } catch (emailError) {
+      emailStatus.error = emailError.message;
+      console.error("❌ Registration email failed:", emailError.message);
+    }
 
     if (logActivity)
       await logActivity(
@@ -74,9 +113,12 @@ exports.createUser = async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: "User created successfully",
+      message: emailStatus.sent
+        ? "User created successfully and registration email sent."
+        : "User created successfully, but registration email failed to send.",
       user: newUser,
       registrationCode,
+      emailStatus,
     });
   } catch (error) {
     res.status(500).json({
@@ -118,20 +160,35 @@ exports.resetZkpRegistration = async (req, res) => {
     await userToReset.save();
 
     // ✅ Send Reset Email
-    sendRegistrationEmail(
-      userToReset.email,
-      userToReset.name,
-      userToReset.userId,
-      newRegistrationCode,
-      true,
-    );
+    let emailStatus = {
+      sent: false,
+      error: null,
+    };
+
+    try {
+      await sendRegistrationEmail(
+        userToReset.email,
+        userToReset.name,
+        userToReset.userId,
+        newRegistrationCode,
+        true,
+      );
+
+      emailStatus.sent = true;
+    } catch (emailError) {
+      emailStatus.error = emailError.message;
+      console.error("❌ Reset email failed:", emailError.message);
+    }
 
     res.json({
       success: true,
-      message: "User ZKP identity reset successfully.",
+      message: emailStatus.sent
+        ? "User ZKP identity reset successfully and email sent."
+        : "User ZKP identity reset successfully, but email failed to send.",
       registrationCode: newRegistrationCode,
       name: userToReset.name,
       userId: userToReset.userId,
+      emailStatus,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: "Failed to reset user." });

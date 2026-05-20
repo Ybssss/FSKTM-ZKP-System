@@ -25,7 +25,7 @@ const SCALE = [
 
 export default function EvaluationPage() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+  const isAdmin = user?.role === "admin";
 
   const { id: urlId } = useParams();
   const navigate = useNavigate();
@@ -78,13 +78,14 @@ export default function EvaluationPage() {
     try {
       const payload = {
         targetEvaluationId: selectedEval._id,
-        owningPanelId:
-          selectedEval.evaluatorId?._id || selectedEval.evaluatorId,
-        studentId: selectedEval.studentId?._id || selectedEval.studentId,
-        reason: `[UNLOCK REQUEST]: ${reason}`, // Prefix so Admins know it's an unlock request
+        reason,
       };
 
-      const res = await api.post("/feedback/permissions/request", payload);
+      const res = await api.post(
+        "/feedback/permissions/request-unlock",
+        payload,
+      );
+
       if (res.data.success) {
         alert(
           "✅ Unlock request sent to the Administration. You will be able to edit once approved.",
@@ -268,8 +269,13 @@ export default function EvaluationPage() {
   // LOCK LOGIC:
   // 1. If it's completed, it's locked for EVERYONE.
   // 2. If it's pending, ONLY the actual author can edit it. Admins cannot edit someone else's pending form.
-  const isLocked = selectedEval?.status === "COMPLETED";
-  const canEdit = isAuthor && !isLocked;
+  const isCompleted = selectedEval?.status === "COMPLETED";
+  const isUnlocked = selectedEval?.isUnlocked === true;
+
+  const isLocked = isCompleted && !isUnlocked;
+  const canEdit =
+    isAuthor &&
+    (selectedEval?.status === "PENDING" || (isCompleted && isUnlocked));
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -433,23 +439,31 @@ export default function EvaluationPage() {
 
             <div className="p-8 overflow-y-auto flex-1 bg-gray-50">
               {/* LOCK WARNING BANNER */}
-              {isLocked && (
+              {isLocked && (isAdmin || isAuthor) && (
                 <div className="mb-6 bg-red-50 border border-red-200 p-4 rounded-lg flex items-start gap-3">
                   <ShieldAlert className="w-6 h-6 text-red-600 shrink-0" />
                   <div>
-                    <h3 className="font-bold text-red-900">Document Locked</h3>
+                    <h3 className="font-bold text-red-900">
+                      {isAdmin
+                        ? "Officially Submitted Document"
+                        : "Document Locked"}
+                    </h3>
+
                     <p className="text-sm text-red-800 mt-1">
-                      This evaluation has been officially submitted and is
-                      secured. If you need to revise your scores or remarks, you
-                      must submit a formal Unlock Request to the Administration.
+                      {isAdmin
+                        ? "This evaluation has been submitted and is currently read-only. Admin may review the document and manage unlock requests."
+                        : "This evaluation has been officially submitted and secured. To revise the scores or remarks, please submit an Unlock Request to the administration."}
                     </p>
-                    <button
-                      onClick={handleUnlockRequest}
-                      className="mt-3 bg-red-600 text-white px-4 py-2 rounded text-xs font-bold hover:bg-red-700 transition-colors shadow-sm"
-                    >
-                      <Lock className="w-3 h-3 inline mr-1" /> Request Unlock to
-                      Edit
-                    </button>
+
+                    {isAuthor && !isAdmin && (
+                      <button
+                        onClick={handleUnlockRequest}
+                        className="mt-3 bg-red-600 text-white px-4 py-2 rounded text-xs font-bold hover:bg-red-700 transition-colors shadow-sm"
+                      >
+                        <Lock className="w-3 h-3 inline mr-1" />
+                        Request Unlock to Edit
+                      </button>
+                    )}
                   </div>
                 </div>
               )}

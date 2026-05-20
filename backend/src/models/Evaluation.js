@@ -26,6 +26,27 @@ const evaluationSchema = new mongoose.Schema(
       default: "PENDING",
     },
 
+    isUnlocked: {
+      type: Boolean,
+      default: false,
+    },
+
+    unlockedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    unlockedAt: {
+      type: Date,
+      default: null,
+    },
+
+    lastRelockedAt: {
+      type: Date,
+      default: null,
+    },
+
     rubricId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Rubric",

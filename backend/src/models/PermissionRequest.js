@@ -33,7 +33,7 @@ const permissionRequestSchema = new mongoose.Schema(
 
     scope: {
       type: String,
-      enum: ["SINGLE_EVALUATION", "STUDENT_HISTORY"],
+      enum: ["SINGLE_EVALUATION", "STUDENT_HISTORY", "UNLOCK_EVALUATION"],
       default: "SINGLE_EVALUATION",
     },
 
