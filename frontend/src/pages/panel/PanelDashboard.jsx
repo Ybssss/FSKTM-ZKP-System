@@ -15,7 +15,7 @@ import api from "../../services/api";
 export default function PanelDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+  const isAdmin = user?.role === "admin";
 
   const [upcomingSessions, setUpcomingSessions] = useState([]);
   const [loading, setLoading] = useState(true);

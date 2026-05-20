@@ -1,8 +1,6 @@
 import React, { useState, useEffect } from "react";
 import {
   Eye,
-  FileText,
-  TrendingUp,
   Lock,
   Unlock,
   CheckCircle,
@@ -16,13 +14,14 @@ import { useAuth } from "../../contexts/AuthContext";
 
 export default function HistoricalFeedbackPage() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+  const isAdmin = user?.role === "admin";
+  const canManagePermissions = user?.role === "panel" || isAdmin;
 
   const [evaluations, setEvaluations] = useState([]);
   const [lockedEvals, setLockedEvals] = useState([]);
   const [incomingRequests, setIncomingRequests] = useState([]);
   const [loading, setLoading] = useState(true);
-
+  const [approvedRequests, setApprovedRequests] = useState([]);
   // Modals & UI State
   const [selectedEvaluation, setSelectedEvaluation] = useState(null);
   const [activeTab, setActiveTab] = useState("my-access"); // 'my-access' | 'locked' | 'requests'
@@ -45,9 +44,15 @@ export default function HistoricalFeedbackPage() {
       setEvaluations(completed);
       setLockedEvals(res.data.locked || []);
 
-      if (user?.role === "panel") {
-        const reqRes = await api.get("/evaluations/pending-requests");
-        setIncomingRequests(reqRes.data.data || []);
+      if (user?.role === "panel" || user?.role === "admin") {
+        const reqRes = await api.get(
+          "/feedback/permissions/incoming?status=PENDING",
+        );
+        setIncomingRequests(reqRes.data.requests || []);
+        const approvedReqRes = await api.get(
+          "/feedback/permissions/incoming?status=APPROVED",
+        );
+        setApprovedRequests(approvedReqRes.data.requests || []);
       }
     } catch (error) {
       console.error("Error loading historical data:", error);
@@ -60,7 +65,7 @@ export default function HistoricalFeedbackPage() {
     e.preventDefault();
     setActionLoading(true);
     try {
-      await api.post("/evaluations/request-access", {
+      await api.post("/feedback/permissions/request", {
         targetEvaluationId: requestModalData._id,
         reason: requestReason,
       });
@@ -69,7 +74,11 @@ export default function HistoricalFeedbackPage() {
       setRequestReason("");
       loadData();
     } catch (error) {
-      alert(error.response?.data?.error || "Failed to send request.");
+      alert(
+        error.response?.data?.message ||
+          error.response?.data?.error ||
+          "Failed to send request.",
+      );
     } finally {
       setActionLoading(false);
     }
@@ -83,10 +92,25 @@ export default function HistoricalFeedbackPage() {
     )
       return;
     try {
-      await api.post("/evaluations/respond-request", { requestId, action });
+      await api.post("/feedback/permissions/respond", { requestId, action });
       loadData();
     } catch (error) {
-      alert(error.response?.data?.error || `Failed to respond to request.`);
+      alert(
+        error.response?.data?.message ||
+          error.response?.data?.error ||
+          "Failed to respond to request.",
+      );
+    }
+  };
+
+  const handleWithdrawPermission = async (requestId) => {
+    if (!window.confirm("Withdraw this approved access permission?")) return;
+
+    try {
+      await api.post("/feedback/permissions/withdraw", { requestId });
+      loadData();
+    } catch (error) {
+      alert(error.response?.data?.message || "Failed to withdraw permission.");
     }
   };
 
@@ -109,7 +133,7 @@ export default function HistoricalFeedbackPage() {
           </p>
         </div>
 
-        {user?.role === "panel" && (
+        {canManagePermissions && (
           <div className="flex bg-gray-200 p-1 rounded-lg self-start">
             <button
               onClick={() => setActiveTab("my-access")}
@@ -117,12 +141,18 @@ export default function HistoricalFeedbackPage() {
             >
               My Access
             </button>
-            <button
-              onClick={() => setActiveTab("locked")}
-              className={`px-4 py-2 rounded-md font-bold text-sm transition-all flex items-center gap-1 ${activeTab === "locked" ? "bg-white text-indigo-700 shadow-sm" : "text-gray-600"}`}
-            >
-              <Lock className="w-4 h-4" /> Locked Records
-            </button>
+            {!isAdmin && (
+              <button
+                onClick={() => setActiveTab("locked")}
+                className={`px-4 py-2 rounded-md font-bold text-sm transition-all flex items-center gap-1 ${
+                  activeTab === "locked"
+                    ? "bg-white text-indigo-700 shadow-sm"
+                    : "text-gray-600"
+                }`}
+              >
+                <Lock className="w-4 h-4" /> Locked Records
+              </button>
+            )}
             <button
               onClick={() => setActiveTab("requests")}
               className={`relative px-4 py-2 rounded-md font-bold text-sm transition-all ${activeTab === "requests" ? "bg-indigo-600 text-white shadow-sm" : "text-gray-600"}`}
@@ -131,6 +161,21 @@ export default function HistoricalFeedbackPage() {
               {incomingRequests.length > 0 && (
                 <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full animate-bounce">
                   {incomingRequests.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab("approved")}
+              className={`relative px-4 py-2 rounded-md font-bold text-sm transition-all ${
+                activeTab === "approved"
+                  ? "bg-red-600 text-white shadow-sm"
+                  : "text-gray-600"
+              }`}
+            >
+              Approved Access
+              {approvedRequests.length > 0 && (
+                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full">
+                  {approvedRequests.length}
                 </span>
               )}
             </button>
@@ -145,7 +190,7 @@ export default function HistoricalFeedbackPage() {
       ) : (
         <>
           {/* TAB 1: MY ACCESS */}
-          {(activeTab === "my-access" || isAdmin) && (
+          {activeTab === "my-access" && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="divide-y divide-gray-100">
                 {evaluations.length === 0 && (
@@ -275,13 +320,14 @@ export default function HistoricalFeedbackPage() {
           )}
 
           {/* TAB 3: PENDING APPROVALS */}
-          {activeTab === "requests" && !isAdmin && (
+          {activeTab === "requests" && canManagePermissions && (
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
               <div className="p-4 bg-indigo-50 border-b border-indigo-100 flex items-center gap-3">
                 <Shield className="w-5 h-5 text-indigo-700" />
                 <p className="text-sm text-indigo-900 font-semibold">
-                  Other panels are requesting access to evaluations you
-                  authored.
+                  {isAdmin
+                    ? "All pending historical access requests are shown here."
+                    : "Other panels are requesting access to evaluations you authored."}
                 </p>
               </div>
               <div className="divide-y divide-gray-100">
@@ -344,6 +390,58 @@ export default function HistoricalFeedbackPage() {
                         className="px-5 py-2.5 bg-green-600 text-white hover:bg-green-700 font-bold rounded-lg shadow-sm flex items-center gap-2 transition-colors"
                       >
                         <CheckCircle className="w-5 h-5" /> Grant Access
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {activeTab === "approved" && canManagePermissions && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="p-4 bg-red-50 border-b border-red-100 flex items-center gap-3">
+                <Shield className="w-5 h-5 text-red-700" />
+                <p className="text-sm text-red-900 font-semibold">
+                  {isAdmin
+                    ? "All approved historical access permissions are shown here and can be withdrawn."
+                    : "These panels currently have approved access to evaluations you authored."}
+                </p>
+              </div>
+
+              <div className="divide-y divide-gray-100">
+                {approvedRequests.length === 0 && (
+                  <div className="p-12 text-center text-gray-500">
+                    No approved access permissions found.
+                  </div>
+                )}
+
+                {approvedRequests.map((req) => (
+                  <div key={req._id} className="p-6 bg-white hover:bg-gray-50">
+                    <div className="flex flex-col md:flex-row justify-between items-start gap-4">
+                      <div>
+                        <p className="text-xs text-gray-500 uppercase font-bold tracking-widest mb-1">
+                          Access Granted To
+                        </p>
+                        <h3 className="text-lg font-bold text-gray-900">
+                          {req.requestingPanelId?.name}
+                        </h3>
+                        <p className="text-sm text-gray-600">
+                          {req.requestingPanelId?.email}
+                        </p>
+                        <p className="text-sm text-gray-600 mt-2">
+                          Student:{" "}
+                          <span className="font-bold text-indigo-700">
+                            {req.studentId?.name}
+                          </span>
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => handleWithdrawPermission(req._id)}
+                        className="px-5 py-2.5 bg-red-600 text-white hover:bg-red-700 font-bold rounded-lg shadow-sm flex items-center gap-2 transition-colors"
+                      >
+                        <XCircle className="w-5 h-5" />
+                        Withdraw Access
                       </button>
                     </div>
                   </div>

@@ -5,16 +5,24 @@ const feedbackController = require("../controllers/feedbackController");
 
 // Protect all routes
 router.use(authenticateToken);
+
+// Permission request routes
+router.post("/permissions/request", feedbackController.requestAccess);
+
 router.post(
-  "/permissions/request",
-  authenticateToken,
-  feedbackController.requestAccess,
+  "/permissions/request-student-history",
+  feedbackController.requestStudentHistoryAccess,
 );
-router.get(
-  "/permissions/my",
-  authenticateToken,
-  feedbackController.getMyPermissions,
-);
+
+router.get("/permissions/my", feedbackController.getMyPermissions);
+
+router.get("/permissions/incoming", feedbackController.getIncomingPermissions);
+
+router.get("/permissions/all", feedbackController.getAllPermissions);
+
+router.post("/permissions/respond", feedbackController.respondToRequest);
+
+router.post("/permissions/withdraw", feedbackController.withdrawPermission);
 
 // Search feedback
 router.get("/search", feedbackController.searchFeedback);
@@ -27,17 +35,5 @@ router.get("/stats", feedbackController.getFeedbackStats);
 
 // Get recent feedback
 router.get("/recent", feedbackController.getRecentFeedback);
-
-// Admin Global Permission Routes
-router.get(
-  "/permissions/all",
-  authenticateToken,
-  feedbackController.getAllPermissions,
-);
-router.post(
-  "/permissions/respond",
-  authenticateToken,
-  feedbackController.respondToRequest,
-);
 
 module.exports = router;

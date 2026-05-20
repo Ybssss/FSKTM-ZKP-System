@@ -1,6 +1,8 @@
 const Evaluation = require("../models/Evaluation");
 const User = require("../models/User");
 const PermissionRequest = require("../models/PermissionRequest");
+const crypto = require("crypto");
+const Timetable = require("../models/Timetable");
 const escapeRegex = (value = "") =>
   String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
@@ -10,6 +12,37 @@ const cleanText = (value = "") =>
     .replace(/[<>]/g, "")
     .replace(/\s+/g, " ")
     .trim();
+
+const getAuthUserId = (req) => req.user.id || req.user._id;
+
+const isSameId = (a, b) => String(a || "") === String(b || "");
+
+const hasActivePermissionStatus = ["PENDING", "APPROVED"];
+
+const canRequesterAccessStudent = async ({
+  requester,
+  requesterId,
+  studentId,
+  currentSessionId,
+}) => {
+  if (requester.role === "admin") return true;
+
+  const assignedByUserModel = requester.assignedStudents?.some(
+    (assignedStudentId) => isSameId(assignedStudentId, studentId),
+  );
+
+  if (assignedByUserModel) return true;
+
+  if (!currentSessionId) return false;
+
+  const matchingCurrentSession = await Timetable.findOne({
+    _id: currentSessionId,
+    students: studentId,
+    panels: requesterId,
+  }).select("_id");
+
+  return Boolean(matchingCurrentSession);
+};
 
 // @desc    Search feedback/evaluations
 // @route   GET /api/feedback/search
@@ -62,16 +95,81 @@ exports.searchFeedback = async (req, res) => {
 
     const evaluations = await Evaluation.find(filter)
       .populate("studentId", "name matricNumber program email")
-      .populate("evaluatorId", "name email")
+      .populate("evaluatorId", "name email userId")
       .populate("rubricId", "name")
-      .sort({ date: -1 });
+      .populate({
+        path: "sessionId",
+        select:
+          "title sessionType date startTime endTime venue studentDocuments",
+        populate: {
+          path: "studentDocuments.uploadedBy",
+          select: "name userId matricNumber email role",
+        },
+      })
+      .sort({ date: -1 })
+      .lean();
 
-    console.log(`✅ Found ${evaluations.length} evaluations`);
+    const viewerId = req.user.id || req.user._id;
+    const viewerRole = req.user.role;
+
+    const approvedPermissions = await PermissionRequest.find({
+      requestingPanelId: viewerId,
+      targetEvaluationId: {
+        $in: evaluations.map((ev) => ev._id),
+      },
+      status: "APPROVED",
+    })
+      .select("targetEvaluationId")
+      .lean();
+
+    const approvedEvaluationIds = new Set(
+      approvedPermissions.map((permission) =>
+        String(permission.targetEvaluationId),
+      ),
+    );
+
+    const protectedEvaluations = evaluations.map((ev) => {
+      const evaluatorId = ev.evaluatorId?._id || ev.evaluatorId;
+      const studentOwnerId = ev.studentId?._id || ev.studentId;
+
+      const isAdmin = viewerRole === "admin";
+      const isOwnerPanel = String(evaluatorId) === String(viewerId);
+      const isStudentOwner =
+        viewerRole === "student" && String(studentOwnerId) === String(viewerId);
+      const hasApprovedAccess = approvedEvaluationIds.has(String(ev._id));
+
+      const canViewProtectedContent =
+        isAdmin || isOwnerPanel || isStudentOwner || hasApprovedAccess;
+
+      const studentDocuments = ev.sessionId?.studentDocuments || [];
+
+      ev.accessGranted = canViewProtectedContent;
+      ev.studentDocumentsCount = studentDocuments.length;
+
+      if (!canViewProtectedContent) {
+        ev.scores = undefined;
+        ev.qualitativeFeedback = undefined;
+        ev.overallComments = undefined;
+        ev.summaryOfProgress = undefined;
+        ev.commentsForImprovement = undefined;
+        ev.overallSuggestions = undefined;
+        ev.totalMarks = undefined;
+        ev.status = undefined;
+
+        if (ev.sessionId) {
+          ev.sessionId.studentDocuments = [];
+        }
+      }
+
+      return ev;
+    });
+
+    console.log(`✅ Found ${protectedEvaluations.length} evaluations`);
 
     res.json({
       success: true,
-      count: evaluations.length,
-      evaluations,
+      count: protectedEvaluations.length,
+      evaluations: protectedEvaluations,
     });
   } catch (error) {
     console.error("❌ Search feedback error:", error);
@@ -200,42 +298,256 @@ exports.getRecentFeedback = async (req, res) => {
 // @access  Private (Panels)
 exports.requestAccess = async (req, res) => {
   try {
-    const { targetEvaluationId, owningPanelId, studentId } = req.body;
+    const { targetEvaluationId, currentSessionId } = req.body;
+    const requestingPanelId = getAuthUserId(req);
 
-    // Safely extract the ID of the person making the request
-    const requestingPanelId = req.user.id || req.user._id || req.user.userId;
-
-    // Prevent duplicate spam requests
-    const existing = await PermissionRequest.findOne({
-      requestingPanelId,
-      targetEvaluationId,
-    });
-    if (existing) {
+    if (!targetEvaluationId) {
       return res.status(400).json({
         success: false,
-        message: "You already have a request submitted for this document.",
+        message: "Target evaluation is required.",
       });
     }
 
-    const newReq = new PermissionRequest({
+    const targetEvaluation = await Evaluation.findById(targetEvaluationId)
+      .select("studentId evaluatorId sessionId status")
+      .populate("sessionId", "students panels");
+
+    if (!targetEvaluation) {
+      return res.status(404).json({
+        success: false,
+        message: "Target evaluation not found.",
+      });
+    }
+
+    if (targetEvaluation.status !== "COMPLETED") {
+      return res.status(400).json({
+        success: false,
+        message: "Only completed historical evaluations can be requested.",
+      });
+    }
+
+    const studentId = targetEvaluation.studentId;
+    const owningPanelId = targetEvaluation.evaluatorId;
+
+    if (isSameId(owningPanelId, requestingPanelId)) {
+      return res.status(400).json({
+        success: false,
+        message: "You already own this evaluation record.",
+      });
+    }
+
+    const requester = await User.findById(requestingPanelId).select(
+      "role assignedStudents",
+    );
+
+    if (!requester) {
+      return res.status(404).json({
+        success: false,
+        message: "Requesting user not found.",
+      });
+    }
+
+    if (!["admin", "panel"].includes(requester.role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Only panels or admins can request historical access.",
+      });
+    }
+
+    const isAssignedToStudent = await canRequesterAccessStudent({
+      requester,
+      requesterId: requestingPanelId,
+      studentId,
+      currentSessionId,
+    });
+
+    if (!isAssignedToStudent) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "You can only request historical access for students currently assigned to you.",
+      });
+    }
+
+    const existing = await PermissionRequest.findOne({
+      requestingPanelId,
+      targetEvaluationId,
+      status: { $in: hasActivePermissionStatus },
+    });
+
+    if (existing?.status === "APPROVED") {
+      return res.status(400).json({
+        success: false,
+        message: "Access has already been granted for this evaluation.",
+      });
+    }
+
+    if (existing?.status === "PENDING") {
+      return res.status(400).json({
+        success: false,
+        message: "You already have a pending request for this evaluation.",
+      });
+    }
+
+    const permission = await PermissionRequest.create({
       requestingPanelId,
       targetEvaluationId,
       owningPanelId,
       studentId,
+      currentSessionId: currentSessionId || null,
+      scope: "SINGLE_EVALUATION",
+      reason: cleanText(
+        req.body.reason ||
+          "Need to review historical context for current evaluation.",
+      ),
     });
-
-    await newReq.save();
 
     res.json({
       success: true,
       message: "Permission requested successfully.",
-      permission: newReq,
+      permission,
     });
   } catch (error) {
     console.error("Request Access Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to request access.",
+      error: error.message,
+    });
+  }
+};
+
+exports.requestStudentHistoryAccess = async (req, res) => {
+  try {
+    const { studentId, currentSessionId } = req.body;
+    const requestingPanelId = getAuthUserId(req);
+
+    if (!studentId) {
+      return res.status(400).json({
+        success: false,
+        message: "Student ID is required.",
+      });
+    }
+
+    const requester = await User.findById(requestingPanelId).select(
+      "role assignedStudents",
+    );
+
+    if (!requester) {
+      return res.status(404).json({
+        success: false,
+        message: "Requesting user not found.",
+      });
+    }
+
+    if (!["admin", "panel"].includes(requester.role)) {
+      return res.status(403).json({
+        success: false,
+        message: "Only panels or admins can request historical access.",
+      });
+    }
+
+    const isAssignedToStudent = await canRequesterAccessStudent({
+      requester,
+      requesterId: requestingPanelId,
+      studentId,
+      currentSessionId,
+    });
+
+    if (!isAssignedToStudent) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "You can only request historical access for students currently assigned to you.",
+      });
+    }
+
+    const evaluationFilter = {
+      studentId,
+      status: "COMPLETED",
+    };
+
+    if (currentSessionId) {
+      evaluationFilter.sessionId = { $ne: currentSessionId };
+    }
+
+    const historicalEvaluations = await Evaluation.find(evaluationFilter)
+      .select("_id evaluatorId studentId sessionId status")
+      .lean();
+
+    const requestableEvaluations = historicalEvaluations.filter(
+      (evaluation) => !isSameId(evaluation.evaluatorId, requestingPanelId),
+    );
+
+    if (requestableEvaluations.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "No requestable historical evaluations found. You may already own all available records.",
+      });
+    }
+
+    const targetEvaluationIds = requestableEvaluations.map(
+      (evaluation) => evaluation._id,
+    );
+
+    const existingActiveRequests = await PermissionRequest.find({
+      requestingPanelId,
+      targetEvaluationId: { $in: targetEvaluationIds },
+      status: { $in: hasActivePermissionStatus },
+    })
+      .select("targetEvaluationId status")
+      .lean();
+
+    const existingActiveIds = new Set(
+      existingActiveRequests.map((request) =>
+        String(request.targetEvaluationId),
+      ),
+    );
+
+    const batchId = crypto.randomUUID();
+
+    const permissionDocs = requestableEvaluations
+      .filter((evaluation) => !existingActiveIds.has(String(evaluation._id)))
+      .map((evaluation) => ({
+        requestingPanelId,
+        targetEvaluationId: evaluation._id,
+        owningPanelId: evaluation.evaluatorId,
+        studentId: evaluation.studentId,
+        currentSessionId: currentSessionId || null,
+        batchId,
+        scope: "STUDENT_HISTORY",
+        reason: cleanText(
+          req.body.reason ||
+            "Need to review all previous evaluations and materials for current assigned evaluation.",
+        ),
+      }));
+
+    if (permissionDocs.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "All available historical evaluations already have pending or approved access requests.",
+      });
+    }
+
+    const permissions = await PermissionRequest.insertMany(permissionDocs, {
+      ordered: false,
+    });
+
+    res.json({
+      success: true,
+      message: `Created ${permissions.length} historical access request(s).`,
+      batchId,
+      createdCount: permissions.length,
+      skippedCount: requestableEvaluations.length - permissions.length,
+      permissions,
+    });
+  } catch (error) {
+    console.error("Request Student History Access Error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to request student history access.",
       error: error.message,
     });
   }
@@ -264,27 +576,190 @@ exports.getMyPermissions = async (req, res) => {
 // @access  Private (Admin only)
 exports.respondToRequest = async (req, res) => {
   try {
-    // Only Admins or Superadmins can perform this global action
-    if (req.user.role !== "admin" && req.user.role !== "superadmin") {
-      return res.status(403).json({ success: false, message: "Unauthorized." });
+    const responderId = getAuthUserId(req);
+    const { requestId, action } = req.body;
+
+    if (!["APPROVED", "REJECTED"].includes(action)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid action. Use APPROVED or REJECTED.",
+      });
     }
 
-    const { requestId, action } = req.body; // action = "APPROVED" or "REJECTED"
+    const request = await PermissionRequest.findById(requestId);
+
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message: "Request not found.",
+      });
+    }
+
+    if (request.status !== "PENDING") {
+      return res.status(400).json({
+        success: false,
+        message: `Only PENDING requests can be responded to. Current status: ${request.status}.`,
+      });
+    }
+
+    const isAdmin = req.user.role === "admin";
+    const isOriginalOwner = isSameId(request.owningPanelId, responderId);
+
+    if (!isAdmin && !isOriginalOwner) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Only admin or the original evaluation owner can respond to this request.",
+      });
+    }
+
+    const updatedRequest = await PermissionRequest.findByIdAndUpdate(
+      requestId,
+      {
+        $set: {
+          status: action,
+          approvedBy: action === "APPROVED" ? responderId : null,
+          approvedAt: action === "APPROVED" ? new Date() : null,
+        },
+      },
+      {
+        new: true,
+        runValidators: true,
+      },
+    );
+
+    res.json({
+      success: true,
+      message: `Request has been ${action}.`,
+      request: updatedRequest,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Server error.",
+      error: error.message,
+    });
+  }
+};
+
+exports.getIncomingPermissions = async (req, res) => {
+  try {
+    const viewerId = getAuthUserId(req);
+    const requestedStatus = cleanText(req.query.status || "PENDING", 20);
+
+    const allowedStatuses = ["PENDING", "APPROVED", "REJECTED", "WITHDRAWN"];
+    const status = allowedStatuses.includes(requestedStatus)
+      ? requestedStatus
+      : "PENDING";
+
+    const filter =
+      req.user.role === "admin"
+        ? { status }
+        : req.user.role === "panel"
+          ? { owningPanelId: viewerId, status }
+          : null;
+
+    if (!filter) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Only admins and panels can view incoming permission requests.",
+      });
+    }
+
+    const requests = await PermissionRequest.find(filter)
+      .populate("requestingPanelId", "name email userId")
+      .populate("studentId", "name matricNumber userId")
+      .populate("owningPanelId", "name email userId")
+      .populate({
+        path: "targetEvaluationId",
+        select: "sessionType semester status createdAt updatedAt",
+      })
+      .populate({
+        path: "currentSessionId",
+        select: "title sessionType date startTime endTime",
+      })
+      .sort({ createdAt: -1 });
+
+    res.json({
+      success: true,
+      count: requests.length,
+      requests,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch incoming permission requests.",
+      error: error.message,
+    });
+  }
+};
+
+exports.withdrawPermission = async (req, res) => {
+  try {
+    const actorId = getAuthUserId(req);
+    const { requestId } = req.body;
+
+    if (!requestId) {
+      return res.status(400).json({
+        success: false,
+        message: "Request ID is required.",
+      });
+    }
 
     const request = await PermissionRequest.findById(requestId);
-    if (!request)
-      return res
-        .status(404)
-        .json({ success: false, message: "Request not found." });
 
-    request.status = action;
-    await request.save();
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        message: "Permission request not found.",
+      });
+    }
 
-    res.json({ success: true, message: `Request has been ${action}.` });
+    if (request.status !== "APPROVED") {
+      return res.status(400).json({
+        success: false,
+        message: "Only APPROVED permissions can be withdrawn.",
+      });
+    }
+
+    const isAdmin = req.user.role === "admin";
+    const isOriginalOwner = isSameId(request.owningPanelId, actorId);
+
+    if (!isAdmin && !isOriginalOwner) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Only admin or the original evaluation owner can withdraw this permission.",
+      });
+    }
+
+    const updatedRequest = await PermissionRequest.findByIdAndUpdate(
+      requestId,
+      {
+        $set: {
+          status: "WITHDRAWN",
+          withdrawnBy: actorId,
+          withdrawnAt: new Date(),
+        },
+      },
+      {
+        new: true,
+        runValidators: true,
+      },
+    );
+
+    res.json({
+      success: true,
+      message: "Permission withdrawn successfully.",
+      request: updatedRequest,
+    });
   } catch (error) {
-    res
-      .status(500)
-      .json({ success: false, message: "Server error.", error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "Failed to withdraw permission.",
+      error: error.message,
+    });
   }
 };
 
@@ -293,22 +768,32 @@ exports.respondToRequest = async (req, res) => {
 // @access  Private (Admin only)
 exports.getAllPermissions = async (req, res) => {
   try {
-    if (req.user.role !== "admin" && req.user.role !== "superadmin") {
-      return res.status(403).json({ success: false, message: "Unauthorized." });
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Unauthorized.",
+      });
     }
+
     const requests = await PermissionRequest.find()
-      .populate("requestingPanelId", "name email")
-      .populate("studentId", "name matricNumber")
+      .populate("requestingPanelId", "name email userId")
+      .populate("studentId", "name matricNumber userId")
+      .populate("owningPanelId", "name email userId")
       .populate({
         path: "targetEvaluationId",
-        select: "sessionType semester",
+        select: "sessionType semester status createdAt updatedAt",
       })
       .sort({ createdAt: -1 });
 
-    res.json({ success: true, requests });
+    res.json({
+      success: true,
+      requests,
+    });
   } catch (error) {
-    res
-      .status(500)
-      .json({ success: false, message: "Failed to fetch permissions." });
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch permissions.",
+      error: error.message,
+    });
   }
 };

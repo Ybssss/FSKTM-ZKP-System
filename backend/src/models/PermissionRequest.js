@@ -25,9 +25,49 @@ const permissionRequestSchema = new mongoose.Schema(
       required: true,
     },
 
+    batchId: {
+      type: String,
+      default: null,
+      index: true,
+    },
+
+    scope: {
+      type: String,
+      enum: ["SINGLE_EVALUATION", "STUDENT_HISTORY"],
+      default: "SINGLE_EVALUATION",
+    },
+
+    currentSessionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Timetable",
+      default: null,
+    },
+
+    approvedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    approvedAt: {
+      type: Date,
+      default: null,
+    },
+
+    withdrawnBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+
+    withdrawnAt: {
+      type: Date,
+      default: null,
+    },
+
     status: {
       type: String,
-      enum: ["PENDING", "APPROVED", "REJECTED"],
+      enum: ["PENDING", "APPROVED", "REJECTED", "WITHDRAWN"],
       default: "PENDING",
     },
     reason: {
@@ -41,7 +81,14 @@ const permissionRequestSchema = new mongoose.Schema(
 // Prevent duplicate requests
 permissionRequestSchema.index(
   { requestingPanelId: 1, targetEvaluationId: 1 },
-  { unique: true },
+  {
+    unique: true,
+    partialFilterExpression: {
+      status: {
+        $in: ["PENDING", "APPROVED"],
+      },
+    },
+  },
 );
 
 module.exports = mongoose.model("PermissionRequest", permissionRequestSchema);

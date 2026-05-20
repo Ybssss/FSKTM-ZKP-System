@@ -91,7 +91,10 @@ export default function SessionDetailPage() {
             .filter((e) => {
               const eSessionId =
                 e.sessionId?._id?.toString() || e.sessionId?.toString();
-              return eSessionId !== id.toString() && e.status === "COMPLETED";
+              return (
+                eSessionId !== id.toString() &&
+                (e.status === "COMPLETED" || e.accessGranted === false)
+              );
             })
             .sort(
               (a, b) =>
@@ -122,8 +125,7 @@ export default function SessionDetailPage() {
     try {
       const payload = {
         targetEvaluationId: ev._id,
-        owningPanelId: ev.evaluatorId?._id || ev.evaluatorId,
-        studentId: session.student?._id || session.student,
+        currentSessionId: id,
       };
 
       const res = await api.post("/feedback/permissions/request", payload);
@@ -135,6 +137,50 @@ export default function SessionDetailPage() {
       }
     } catch (err) {
       alert(err.response?.data?.message || "Failed to send request.");
+    }
+  };
+
+  const getPermissionTargetId = (permission) =>
+    typeof permission.targetEvaluationId === "object"
+      ? permission.targetEvaluationId?._id
+      : permission.targetEvaluationId;
+
+  const getRequestForEvaluation = (evaluationId) =>
+    permissions.find(
+      (permission) =>
+        String(getPermissionTargetId(permission)) === String(evaluationId) &&
+        permission.status !== "WITHDRAWN",
+    );
+
+  const handleRequestAllHistory = async () => {
+    try {
+      const studentId = session.student?._id || session.student;
+
+      if (!studentId) {
+        alert("Student information is missing.");
+        return;
+      }
+
+      const res = await api.post(
+        "/feedback/permissions/request-student-history",
+        {
+          studentId,
+          currentSessionId: id,
+        },
+      );
+
+      if (res.data.success) {
+        setPermissions((prev) => [...prev, ...(res.data.permissions || [])]);
+        alert(
+          `✅ ${res.data.createdCount} historical access request(s) created under batch ${res.data.batchId}.`,
+        );
+      }
+    } catch (error) {
+      alert(
+        error.response?.data?.message ||
+          error.response?.data?.error ||
+          "Failed to request all historical evaluations.",
+      );
     }
   };
 
@@ -478,6 +524,24 @@ export default function SessionDetailPage() {
             </button>
           )}
         </div>
+        {isStaff &&
+          historicalEvals.some((ev) => {
+            const request = getRequestForEvaluation(ev._id);
+            return (
+              !ev.accessGranted &&
+              request?.status !== "PENDING" &&
+              request?.status !== "APPROVED"
+            );
+          }) && (
+            <button
+              type="button"
+              onClick={handleRequestAllHistory}
+              className="px-4 py-3 bg-purple-50 text-purple-700 rounded-lg font-bold border border-purple-100 hover:bg-purple-100 flex items-center gap-2"
+            >
+              <Lock className="w-4 h-4" />
+              Request All History
+            </button>
+          )}
       </div>
 
       {/* PANEL EXAMINERS - visible to students and staff */}
@@ -829,9 +893,7 @@ export default function SessionDetailPage() {
                 const isOwner =
                   ev.evaluatorId?._id === user.id || ev.evaluatorId === user.id;
                 const isGranted = isAdmin || isOwner;
-                const request = permissions.find(
-                  (p) => p.targetEvaluationId === ev._id,
-                );
+                const request = getRequestForEvaluation(ev._id);
 
                 return (
                   <div
@@ -855,6 +917,39 @@ export default function SessionDetailPage() {
                         Date:{" "}
                         {new Date(ev.updatedAt || ev.date).toLocaleDateString()}
                       </p>
+                      {isGranted || request?.status === "APPROVED" ? (
+                        ev.sessionId?.studentDocuments?.length > 0 ? (
+                          <div className="mt-3 space-y-2">
+                            <p className="text-xs font-bold text-indigo-300 uppercase tracking-widest">
+                              Approved Student Materials
+                            </p>
+
+                            {ev.sessionId.studentDocuments.map((doc) => (
+                              <a
+                                key={doc._id}
+                                href={doc.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block text-sm text-indigo-300 hover:text-indigo-200 hover:underline"
+                              >
+                                {doc.title || "Student material"}
+                              </a>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-500 mt-3">
+                            No student materials attached to this historical
+                            session.
+                          </p>
+                        )
+                      ) : (
+                        ev.studentDocumentsCount > 0 && (
+                          <p className="text-xs text-yellow-400 mt-3">
+                            {ev.studentDocumentsCount} student material(s)
+                            locked until permission is approved.
+                          </p>
+                        )
+                      )}
                     </div>
 
                     <div className="flex items-center gap-3">
