@@ -21,7 +21,7 @@ import { useNavigate } from "react-router-dom";
 
 export default function TimetableManagementPage() {
   const { user } = useAuth();
-  const isAdmin = user?.role === "admin" || user?.role === "superadmin";
+  const isAdmin = user?.role === "admin";
   const navigate = useNavigate();
 
   const [sessions, setSessions] = useState([]);
@@ -41,8 +41,13 @@ export default function TimetableManagementPage() {
 
   const [bulkConfig, setBulkConfig] = useState({
     rubricId: "",
+    academicSession: "2025/2026, Semester 1",
+    batchName: "",
+    batchId: "",
     date: new Date().toISOString().split("T")[0],
+    startTime: "09:00",
     venue: "",
+    breakBetweenSlotsMinutes: 5,
   });
 
   const [selectedStudentIds, setSelectedStudentIds] = useState([]);
@@ -96,11 +101,7 @@ export default function TimetableManagementPage() {
         const usersRes = await api.get("/users");
         const allUsers = usersRes.data.users || [];
         setStudents(allUsers.filter((u) => u.role === "student"));
-        setPanels(
-          allUsers.filter((u) =>
-            ["panel", "admin", "superadmin"].includes(u.role),
-          ),
-        );
+        setPanels(allUsers.filter((u) => ["panel", "admin"].includes(u.role)));
         const rubRes = await api.get("/rubrics");
         const fetchedRubrics = rubRes.data.data || rubRes.data.rubrics || [];
         setRubrics(fetchedRubrics);
@@ -133,6 +134,28 @@ export default function TimetableManagementPage() {
     const date = new Date();
     date.setHours(h, m + parseInt(mins), 0, 0);
     return date.toTimeString().slice(0, 5);
+  };
+
+  const addMinutesToTime = (timeStr, mins) => {
+    if (!timeStr) return "";
+    const [h, m] = timeStr.split(":").map(Number);
+    const date = new Date();
+    date.setHours(h, m + Number(mins || 0), 0, 0);
+    return date.toTimeString().slice(0, 5);
+  };
+
+  const getAutoSlot = (index) => {
+    const duration = Number(slotDuration || 60);
+    const breakMinutes = Number(bulkConfig.breakBetweenSlotsMinutes || 0);
+    const start = addMinutesToTime(
+      bulkConfig.startTime || "09:00",
+      index * (duration + breakMinutes),
+    );
+
+    return {
+      startTime: start,
+      endTime: addMinutesToTime(start, duration),
+    };
   };
 
   const handleEditClick = (session) => {
@@ -220,11 +243,14 @@ export default function TimetableManagementPage() {
           student.assignedPanels[1]?.panelId?._id ||
           student.assignedPanels[1]?.panelId ||
           student.assignedPanels[1];
+        const nextIndex = prev.length;
+        const autoSlot = getAutoSlot(nextIndex);
+
         setSessionDrafts({
           ...sessionDrafts,
           [studentId]: {
-            startTime: "09:00",
-            endTime: addMinutes("09:00", slotDuration),
+            startTime: autoSlot.startTime,
+            endTime: autoSlot.endTime,
             panel1Id: p1,
             panel2Id: p2,
           },
@@ -235,6 +261,9 @@ export default function TimetableManagementPage() {
   };
 
   const handleBulkSubmit = async () => {
+    if (!bulkConfig.batchName.trim()) {
+      return alert("Please enter a Batch / Session Name, e.g., PIXEL.");
+    }
     if (!bulkConfig.venue) return alert("Please set an Online Meeting Link.");
     if (!bulkConfig.rubricId)
       return alert("Please select an Evaluation Rubric.");
@@ -248,8 +277,9 @@ export default function TimetableManagementPage() {
         ? selectedRubric.sessionType
         : "PROPOSAL_DEFENSE";
 
-      const payload = selectedStudentIds.map((studentId) => {
-        const draft = sessionDrafts[studentId];
+      const payload = selectedStudentIds.map((studentId, index) => {
+        const draft = sessionDrafts[studentId] || {};
+        const autoSlot = getAutoSlot(index);
         if (!draft.panel1Id || !draft.panel2Id)
           throw new Error(`Missing panels for a student.`);
 
@@ -258,16 +288,36 @@ export default function TimetableManagementPage() {
           sessionType,
           rubricId: bulkConfig.rubricId,
           date: bulkConfig.date,
-          time: draft.startTime,
-          endTime: draft.endTime,
+          time: draft.startTime || autoSlot.startTime,
+          endTime: draft.endTime || autoSlot.endTime,
           venue: bulkConfig.venue,
           panel1Id: draft.panel1Id,
           panel2Id: draft.panel2Id,
         };
       });
 
-      await api.post("/timetables/bulk", { sessions: payload });
+      const finalBatchId =
+        bulkConfig.batchId.trim() ||
+        `${bulkConfig.batchName.trim()}-${bulkConfig.date}`;
+
+      await api.post("/timetables/bulk", {
+        academicSession: bulkConfig.academicSession,
+        scheduleTitle: "Postgraduate Progress Presentation Schedule",
+        batchName: bulkConfig.batchName.trim(),
+        batchId: finalBatchId,
+        googleMeetLink: bulkConfig.venue,
+        venue: bulkConfig.venue,
+        date: bulkConfig.date,
+        startTime: bulkConfig.startTime,
+        slotDurationMinutes: slotDuration,
+        breakBetweenSlotsMinutes: bulkConfig.breakBetweenSlotsMinutes,
+        semester: bulkConfig.academicSession,
+        sessions: payload,
+      });
       alert("✅ Bulk Sessions Created Successfully!");
+      navigate(
+        `/panel/sessions/batch/${encodeURIComponent(finalBatchId)}/print`,
+      );
       setSelectedStudentIds([]);
       setSessionDrafts({});
       setActiveTab("list");
@@ -499,8 +549,22 @@ export default function TimetableManagementPage() {
                             Evaluate Now
                           </button>
                         )}
+
                         {isAdmin && (
                           <div className="flex justify-end gap-2">
+                            {session.batchId && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  navigate(
+                                    `/panel/sessions/batch/${encodeURIComponent(session.batchId)}/print`,
+                                  );
+                                }}
+                                className="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg font-bold hover:bg-blue-100 text-sm shadow-sm"
+                              >
+                                Print Batch
+                              </button>
+                            )}
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -539,6 +603,87 @@ export default function TimetableManagementPage() {
               <h2 className="font-bold text-lg mb-4 text-gray-900 border-b pb-2">
                 1. Base Settings
               </h2>
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
+                  Academic Session
+                </label>
+                <input
+                  type="text"
+                  value={bulkConfig.academicSession}
+                  onChange={(e) =>
+                    setBulkConfig({
+                      ...bulkConfig,
+                      academicSession: e.target.value,
+                    })
+                  }
+                  className="w-full p-2 border rounded-lg bg-gray-50 font-semibold"
+                  placeholder="2025/2026, Semester 1"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
+                  Batch / Session Name
+                </label>
+                <input
+                  type="text"
+                  value={bulkConfig.batchName}
+                  onChange={(e) =>
+                    setBulkConfig({ ...bulkConfig, batchName: e.target.value })
+                  }
+                  className="w-full p-2 border rounded-lg bg-gray-50 font-semibold"
+                  placeholder="e.g., PIXEL"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
+                  Batch ID
+                </label>
+                <input
+                  type="text"
+                  value={bulkConfig.batchId}
+                  onChange={(e) =>
+                    setBulkConfig({ ...bulkConfig, batchId: e.target.value })
+                  }
+                  className="w-full p-2 border rounded-lg bg-gray-50 font-semibold"
+                  placeholder="Auto if empty"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
+                  First Slot Start Time
+                </label>
+                <input
+                  type="time"
+                  value={bulkConfig.startTime}
+                  onChange={(e) =>
+                    setBulkConfig({ ...bulkConfig, startTime: e.target.value })
+                  }
+                  className="w-full p-2 border rounded-lg bg-gray-50 font-semibold"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
+                  Break Between Slots
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="60"
+                  step="5"
+                  value={bulkConfig.breakBetweenSlotsMinutes}
+                  onChange={(e) =>
+                    setBulkConfig({
+                      ...bulkConfig,
+                      breakBetweenSlotsMinutes: Number(e.target.value),
+                    })
+                  }
+                  className="w-full p-2 border rounded-lg bg-gray-50 font-semibold"
+                />
+              </div>
               <div className="space-y-4">
                 <div>
                   <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
@@ -705,7 +850,11 @@ export default function TimetableManagementPage() {
                           <div className="flex items-center gap-2">
                             <input
                               type="time"
-                              value={sessionDrafts[id]?.startTime || "09:00"}
+                              value={
+                                sessionDrafts[id]?.startTime ||
+                                getAutoSlot(selectedStudentIds.indexOf(id))
+                                  .startTime
+                              }
                               onChange={(e) =>
                                 setSessionDrafts((prev) => ({
                                   ...prev,
@@ -723,7 +872,11 @@ export default function TimetableManagementPage() {
                             </span>
                             <input
                               type="time"
-                              value={sessionDrafts[id]?.endTime || "10:00"}
+                              value={
+                                sessionDrafts[id]?.endTime ||
+                                getAutoSlot(selectedStudentIds.indexOf(id))
+                                  .endTime
+                              }
                               onChange={(e) =>
                                 setSessionDrafts((prev) => ({
                                   ...prev,

@@ -37,6 +37,7 @@ import StudentRubrics from "./pages/student/StudentRubrics";
 // Shared Pages
 import DeviceManagementPage from "./pages/DeviceManagementPage";
 import StudentProfile from "./pages/student/StudentProfile";
+import BatchSchedulePrintPage from "./pages/panel/BatchSchedulePrintPage";
 
 function App() {
   return (
@@ -69,6 +70,10 @@ function App() {
               element={<HistoricalFeedbackPage />}
             />
             <Route path="sessions" element={<TimetableManagementPage />} />
+            <Route
+              path="sessions/batch/:batchId/print"
+              element={<BatchSchedulePrintPage />}
+            />
             <Route path="sessions/:id" element={<SessionDetailPage />} />
             <Route path="attendance" element={<PanelAttendancePage />} />
             <Route path="users" element={<UsersPage />} />

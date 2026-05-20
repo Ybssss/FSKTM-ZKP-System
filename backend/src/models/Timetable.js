@@ -122,6 +122,16 @@ const timetableSchema = new mongoose.Schema(
       },
     ],
 
+    academicSession: {
+      type: String,
+      default: "",
+    },
+
+    scheduleTitle: {
+      type: String,
+      default: "Postgraduate Progress Presentation Schedule",
+    },
+
     // NEW: Panel Pre-Review Notes
     panelNotes: [
       {

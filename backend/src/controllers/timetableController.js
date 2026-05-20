@@ -168,6 +168,11 @@ const buildTimetablePayload = (body, userId) => {
       : [body.panel1Id, body.panel2Id].filter(Boolean),
     status,
     createdBy: userId,
+    academicSession: cleanText(body.academicSession || "", 100),
+    scheduleTitle: cleanText(
+      body.scheduleTitle || "Postgraduate Progress Presentation Schedule",
+      150,
+    ),
   };
 };
 const {
@@ -332,6 +337,8 @@ exports.createBulkTimetables = async (req, res) => {
       slotDurationMinutes,
       breakBetweenSlotsMinutes,
       semester,
+      academicSession,
+      scheduleTitle,
     } = req.body;
 
     if (!Array.isArray(sessions) || sessions.length === 0) {
@@ -414,6 +421,16 @@ exports.createBulkTimetables = async (req, res) => {
         panels: [s.panel1Id, s.panel2Id].filter(Boolean),
         status: "scheduled",
         createdBy: req.user.id,
+        academicSession: cleanText(
+          s.academicSession || academicSession || "",
+          100,
+        ),
+        scheduleTitle: cleanText(
+          s.scheduleTitle ||
+            scheduleTitle ||
+            "Postgraduate Progress Presentation Schedule",
+          150,
+        ),
       };
     });
 
@@ -446,6 +463,136 @@ exports.createBulkTimetables = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Error scheduling",
+      error: error.message,
+    });
+  }
+};
+
+const formatPrintDate = (dateValue) => {
+  const date = new Date(dateValue);
+
+  if (Number.isNaN(date.getTime())) {
+    return {
+      raw: "",
+      display: "",
+      dayName: "",
+    };
+  }
+
+  return {
+    raw: date.toISOString().slice(0, 10),
+    display: date.toLocaleDateString("en-GB"),
+    dayName: date.toLocaleDateString("en-MY", { weekday: "long" }),
+  };
+};
+
+const formatPrintTime = (timeValue) => {
+  const raw = String(timeValue || "").trim();
+  const match = raw.match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+
+  if (!match) return raw;
+
+  const date = new Date();
+  date.setHours(Number(match[1]), Number(match[2]), 0, 0);
+
+  return date
+    .toLocaleTimeString("en-MY", {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    })
+    .replace("AM", "am")
+    .replace("PM", "pm");
+};
+
+exports.getBatchPrintSchedule = async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Only admin can export or print batch schedules.",
+      });
+    }
+
+    const batchId = decodeURIComponent(req.params.batchId || "").trim();
+
+    if (!batchId) {
+      return res.status(400).json({
+        success: false,
+        message: "Batch ID is required.",
+      });
+    }
+
+    const sessions = await Timetable.find({ batchId })
+      .populate({
+        path: "students",
+        select:
+          "name userId matricNumber yearOfStudy program researchTitle supervisorId",
+        populate: {
+          path: "supervisorId",
+          select: "name userId email",
+        },
+      })
+      .populate("panels", "name userId email")
+      .populate("rubricId", "name sessionType")
+      .sort({ date: 1, startTime: 1 });
+
+    if (!sessions.length) {
+      return res.status(404).json({
+        success: false,
+        message: "No sessions found for this batch.",
+      });
+    }
+
+    const first = sessions[0];
+    const dateInfo = formatPrintDate(first.date);
+
+    const rows = sessions.map((session, index) => {
+      const student = session.students?.[0] || {};
+      const examiner1 = session.panels?.[0] || {};
+      const examiner2 = session.panels?.[1] || {};
+      const supervisor = student.supervisorId || {};
+
+      return {
+        no: index + 1,
+        time: `${formatPrintTime(session.startTime)} – ${formatPrintTime(
+          session.endTime,
+        )}`,
+        name: student.name || "",
+        matricNumber: student.matricNumber || student.userId || "",
+        yearOfStudy: student.yearOfStudy || "",
+        program: student.program || "",
+        examiner1: examiner1.name || "",
+        examiner2: examiner2.name || "",
+        supervisor: supervisor.name || "",
+        researchTitle: student.researchTitle || "",
+      };
+    });
+
+    res.json({
+      success: true,
+      schedule: {
+        title:
+          first.scheduleTitle || "Postgraduate Progress Presentation Schedule",
+        academicSession:
+          first.academicSession || req.query.academicSession || "",
+        batchId: first.batchId,
+        batchName: first.batchName || first.batchId,
+        date: dateInfo.raw,
+        dateDisplay: dateInfo.display,
+        dayName: dateInfo.dayName,
+        googleMeetLink: first.googleMeetLink || first.venue || "",
+        sessionType: first.sessionType,
+        rubricName: first.rubricId?.name || "",
+        generatedAt: new Date(),
+        rows,
+      },
+    });
+  } catch (error) {
+    console.error("Batch print schedule error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to generate batch print schedule.",
       error: error.message,
     });
   }

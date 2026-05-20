@@ -12,6 +12,10 @@ const userSchema = new mongoose.Schema(
     },
     // 🔴 FIXED: ADDED THE MISSING UTHM DIRECTORY FIELDS
     matricNumber: { type: String, default: "" },
+    yearOfStudy: {
+      type: Number,
+      default: null,
+    },
     profession: { type: String, default: "" },
     researchTitle: { type: String, default: "" },
     researchAbstract: {
