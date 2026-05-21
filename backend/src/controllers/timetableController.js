@@ -94,25 +94,6 @@ const ensureNotBackdated = (dateValue, startTime) => {
   }
 };
 
-const isAtLeastOneWeekBeforeSession = (dateValue) => {
-  const dateOnly = normalizeDateOnly(dateValue);
-  if (!dateOnly) return false;
-
-  const sessionDate = new Date(`${dateOnly}T00:00:00`);
-  if (Number.isNaN(sessionDate.getTime())) return false;
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const diffDays = Math.ceil((sessionDate - today) / (1000 * 60 * 60 * 24));
-
-  return diffDays >= 7;
-};
-
-const sameIdList = (left = [], right = []) => {
-  const normalize = (items) => items.map((item) => String(item || "")).filter(Boolean).sort();
-  return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right));
-};
-
 const buildPendingEvaluations = (timetable, payload, semester) => {
   const studentId = payload.students?.[0];
 
@@ -197,9 +178,10 @@ const buildTimetablePayload = (body, userId) => {
   };
 };
 const {
-  uploadToGoogleDrive,
-  deleteFromGoogleDrive,
-} = require("../services/googleDriveService");
+  uploadStoredFile,
+  deleteStoredFile,
+  streamStoredFile,
+} = require("../services/fileStorageService");
 
 exports.createTimetable = async (req, res) => {
   try {
@@ -869,7 +851,6 @@ exports.updateTimetable = async (req, res) => {
 
     if (req.body.venue !== undefined) {
       updates.venue = cleanText(req.body.venue, 500);
-      updates.googleMeetLink = updates.venue;
     }
 
     if (req.body.rubricId !== undefined) {
@@ -935,88 +916,40 @@ exports.updateTimetable = async (req, res) => {
       ensureNotBackdated(effectiveDate, effectiveStartTime);
     }
 
-    // Reconstruct panels array for updating. `panel1Id` and `panel2Id` are frontend helpers,
-    // while the database stores the actual panel assignment in `panels`.
-    const oldPanels = (existingSession.panels || []).map((panelId) =>
-      String(panelId),
-    );
-    const oldP1 = oldPanels[0] || "";
-    const oldP2 = oldPanels[1] || "";
+    // Reconstruct the array for updating
+    const oldP1 = existingSession.panels?.[0]?.toString();
+    const oldP2 = existingSession.panels?.[1]?.toString();
 
-    if (updates.panel1Id !== undefined || updates.panel2Id !== undefined) {
-      const nextPanels = [
-        updates.panel1Id !== undefined ? updates.panel1Id : oldP1,
-        updates.panel2Id !== undefined ? updates.panel2Id : oldP2,
-      ]
-        .filter(Boolean)
-        .map(String);
-
-      const uniquePanels = [...new Set(nextPanels)];
-
-      if (uniquePanels.length !== nextPanels.length) {
-        return res.status(400).json({
-          success: false,
-          message: "Panel 1 and Panel 2 must be different people.",
-        });
-      }
-
-      const panelChanged = !sameIdList(oldPanels, uniquePanels);
-
-      if (panelChanged && !isAtLeastOneWeekBeforeSession(effectiveDate)) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Panel replacement is only allowed at least 1 week before the session date.",
-        });
-      }
-
-      updates.panels = uniquePanels;
+    if (updates.panel1Id || updates.panel2Id) {
+      updates.panels = [
+        updates.panel1Id || oldP1,
+        updates.panel2Id || oldP2,
+      ].filter(Boolean);
     }
-
-    delete updates.panel1Id;
-    delete updates.panel2Id;
+    if (updates.time) updates.startTime = updates.time;
 
     const updatedSession = await Timetable.findByIdAndUpdate(id, updates, {
       new: true,
     });
 
-    // Refresh pending evaluations only for this scheduled session when panels change.
-    // Completed evaluations remain untouched as academic records.
-    if (updates.panels) {
-      const newPanelIds = updates.panels.map(String);
-      const studentId = existingSession.students?.[0];
-      const rubricId = updates.rubricId || existingSession.rubricId;
-      const sessionType = updates.sessionType || existingSession.sessionType;
-
-      await Evaluation.deleteMany({
-        sessionId: id,
-        status: "PENDING",
-        evaluatorId: { $nin: newPanelIds },
-      });
-
-      for (const evaluatorId of newPanelIds) {
-        const existingEvaluation = await Evaluation.findOne({
-          sessionId: id,
-          evaluatorId,
-        }).select("_id status");
-
-        if (!existingEvaluation && studentId) {
-          await Evaluation.create({
-            sessionId: id,
-            studentId,
-            evaluatorId,
-            rubricId,
-            semester: existingSession.academicSession || "",
-            sessionType,
-            status: "PENDING",
-          });
-        } else if (existingEvaluation?.status === "PENDING") {
-          await Evaluation.findByIdAndUpdate(existingEvaluation._id, {
-            rubricId,
-            sessionType,
-          });
-        }
-      }
+    // Panel Swaps
+    if (updates.panel1Id && oldP1 && updates.panel1Id !== oldP1) {
+      await Evaluation.findOneAndUpdate(
+        { sessionId: id, evaluatorId: oldP1, status: "PENDING" },
+        {
+          evaluatorId: updates.panel1Id,
+          rubricId: updates.rubricId || existingSession.rubricId,
+        },
+      );
+    }
+    if (updates.panel2Id && oldP2 && updates.panel2Id !== oldP2) {
+      await Evaluation.findOneAndUpdate(
+        { sessionId: id, evaluatorId: oldP2, status: "PENDING" },
+        {
+          evaluatorId: updates.panel2Id,
+          rubricId: updates.rubricId || existingSession.rubricId,
+        },
+      );
     }
     if (updates.rubricId) {
       const evaluationUpdate = {
@@ -1056,6 +989,19 @@ exports.deleteTimetable = async (req, res) => {
 };
 
 // Required placeholders for routing
+
+const makeAbsoluteFileUrl = (req, value) => {
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+
+  const origin =
+    process.env.PUBLIC_BACKEND_URL ||
+    process.env.BACKEND_URL ||
+    `${req.protocol}://${req.get("host")}`;
+
+  return `${origin}${value.startsWith("/") ? "" : "/"}${value}`;
+};
+
 exports.uploadDocument = async (req, res) => {
   try {
     const { id } = req.params;
@@ -1112,14 +1058,15 @@ exports.uploadDocument = async (req, res) => {
     const allowedTypes = ["report", "slides", "supplementary", "other"];
     const cleanType = allowedTypes.includes(type) ? type : "other";
 
-    const uploaded = await uploadToGoogleDrive(req.file);
+    const uploaded = await uploadStoredFile(req.file);
 
     const documentRecord = {
       title: cleanTitle,
-      url: uploaded.webViewLink,
-      driveFileId: uploaded.id,
+      url: makeAbsoluteFileUrl(req, uploaded.webViewLink),
+      fileStorageId: uploaded.id,
+      driveFileId: uploaded.id, // legacy field retained for older records
       mimeType: uploaded.mimeType || req.file.mimetype,
-      source: "google-drive",
+      source: "uploaded-file",
       type: cleanType,
       uploadedBy: req.user.id,
       uploadedAt: new Date(),
@@ -1154,7 +1101,7 @@ exports.uploadDocument = async (req, res) => {
 
     res.json({
       success: true,
-      message: "Material uploaded to Google Drive successfully.",
+      message: "Material uploaded successfully.",
       timetable: formatTimetable(updatedTimetable),
       document: documentRecord,
     });
@@ -1168,6 +1115,20 @@ exports.uploadDocument = async (req, res) => {
     });
   }
 };
+
+exports.streamDocumentFile = async (req, res) => {
+  try {
+    await streamStoredFile(req.params.fileId, res);
+  } catch (error) {
+    console.error("Stream document file error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to load file.",
+      error: error.message,
+    });
+  }
+};
+
 exports.deleteDocument = async (req, res) => {
   try {
     const { id, documentId } = req.params;
@@ -1202,7 +1163,7 @@ exports.deleteDocument = async (req, res) => {
       });
     }
 
-    await deleteFromGoogleDrive(targetDocument.driveFileId);
+    await deleteStoredFile(targetDocument.fileStorageId || targetDocument.driveFileId);
 
     const updatedTimetable = await Timetable.findByIdAndUpdate(
       id,
@@ -1245,4 +1206,72 @@ exports.deleteDocument = async (req, res) => {
 };
 exports.addPanelNotes = async (req, res) => {
   res.json({ success: true });
+};
+
+
+exports.reorderBatchTimeFrames = async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Only admin can update batch time frames.",
+      });
+    }
+
+    const { batchId, items = [] } = req.body;
+
+    if (!batchId) {
+      return res.status(400).json({
+        success: false,
+        message: "Batch ID is required.",
+      });
+    }
+
+    if (!Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one session item is required.",
+      });
+    }
+
+    const updates = [];
+
+    for (const item of items) {
+      const sessionId = item.sessionId || item._id || item.id;
+      const startTime = cleanText(item.startTime || item.time || "", 20);
+      const endTime = cleanText(item.endTime || "", 20);
+
+      if (!sessionId || !startTime || !endTime) continue;
+
+      const updated = await Timetable.findOneAndUpdate(
+        {
+          _id: sessionId,
+          batchId,
+          status: { $ne: "completed" },
+        },
+        {
+          $set: {
+            startTime,
+            endTime,
+          },
+        },
+        { new: true },
+      );
+
+      if (updated) updates.push(updated);
+    }
+
+    res.json({
+      success: true,
+      message: "Batch time frames updated successfully.",
+      updatedCount: updates.length,
+    });
+  } catch (error) {
+    console.error("Reorder batch time frames error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to update batch time frames.",
+      error: error.message,
+    });
+  }
 };

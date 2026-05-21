@@ -704,7 +704,7 @@ export default function SessionDetailPage() {
               className="inline-flex items-center gap-2 px-5 py-2.5 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 disabled:bg-gray-400"
             >
               <Upload className="w-4 h-4" />
-              {uploadingMaterial ? "Uploading..." : "Upload to Google Drive"}
+              {uploadingMaterial ? "Uploading..." : "Upload Material"}
             </button>
           </form>
         )}

@@ -93,6 +93,9 @@ const timetableSchema = new mongoose.Schema(
           type: String,
           required: true,
         },
+        fileStorageId: {
+          type: String,
+        },
         driveFileId: {
           type: String,
         },
@@ -101,8 +104,8 @@ const timetableSchema = new mongoose.Schema(
         },
         source: {
           type: String,
-          enum: ["google-drive", "external-link"],
-          default: "google-drive",
+          enum: ["uploaded-file", "gridfs", "external-link", "google-drive"],
+          default: "uploaded-file",
         },
         type: {
           type: String,

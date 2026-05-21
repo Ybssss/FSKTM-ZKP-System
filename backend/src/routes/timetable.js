@@ -1,13 +1,10 @@
 const express = require("express");
-const multer = require("multer");
-const path = require("path");
-const os = require("os");
-const fs = require("fs");
-
 const router = express.Router();
-const { authenticateToken, requireRole } = require("../middleware/auth");
-const evaluationController = require("../controllers/evaluationController");
+const multer = require("multer");
+const os = require("os");
+const path = require("path");
 
+const { authenticateToken, requireRole } = require("../middleware/auth");
 const {
   createTimetable,
   getTimetables,
@@ -17,15 +14,19 @@ const {
   deleteTimetable,
   uploadDocument,
   deleteDocument,
+  streamDocumentFile,
   addPanelNotes,
   createBulkTimetables,
+  getAvailableBatches,
+  getBatchPrintSchedules,
+  getBatchPrintSchedule,
+  reorderBatchTimeFrames,
 } = require("../controllers/timetableController");
 
 const matchingController = require("../controllers/matchingController");
 const expertiseService = require("../services/expertiseService");
 
-const uploadDir = path.join(os.tmpdir(), "fsktm-zkp-uploads");
-fs.mkdirSync(uploadDir, { recursive: true });
+const maxFileSize = Number(process.env.MAX_FILE_SIZE || 10 * 1024 * 1024);
 
 const allowedMimeTypes = new Set([
   "application/pdf",
@@ -42,59 +43,62 @@ const allowedMimeTypes = new Set([
 ]);
 
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: (_req, _file, cb) => cb(null, uploadDir),
-    filename: (_req, file, cb) => {
-      const safeName = String(file.originalname || "upload")
-        .replace(/[^a-zA-Z0-9._-]/g, "_")
-        .slice(-120);
-      cb(null, `${Date.now()}-${safeName}`);
-    },
-  }),
+  dest: path.join(os.tmpdir(), "fsktm-timetable-documents"),
   limits: {
-    fileSize: 25 * 1024 * 1024,
+    fileSize: maxFileSize,
   },
   fileFilter: (_req, file, cb) => {
     if (allowedMimeTypes.has(file.mimetype)) {
-      cb(null, true);
-      return;
+      return cb(null, true);
     }
 
     cb(
       new Error(
-        "Unsupported file type. Please upload PDF, Word, PowerPoint, Excel, text, PNG, JPG, or WebP files.",
+        "Unsupported file type. Please upload PDF, Word, PowerPoint, Excel, text, or image files.",
       ),
     );
   },
 });
 
-const handleUploadErrors = (req, res, next) => {
+const handleSingleDocumentUpload = (req, res, next) => {
   upload.single("file")(req, res, (error) => {
-    if (!error) {
-      next();
-      return;
-    }
+    if (!error) return next();
 
-    const statusCode = error instanceof multer.MulterError ? 400 : 415;
-    res.status(statusCode).json({
+    return res.status(400).json({
       success: false,
-      message: error.message || "File upload failed.",
+      message: error.message || "Failed to read uploaded file.",
     });
   });
 };
+
+// Public file stream route. This mirrors your previous Google Drive "anyone with link"
+// behavior while storing the actual file in MongoDB GridFS.
+router.get("/documents/file/:fileId", streamDocumentFile);
 
 router.use(authenticateToken);
 
 router.get("/my", getMyTimetable);
 
+router.get("/batches", requireRole(["admin"]), getAvailableBatches);
+router.get("/batches/print", requireRole(["admin"]), getBatchPrintSchedules);
+router.post(
+  "/batches/reorder-timeframes",
+  requireRole(["admin"]),
+  reorderBatchTimeFrames,
+);
+router.get(
+  "/batches/:batchId/print",
+  requireRole(["admin"]),
+  getBatchPrintSchedule,
+);
+
 router.post("/bulk", requireRole(["admin"]), createBulkTimetables);
 router.post("/create", requireRole(["admin"]), createTimetable);
-router.delete("/:id", requireRole(["admin"]), deleteTimetable);
 
 router.post(
   "/:id/documents",
   requireRole(["student", "admin"]),
-  handleUploadErrors,
+  handleSingleDocumentUpload,
   uploadDocument,
 );
 
@@ -110,7 +114,13 @@ router.get("/expertise/:userId", requireRole(["admin"]), async (req, res) => {
   try {
     const { userId } = req.params;
     const expertise = await expertiseService.fetchUserExpertise(userId);
-    res.json({ success: true, userId, expertise, count: expertise.length });
+
+    res.json({
+      success: true,
+      userId,
+      expertise,
+      count: expertise.length,
+    });
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -127,11 +137,8 @@ router.post(
 );
 
 router.put("/:id", requireRole(["admin"]), updateTimetable);
+router.delete("/:id", requireRole(["admin"]), deleteTimetable);
 router.get("/", requireRole(["admin"]), getTimetables);
 router.get("/:id", getTimetableById);
-
-router.post("/submit", evaluationController.submitEvaluation);
-router.get("/search", evaluationController.searchHistoricalComments);
-router.get("/", evaluationController.getAllEvaluations);
 
 module.exports = router;

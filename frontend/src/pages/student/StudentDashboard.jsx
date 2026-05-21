@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
-import api, { analyticsAPI, attendanceAPI, timetableAPI, userAPI } from "../../services/api";
+import api, { analyticsAPI, attendanceAPI, timetableAPI } from "../../services/api";
 import {
   AlertCircle,
   Calendar,
@@ -10,7 +10,6 @@ import {
   Clock,
   FileText,
   MapPin,
-  Users,
 } from "lucide-react";
 
 const SESSION_TYPE_LABELS = {
@@ -100,12 +99,10 @@ export default function StudentDashboard() {
   const { user } = useAuth();
   const [stats, setStats] = useState({
     totalEvaluations: 0,
-    averageScore: 0,
     upcomingSessions: 0,
     attendanceRate: 0,
   });
   const [upcomingSessions, setUpcomingSessions] = useState([]);
-  const [assignedPanels, setAssignedPanels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
@@ -133,21 +130,9 @@ export default function StudentDashboard() {
             const studentId = evaluation.studentId?._id || evaluation.studentId;
             return String(studentId) === String(user?.id) && evaluation.status === "COMPLETED";
           });
-          const averageScore =
-            myCompleted.length > 0
-              ? Number(
-                  (
-                    myCompleted.reduce(
-                      (sum, evaluation) => sum + Number(evaluation.totalMarks || 0),
-                      0,
-                    ) / myCompleted.length
-                  ).toFixed(1),
-                )
-              : 0;
           setStats((prev) => ({
             ...prev,
             totalEvaluations: myCompleted.length,
-            averageScore,
           }));
         } catch (_) {
           // Keep default stats.
@@ -169,19 +154,6 @@ export default function StudentDashboard() {
         setStats((prev) => ({ ...prev, upcomingSessions: upcoming.length }));
       } catch (error) {
         console.log("Could not fetch timetables:", error.message);
-      }
-
-      try {
-        const studentResponse = await userAPI.getById(user.id);
-        const studentData = studentResponse.user;
-        const activePanels =
-          studentData.assignedPanels?.filter((assignment) => {
-            if (!assignment.endDate) return true;
-            return formatDateKey(assignment.endDate) >= formatDateKey(new Date());
-          }) || [];
-        setAssignedPanels(activePanels);
-      } catch (error) {
-        console.log("Could not fetch assigned panels:", error.message);
       }
 
       try {
@@ -256,14 +228,10 @@ export default function StudentDashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
           <p className="text-xs font-bold text-gray-500 uppercase">Evaluations</p>
           <p className="text-2xl font-bold text-gray-900 mt-1">{stats.totalEvaluations || 0}</p>
-        </div>
-        <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
-          <p className="text-xs font-bold text-gray-500 uppercase">Average Score</p>
-          <p className="text-2xl font-bold text-gray-900 mt-1">{stats.averageScore || 0}</p>
         </div>
         <div className="bg-white rounded-xl border border-gray-200 p-4 shadow-sm">
           <p className="text-xs font-bold text-gray-500 uppercase">Upcoming</p>
@@ -393,27 +361,6 @@ export default function StudentDashboard() {
           </div>
         </section>
       </div>
-
-      {assignedPanels.length > 0 && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
-          <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-3">
-            <Users className="w-5 h-5 text-indigo-600" /> Assigned Panels
-          </h2>
-          <div className="flex flex-wrap gap-2">
-            {assignedPanels.map((assignment) => {
-              const panel = assignment.panelId || assignment;
-              return (
-                <span
-                  key={panel?._id || panel?.id || panel?.email || String(panel)}
-                  className="px-3 py-2 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-100 text-sm font-semibold"
-                >
-                  {panel?.name || panel?.email || "Panel"}
-                </span>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 md:p-6">
         <h2 className="text-lg font-bold text-gray-900 mb-4">Quick Links</h2>

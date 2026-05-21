@@ -1,5 +1,7 @@
 // src/scripts/seed.js
 const mongoose = require("mongoose");
+const { GridFSBucket } = require("mongodb");
+const { Readable } = require("stream");
 const dotenv = require("dotenv");
 const path = require("path");
 const SessionBatch = require("../models/SessionBatch");
@@ -117,7 +119,7 @@ const rubricsData = [
         key: "crit_f_methodology",
         title: "CRITERIA F: METHODOLOGY",
         type: "quantitative",
-        weight: 20,
+        weight: 15,
         maxScore: 4,
         exemplary:
           "The methodology is comprehensive, clearly aligned with the research objectives, and well justified. The research design, data collection, and analysis methods are methodologically sound.",
@@ -547,6 +549,95 @@ const rubricsData = [
   },
 ];
 
+
+const getPublicBackendUrl = () =>
+  String(
+    process.env.PUBLIC_BACKEND_URL ||
+      process.env.BACKEND_URL ||
+      `http://localhost:${process.env.PORT || 5000}`,
+  ).replace(/\/$/, "");
+
+const createSeedGridFsFile = async ({ filename, content, mimeType = "text/plain" }) => {
+  if (!mongoose.connection.db) {
+    throw new Error("MongoDB connection is not ready for seeded file storage.");
+  }
+
+  const bucket = new GridFSBucket(mongoose.connection.db, {
+    bucketName: process.env.GRIDFS_BUCKET_NAME || "session_materials",
+  });
+
+  return new Promise((resolve, reject) => {
+    const uploadStream = bucket.openUploadStream(filename, {
+      contentType: mimeType,
+      metadata: {
+        seeded: true,
+        originalName: filename,
+        uploadedAt: new Date(),
+      },
+    });
+
+    Readable.from([Buffer.from(content, "utf8")])
+      .pipe(uploadStream)
+      .on("error", reject)
+      .on("finish", () => {
+        const fileId = uploadStream.id.toString();
+        resolve({
+          id: fileId,
+          name: filename,
+          mimeType,
+          size: String(Buffer.byteLength(content, "utf8")),
+          url: `${getPublicBackendUrl()}/api/timetables/documents/file/${fileId}`,
+        });
+      });
+  });
+};
+
+const makeSeedMaterialContent = ({ studentName, sessionTitle, materialType }) => `FSKTM ZKP System Demo Material
+
+Student: ${studentName}
+Session: ${sessionTitle}
+Material Type: ${materialType}
+
+This is a seeded demo file stored in MongoDB GridFS. It is used to test session material upload and view workflows.
+`;
+
+const cleanGridFsBucket = async () => {
+  const bucketName = process.env.GRIDFS_BUCKET_NAME || "session_materials";
+
+  if (!mongoose.connection.db) {
+    console.warn("⚠️ MongoDB connection is not ready. Skipping GridFS cleanup.");
+    return;
+  }
+
+  try {
+    const filesCollection = mongoose.connection.db.collection(`${bucketName}.files`);
+    const chunksCollection = mongoose.connection.db.collection(`${bucketName}.chunks`);
+
+    const fileCount = await filesCollection.countDocuments({});
+    const chunkCount = await chunksCollection.countDocuments({});
+
+    await filesCollection.deleteMany({});
+    await chunksCollection.deleteMany({});
+
+    console.log(
+      `🧹 Deleted ${fileCount} uploaded material file(s) and ${chunkCount} GridFS chunk(s) from bucket "${bucketName}".`,
+    );
+  } catch (error) {
+    console.warn("⚠️ Could not clean GridFS uploaded files:", error.message);
+  }
+};
+
+
+const proposalWeightTotal = rubricsData
+  .find((rubric) => rubric.sessionType === "PROPOSAL_DEFENSE")
+  .criteria.filter((criterion) => criterion.type === "quantitative")
+  .reduce((sum, criterion) => sum + Number(criterion.weight || 0), 0);
+
+if (proposalWeightTotal !== 100) {
+  console.error(`FATAL ERROR: Proposal rubric quantitative weight is ${proposalWeightTotal}%, expected 100%.`);
+  process.exit(1);
+}
+
 const seedDatabase = async () => {
   try {
     await mongoose.connect(MONGO_URI);
@@ -560,6 +651,11 @@ const seedDatabase = async () => {
     await Rubric.deleteMany({});
     await User.deleteMany({});
     await SessionBatch.deleteMany({});
+
+    // Clean uploaded materials stored in MongoDB GridFS too.
+    // Without this, reseeding removes timetable references but leaves orphan files in:
+    // session_materials.files and session_materials.chunks.
+    await cleanGridFsBucket();
 
     // 1. Create Rubrics
     console.log("📚 Seeding UTHM Rubric Templates with FULL Criteria...");
@@ -580,10 +676,10 @@ const seedDatabase = async () => {
     const adminUsers = [
       {
         userId: "admin_samihah",
-        name: "Dr. CHE SAMIHAH BINTI CHE DALIM",
+        name: "CHE SAMIHAH BINTI CHE DALIM",
         email: "samihah@uthm.edu.my",
         role: "admin",
-        registrationCode: "temp",
+        registrationCode: "demo",
         // 🔴 FIXED: Since admins can be assigned to panels now, give them tags!
         profession: "DS13 Pensyarah Kanan — Jabatan Multimedia",
         expertiseTags: [
@@ -600,7 +696,7 @@ const seedDatabase = async () => {
         name: "PENDAFTAR FSKTM",
         email: "pendaftar.fsktm@uthm.edu.my",
         role: "admin",
-        registrationCode: "temp",
+        registrationCode: "demo",
       },
     ];
     let allUsers = await User.create(adminUsers);
@@ -611,12 +707,12 @@ const seedDatabase = async () => {
     const demoPanels = [
       {
         userId: "panel_zkp",
-        name: "Dr. NUR ZIADAH BINTI HARUN",
+        name: "NUR ZIADAH BINTI HARUN",
         email: "panel.zkp@example.com",
         role: "panel",
         profession:
           "DS13 Pensyarah Kanan — Jabatan Keselamatan Maklumat dan Teknologi Web",
-        registrationCode: "PANEL001",
+        registrationCode: "demo",
         expertiseTags: [
           "Security System",
           "Cryptography",
@@ -628,12 +724,12 @@ const seedDatabase = async () => {
       },
       {
         userId: "panel_ai",
-        name: "PROF. MADYA Dr. SHAHREEN BINTI KASIM",
+        name: "SHAHREEN BINTI KASIM",
         email: "panel.ai@example.com",
         role: "panel",
         profession:
           "DS14 Profesor Madya — Jabatan Keselamatan Maklumat dan Teknologi Web",
-        registrationCode: "PANEL002",
+        registrationCode: "demo",
         expertiseTags: [
           "Bioinformatics",
           "Gene Expression Analysis",
@@ -645,12 +741,12 @@ const seedDatabase = async () => {
       },
       {
         userId: "panel_blockchain",
-        name: "PROF. MADYA Dr. SAPI'EE BIN JAMEL",
+        name: "SAPI'EE BIN JAMEL",
         email: "panel.blockchain@example.com",
         role: "panel",
         profession:
           "DS14 Profesor Madya — Jabatan Keselamatan Maklumat dan Teknologi Web",
-        registrationCode: "PANEL003",
+        registrationCode: "demo",
         expertiseTags: [
           "Data Management",
           "Data Encryption",
@@ -662,11 +758,11 @@ const seedDatabase = async () => {
       },
       {
         userId: "panel_web",
-        name: "Dr. NUR LIYANA BINTI SULAIMAN",
+        name: "NUR LIYANA BINTI SULAIMAN",
         email: "panel.web@example.com",
         role: "panel",
         profession: "DS13 Pensyarah Kanan — Jabatan Kejuruteraan Perisian",
-        registrationCode: "PANEL004",
+        registrationCode: "demo",
         expertiseTags: [
           "Software Engineering",
           "Software Process Models",
@@ -678,12 +774,12 @@ const seedDatabase = async () => {
       },
       {
         userId: "panel_network",
-        name: "Ts. Dr. ZUBAILE BIN ABDULLAH",
+        name: "ZUBAILE BIN ABDULLAH",
         email: "panel.network@example.com",
         role: "panel",
         profession:
           "DS13 Pensyarah Kanan — Jabatan Keselamatan Maklumat dan Teknologi Web",
-        registrationCode: "PANEL005",
+        registrationCode: "demo",
         expertiseTags: [
           "Security System",
           "Malware",
@@ -708,7 +804,7 @@ const seedDatabase = async () => {
         name: "Muhammad Ali",
         email: "ali@student.uthm.edu.my",
         role: "student",
-        registrationCode: "111111",
+        registrationCode: "demo",
         program: "Master of Information Technology",
         researchTitle: "Optimization of Zero-Knowledge Proof Authentication",
         researchAbstract:
@@ -721,7 +817,7 @@ const seedDatabase = async () => {
         name: "Siti Nuraisyah",
         email: "siti@student.uthm.edu.my",
         role: "student",
-        registrationCode: "222222",
+        registrationCode: "demo",
         program: "PhD in Computer Science",
         researchTitle: "Advanced Deep Learning Models for Academic Prediction",
         researchAbstract:
@@ -734,7 +830,7 @@ const seedDatabase = async () => {
         name: "Chong Wei Ming",
         email: "chong@student.uthm.edu.my",
         role: "student",
-        registrationCode: "333333",
+        registrationCode: "demo",
         program: "Master of Software Engineering",
         researchTitle: "Blockchain-Based Healthcare Information System",
         researchAbstract:
@@ -747,7 +843,7 @@ const seedDatabase = async () => {
         name: "Tan Mei Ling",
         email: "meiling@student.uthm.edu.my",
         role: "student",
-        registrationCode: "444444",
+        registrationCode: "demo",
         program: "Master of Information Security",
         researchTitle: "Secure Online Evaluation Workflow Using ZKP",
         researchAbstract:
@@ -760,7 +856,7 @@ const seedDatabase = async () => {
         name: "Nur Aina Zulkifli",
         email: "aina@student.uthm.edu.my",
         role: "student",
-        registrationCode: "555555",
+        registrationCode: "demo",
         program: "Master of Information Security",
         researchTitle: "Privacy-Preserving Authentication for Academic Systems",
         researchAbstract:
@@ -773,7 +869,7 @@ const seedDatabase = async () => {
         name: "Ahmad Danish Hakimi",
         email: "danish@student.uthm.edu.my",
         role: "student",
-        registrationCode: "666666",
+        registrationCode: "demo",
         program: "Master of Computer Science",
         researchTitle:
           "Natural Language Processing for Academic Feedback Analysis",
@@ -787,7 +883,7 @@ const seedDatabase = async () => {
         name: "Priya Nair",
         email: "priya@student.uthm.edu.my",
         role: "student",
-        registrationCode: "777777",
+        registrationCode: "demo",
         program: "PhD in Computer Science",
         researchTitle: "Smart Contract Audit Trail for Research Evaluation",
         researchAbstract:
@@ -800,7 +896,7 @@ const seedDatabase = async () => {
         name: "Lim Jia Wei",
         email: "jiawei@student.uthm.edu.my",
         role: "student",
-        registrationCode: "888888",
+        registrationCode: "demo",
         program: "Master of Software Engineering",
         researchTitle: "Usability Evaluation of Web-Based Assessment Platforms",
         researchAbstract:
@@ -813,7 +909,7 @@ const seedDatabase = async () => {
         name: "Mohd Hafiz Rahman",
         email: "hafiz@student.uthm.edu.my",
         role: "student",
-        registrationCode: "999999",
+        registrationCode: "demo",
         program: "Master of Computer Networks",
         researchTitle: "IoT Network Monitoring for Smart Campus Environments",
         researchAbstract:
@@ -826,7 +922,7 @@ const seedDatabase = async () => {
         name: "Amira Sofea",
         email: "amira@student.uthm.edu.my",
         role: "student",
-        registrationCode: "101010",
+        registrationCode: "demo",
         program: "Master of Cloud Computing",
         researchTitle:
           "Cloud-Based Monitoring Framework for Distributed Applications",
@@ -1167,7 +1263,21 @@ const seedDatabase = async () => {
         status: "completed",
       },
 
-      // Case 7: Ali upcoming Pre-Viva, both pending
+      // Case 7: Ali completed Proposal Defense, official scored report
+      {
+        students: [getUserId("ali@student.uthm.edu.my")],
+        panels: [createdPanels[0]._id, createdPanels[1]._id],
+        title: "Completed Proposal Defense - Muhammad Ali",
+        sessionType: "PROPOSAL_DEFENSE",
+        rubricId: proposalRubric._id,
+        date: lastMonth,
+        startTime: "10:30",
+        endTime: "11:30",
+        venue: "meet.example.com/ali-proposal-completed-demo",
+        status: "completed",
+      },
+
+      // Case 8: Ali upcoming Pre-Viva, both pending
       {
         students: [getUserId("ali@student.uthm.edu.my")],
         panels: [getUserId("samihah@uthm.edu.my"), createdPanels[2]._id],
@@ -1318,7 +1428,7 @@ const seedDatabase = async () => {
           studentDocuments: [
             {
               title: `${student.name} Progress Report`,
-              url: "https://drive.google.com/file/d/demo-progress-report",
+              url: "",
               source: "external-link",
               type: "report",
               uploadedBy: getUserId(slot.studentEmail),
@@ -1327,7 +1437,7 @@ const seedDatabase = async () => {
             },
             {
               title: `${student.name} Presentation Slides`,
-              url: "https://drive.google.com/file/d/demo-progress-slides",
+              url: "",
               source: "external-link",
               type: "slides",
               uploadedBy: getUserId(slot.studentEmail),
@@ -1339,7 +1449,7 @@ const seedDatabase = async () => {
       }),
     );
 
-    const enrichedSessionsData = sessionsData.map((session, index) => {
+    const enrichedSessionsData = await Promise.all(sessionsData.map(async (session, index) => {
       const batchInfo =
         index < 4
           ? {
@@ -1376,26 +1486,64 @@ const seedDatabase = async () => {
             ? 5
             : session.breakBetweenSlotsMinutes,
         createdBy: getUserId("samihah@uthm.edu.my"),
-        studentDocuments: session.studentDocuments || [
-          {
-            title: `${session.title} Demo Report`,
-            url: "https://drive.google.com/",
-            source: "external-link",
-            type: "report",
-            uploadedBy: session.students[0],
-            description: "Seeded demo material for panel review testing.",
-          },
-          {
-            title: `${session.title} Demo Slides`,
-            url: "https://drive.google.com/",
-            source: "external-link",
-            type: "slides",
-            uploadedBy: session.students[0],
-            description: "Seeded demo presentation slides.",
-          },
-        ],
+        studentDocuments: await (async () => {
+          const student = allUsers.find(
+            (candidate) => String(candidate._id) === String(session.students?.[0]),
+          );
+          const studentName = student?.name || "Student";
+          const safeTitle = String(session.title || "session")
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-|-$/g, "")
+            .slice(0, 80);
+
+          const reportFile = await createSeedGridFsFile({
+            filename: `${safeTitle}-report.txt`,
+            content: makeSeedMaterialContent({
+              studentName,
+              sessionTitle: session.title,
+              materialType: "Report",
+            }),
+          });
+
+          const slidesFile = await createSeedGridFsFile({
+            filename: `${safeTitle}-slides.txt`,
+            content: makeSeedMaterialContent({
+              studentName,
+              sessionTitle: session.title,
+              materialType: "Presentation Slides",
+            }),
+          });
+
+          return [
+            {
+              title: `${session.title} Demo Report`,
+              url: reportFile.url,
+              driveFileId: reportFile.id,
+              mimeType: reportFile.mimeType,
+              source: "gridfs",
+              type: "report",
+              uploadedBy: session.students[0],
+              fileSize: reportFile.size,
+              description:
+                "Seeded demo report stored in MongoDB GridFS for panel review testing.",
+            },
+            {
+              title: `${session.title} Demo Slides`,
+              url: slidesFile.url,
+              driveFileId: slidesFile.id,
+              mimeType: slidesFile.mimeType,
+              source: "gridfs",
+              type: "slides",
+              uploadedBy: session.students[0],
+              fileSize: slidesFile.size,
+              description:
+                "Seeded demo slides stored in MongoDB GridFS for panel review testing.",
+            },
+          ];
+        })(),
       };
-    });
+    }));
 
     const createdSessions = await Timetable.create(enrichedSessionsData);
 
@@ -1690,7 +1838,69 @@ const seedDatabase = async () => {
           "Proceed with controlled demo testing using seeded users and sessions.",
       },
 
-      // Case 7: Ali upcoming Pre-Viva, both pending
+      // Case 7: Ali completed Proposal Defense, both panels completed
+      {
+        sessionId: getSessionIdByTitle("Completed Proposal Defense - Muhammad Ali"),
+        rubricId: proposalRubric._id,
+        studentId: getUserId("ali@student.uthm.edu.my"),
+        evaluatorId: createdPanels[0]._id,
+        semester: "Semester 2, 2024/2025",
+        sessionType: "PROPOSAL_DEFENSE",
+        status: "COMPLETED",
+        totalMarks: 72.5,
+        scores: makeScoreMapFromValues(proposalRubric, {
+          crit_a_title: 3,
+          crit_b_exec_summary: 3,
+          crit_c_problem: 3,
+          crit_d_objective: 3,
+          crit_e_literature: 3,
+          crit_f_methodology: 3,
+          crit_g_prelim: 3,
+          crit_h_ethics: 3,
+          crit_i_org: 3,
+          crit_j_lang: 3,
+          crit_k_ref: 2,
+          crit_l_pres: 3,
+        }),
+        qualitativeFeedback: makeQualitativeMap(
+          proposalRubric,
+          "The proposal is acceptable and clearly related to authentication security. Improve citation coverage and methodology justification.",
+        ),
+        overallComments:
+          "Good foundation. The student may proceed with improvements to evaluation design and literature support.",
+      },
+      {
+        sessionId: getSessionIdByTitle("Completed Proposal Defense - Muhammad Ali"),
+        rubricId: proposalRubric._id,
+        studentId: getUserId("ali@student.uthm.edu.my"),
+        evaluatorId: createdPanels[1]._id,
+        semester: "Semester 2, 2024/2025",
+        sessionType: "PROPOSAL_DEFENSE",
+        status: "COMPLETED",
+        totalMarks: 76.0,
+        scores: makeScoreMapFromValues(proposalRubric, {
+          crit_a_title: 4,
+          crit_b_exec_summary: 3,
+          crit_c_problem: 3,
+          crit_d_objective: 4,
+          crit_e_literature: 3,
+          crit_f_methodology: 3,
+          crit_g_prelim: 3,
+          crit_h_ethics: 3,
+          crit_i_org: 3,
+          crit_j_lang: 3,
+          crit_k_ref: 3,
+          crit_l_pres: 3,
+        }),
+        qualitativeFeedback: makeQualitativeMap(
+          proposalRubric,
+          "The research direction is clear and feasible. The student should strengthen expected outcomes and validation planning.",
+        ),
+        overallComments:
+          "Clear presentation with suitable research direction. Proceed with minor refinements.",
+      },
+
+      // Case 8: Ali upcoming Pre-Viva, both pending
       {
         sessionId: getSessionIdByTitle("Pre-Viva - Muhammad Ali"),
         rubricId: preVivaRubric._id,
@@ -1979,17 +2189,17 @@ const seedDatabase = async () => {
       });
     }
     console.log("\n🧪 DEMO ACCOUNTS");
-    console.log("Admin: admin_samihah / registration code: temp");
-    console.log("Student Ali: AW240001 / code: 111111");
-    console.log("Student Siti: AW240002 / code: 222222");
-    console.log("Student Chong: AW240003 / code: 333333");
-    console.log("Student Mei Ling: AW240004 / code: 444444");
-    console.log("Student Aina: AW240005 / code: 555555");
-    console.log("Student Danish: AW240006 / code: 666666");
-    console.log("Student Priya: AW240007 / code: 777777");
-    console.log("Student Jia Wei: AW240008 / code: 888888");
-    console.log("Student Hafiz: AW240009 / code: 999999");
-    console.log("Student Amira: AW240010 / code: 101010");
+    console.log("Admin: admin_samihah / registration code: demo");
+    console.log("Student Ali: AW240001 / code: demo");
+    console.log("Student Siti: AW240002 / code: demo");
+    console.log("Student Chong: AW240003 / code: demo");
+    console.log("Student Mei Ling: AW240004 / code: demo");
+    console.log("Student Aina: AW240005 / code: demo");
+    console.log("Student Danish: AW240006 / code: demo");
+    console.log("Student Priya: AW240007 / code: demo");
+    console.log("Student Jia Wei: AW240008 / code: demo");
+    console.log("Student Hafiz: AW240009 / code: demo");
+    console.log("Student Amira: AW240010 / code: demo");
     createdPanels.forEach((panel, index) => {
       console.log(
         `Panel ${index + 1}: ${panel.userId} / ${panel.email} / code: ${panel.registrationCode}`,

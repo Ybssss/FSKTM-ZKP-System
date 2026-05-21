@@ -1,19 +1,61 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import api from "../../services/api";
 import {
-  ClipboardCheck,
-  Hourglass,
-  FileText,
   CheckCircle2,
+  ClipboardCheck,
+  FileText,
+  Hourglass,
+  Search,
 } from "lucide-react";
+
+const SESSION_TYPE_LABELS = {
+  PROPOSAL_DEFENSE: "Proposal Defense",
+  PROGRESS_ASSESSMENT: "Progress Assessment",
+  PRE_VIVA: "Pre-Viva",
+};
+
+const formatDate = (value) => {
+  if (!value) return "Date not available";
+  const raw = String(value);
+  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  const date = match
+    ? new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]))
+    : new Date(value);
+
+  if (Number.isNaN(date.getTime())) return "Date not available";
+
+  return date.toLocaleDateString("en-MY", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+};
+
+const getId = (value) =>
+  String(value?._id || value?.id || value || "");
+
+const normalizeScoreEntries = (scores) => {
+  if (!scores) return [];
+
+  if (scores instanceof Map) return Array.from(scores.entries());
+
+  if (typeof scores === "object") return Object.entries(scores);
+
+  return [];
+};
+
+const getSessionKey = (evaluation) =>
+  getId(evaluation.sessionId) ||
+  `${evaluation.sessionType || "UNKNOWN"}_${evaluation.semester || "Unknown"}`;
 
 export default function FeedbackPage() {
   const { user } = useAuth();
-  const [groupedEvaluations, setGroupedEvaluations] = useState([]);
+  const [reports, setReports] = useState([]);
   const [pendingCount, setPendingCount] = useState(0);
-  const [loading, setLoading] = useState(true);
   const [openedReportId, setOpenedReportId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchMyEvaluations();
@@ -22,101 +64,142 @@ export default function FeedbackPage() {
   const fetchMyEvaluations = async () => {
     try {
       setLoading(true);
-      const res = await api.get(
-        `/evaluations/student/${user.id || user.userId || user._id}`,
-      );
-      const rawEvals = res.data.evaluations || [];
+
+      const studentId = user?.id || user?._id || user?.userId;
+      const res = await api.get(`/evaluations/student/${studentId}`);
+      const rawEvaluations = res.data.evaluations || [];
 
       const grouped = {};
-      rawEvals.forEach((ev) => {
-        const sessionId =
-          typeof ev.sessionId === "object" ? ev.sessionId?._id : ev.sessionId;
 
-        const groupKey =
-          sessionId || `${ev.sessionType}_${ev.semester || "Unknown"}`;
+      rawEvaluations.forEach((evaluation) => {
+        const key = getSessionKey(evaluation);
+        const session = evaluation.sessionId || {};
 
-        if (!grouped[groupKey]) {
-          grouped[groupKey] = {
-            sessionId: sessionId || null,
-            sessionType: ev.sessionType,
-            semester: ev.semester || "Unknown",
-            date: ev.createdAt,
-            evalCount: 0,
-            totalSum: 0,
+        if (!grouped[key]) {
+          grouped[key] = {
+            id: key,
+            sessionTitle:
+              session.title ||
+              SESSION_TYPE_LABELS[evaluation.sessionType] ||
+              evaluation.sessionType ||
+              "Evaluation Report",
+            sessionType: evaluation.sessionType,
+            semester: evaluation.semester || "Unknown semester",
+            date: session.date || evaluation.updatedAt || evaluation.createdAt,
+            rubricName: evaluation.rubricId?.name || "Evaluation Rubric",
+            expectedPanelCount: 0,
+            completedEvaluations: [],
+            pendingEvaluations: [],
             panels: [],
             remarks: [],
             criteriaScores: {},
-            rubricName: ev.rubricId?.name || "Standard Evaluation",
           };
         }
 
-        const group = grouped[groupKey];
-        group.totalSum += ev.totalMarks ?? ev.totalScore ?? 0;
-        group.evalCount += 1;
-
+        const group = grouped[key];
         const panelName =
-          ev.evaluatorId?.name || ev.panelId?.name || "Unknown Panel";
+          evaluation.evaluatorId?.name ||
+          evaluation.panelId?.name ||
+          "Panel";
+
         if (!group.panels.includes(panelName)) group.panels.push(panelName);
 
-        if (ev.overallComments)
-          group.remarks.push({ panel: panelName, text: ev.overallComments });
+        if (evaluation.status === "COMPLETED") {
+          group.completedEvaluations.push(evaluation);
+        } else {
+          group.pendingEvaluations.push(evaluation);
+        }
 
-        // Progress Assessment specific logic
-        if (ev.sessionType === "PROGRESS_ASSESSMENT" && ev.summaryOfProgress) {
-          group.remarks.push({
-            panel: panelName,
-            text: `Summary: ${ev.summaryOfProgress}\n\nImprovement: ${ev.commentsForImprovement}\n\nSuggestions: ${ev.overallSuggestions}`,
-          });
+        group.expectedPanelCount = Math.max(
+          group.expectedPanelCount,
+          group.completedEvaluations.length + group.pendingEvaluations.length,
+        );
+
+        if (evaluation.overallComments) {
+          group.remarks.push({ panel: panelName, text: evaluation.overallComments });
+        }
+
+        if (evaluation.sessionType === "PROGRESS_ASSESSMENT") {
+          const progressText = [
+            evaluation.summaryOfProgress && `Summary: ${evaluation.summaryOfProgress}`,
+            evaluation.commentsForImprovement &&
+              `Improvement: ${evaluation.commentsForImprovement}`,
+            evaluation.overallSuggestions &&
+              `Suggestions: ${evaluation.overallSuggestions}`,
+          ]
+            .filter(Boolean)
+            .join("\n\n");
+
+          if (progressText) {
+            group.remarks.push({ panel: panelName, text: progressText });
+          }
         }
 
         if (
-          typeof ev.scores === "object" &&
-          ev.sessionType !== "PROGRESS_ASSESSMENT"
+          evaluation.status === "COMPLETED" &&
+          evaluation.sessionType !== "PROGRESS_ASSESSMENT"
         ) {
-          Object.entries(ev.scores).forEach(([key, val]) => {
-            let critName = key;
-            let critMax = 4;
+          normalizeScoreEntries(evaluation.scores).forEach(([key, rawValue]) => {
+            let criterionName = key;
+            let criterionMax = 4;
 
-            if (ev.rubricId && Array.isArray(ev.rubricId.criteria)) {
-              const found = ev.rubricId.criteria.find(
-                (c) => c._id === key || c.key === key,
+            if (Array.isArray(evaluation.rubricId?.criteria)) {
+              const found = evaluation.rubricId.criteria.find(
+                (criterion) => getId(criterion) === String(key) || criterion.key === key,
               );
+
               if (found) {
-                critName = found.title || found.name;
-                critMax = found.maxScore || 4;
+                criterionName = found.title || found.name || key;
+                criterionMax = found.maxScore || 4;
               }
             }
 
-            if (!group.criteriaScores[critName]) {
-              group.criteriaScores[critName] = {
+            if (!group.criteriaScores[criterionName]) {
+              group.criteriaScores[criterionName] = {
                 sum: 0,
                 count: 0,
-                maxScore: critMax,
+                maxScore: criterionMax,
               };
             }
-            group.criteriaScores[critName].sum += parseFloat(val) || 0;
-            group.criteriaScores[critName].count += 1;
+
+            group.criteriaScores[criterionName].sum += Number(rawValue || 0);
+            group.criteriaScores[criterionName].count += 1;
           });
         }
       });
 
-      const completed = [];
+      const finalizedReports = [];
       let pending = 0;
+
       Object.values(grouped).forEach((group) => {
-        if (group.evalCount >= 2) {
+        const isProgress = group.sessionType === "PROGRESS_ASSESSMENT";
+        const completedCount = group.completedEvaluations.length;
+        const expectedCount = Math.max(group.expectedPanelCount, 2);
+
+        if (completedCount >= expectedCount || (isProgress && completedCount > 0)) {
+          const numericMarks = group.completedEvaluations
+            .map((evaluation) => Number(evaluation.totalMarks))
+            .filter((mark) => Number.isFinite(mark) && mark > 0);
+
+          const finalAverage =
+            !isProgress && numericMarks.length > 0
+              ? (
+                  numericMarks.reduce((sum, mark) => sum + mark, 0) /
+                  numericMarks.length
+                ).toFixed(2)
+              : null;
+
           const averagedCriteria = Object.entries(group.criteriaScores).map(
             ([name, data]) => ({
               name,
-              average: (data.sum / data.count).toFixed(1),
+              average: (data.sum / Math.max(data.count, 1)).toFixed(1),
               maxScore: data.maxScore,
             }),
           );
-          completed.push({
-            id:
-              group.sessionId ||
-              `${group.sessionType || "UNKNOWN"}_${group.semester || "Unknown"}`,
+
+          finalizedReports.push({
             ...group,
-            finalAverage: (group.totalSum / group.evalCount).toFixed(2),
+            finalAverage,
             averagedCriteria,
           });
         } else {
@@ -124,33 +207,94 @@ export default function FeedbackPage() {
         }
       });
 
-      completed.sort((a, b) => new Date(b.date) - new Date(a.date));
-      setGroupedEvaluations(completed);
+      finalizedReports.sort((a, b) => new Date(b.date) - new Date(a.date));
+      setReports(finalizedReports);
       setPendingCount(pending);
     } catch (error) {
-      console.error("Error:", error);
+      console.error("Error loading evaluation reports:", error);
     } finally {
       setLoading(false);
     }
   };
 
-  if (loading)
+  const normalizedSearchTerm = searchTerm.trim().toLowerCase();
+
+  const filteredReports = useMemo(() => {
+    if (!normalizedSearchTerm) return reports;
+
+    return reports.filter((report) => {
+      const searchableText = [
+        report.sessionTitle,
+        report.rubricName,
+        SESSION_TYPE_LABELS[report.sessionType],
+        report.sessionType,
+        report.semester,
+        formatDate(report.date),
+        report.finalAverage,
+        ...(report.panels || []),
+        ...(report.remarks || []).flatMap((remark) => [remark.panel, remark.text]),
+        ...(report.averagedCriteria || []).map(
+          (criterion) => `${criterion.name} ${criterion.average}/${criterion.maxScore}`,
+        ),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+
+      return searchableText.includes(normalizedSearchTerm);
+    });
+  }, [reports, normalizedSearchTerm]);
+
+  const hasReports = useMemo(() => reports.length > 0, [reports]);
+  const hasFilteredReports = useMemo(
+    () => filteredReports.length > 0,
+    [filteredReports],
+  );
+
+  if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500" />
       </div>
     );
+  }
 
   return (
     <div className="max-w-5xl mx-auto space-y-6 pb-12">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-          <FileText className="w-8 h-8 text-indigo-600" /> Official Evaluation
-          Reports
+      <div>
+        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 flex items-center gap-2">
+          <FileText className="w-7 h-7 text-indigo-600" /> Official Evaluation Reports
         </h1>
         <p className="text-gray-600 mt-2">
-          View your formal academic evaluation results. Documents are published
-          only after all assigned panels have submitted their marks.
+          View finalized academic reports after the assigned panel evaluations are completed.
+        </p>
+      </div>
+
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+        <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">
+          Search Reports
+        </label>
+        <div className="relative">
+          <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search by session, rubric, panel, semester, date, score, or feedback text..."
+            className="w-full pl-10 pr-10 py-3 border border-gray-200 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          />
+          {searchTerm && (
+            <button
+              type="button"
+              onClick={() => setSearchTerm("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-500 hover:text-gray-900"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+        <p className="text-xs text-gray-500 mt-2">
+          Showing {filteredReports.length} of {reports.length} published report(s).
         </p>
       </div>
 
@@ -164,66 +308,66 @@ export default function FeedbackPage() {
               Results Pending Publication
             </h3>
             <p className="text-orange-800 text-sm">
-              You have {pendingCount} session(s) currently under review.
-              Documents will be published automatically once panel grading
-              concludes.
+              {pendingCount} session(s) are still waiting for all required panel submissions.
             </p>
           </div>
         </div>
       )}
 
-      {groupedEvaluations.length === 0 ? (
+      {!hasReports ? (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
           <ClipboardCheck className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900">
-            No Published Reports
-          </h3>
+          <h3 className="text-lg font-semibold text-gray-900">No Published Reports</h3>
           <p className="text-gray-500">
-            Your official results will appear here once finalized by the
-            administration.
+            Your official results will appear here once finalized.
+          </p>
+        </div>
+      ) : !hasFilteredReports ? (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center">
+          <Search className="w-16 h-16 text-gray-300 mx-auto mb-4" />
+          <h3 className="text-lg font-semibold text-gray-900">No Matching Reports</h3>
+          <p className="text-gray-500">
+            No published report matches “{searchTerm}”. Try another keyword.
           </p>
         </div>
       ) : (
         <div className="space-y-4">
-          {groupedEvaluations.map((result, idx) => {
-            const isOpen = openedReportId === result.id;
+          {filteredReports.map((report) => {
+            const isOpen = openedReportId === report.id;
+            const isProgress = report.sessionType === "PROGRESS_ASSESSMENT";
 
             return (
               <div
-                key={result.id || idx}
+                key={report.id}
                 className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden"
               >
-                {/* SUMMARY HEADER - shown first */}
-                <div className="p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+                <div className="p-5 md:p-6 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                   <div>
                     <p className="text-xs font-bold text-indigo-600 uppercase tracking-widest">
-                      {result.rubricName}
+                      {report.rubricName}
                     </p>
                     <h3 className="text-xl font-bold text-gray-900 mt-1">
-                      {result.sessionType?.replaceAll("_", " ")}
+                      {report.sessionTitle}
                     </h3>
                     <p className="text-sm text-gray-500 mt-1">
-                      {result.semester} • {result.panels.length} panel(s) •{" "}
-                      {new Date(result.date).toLocaleDateString("en-MY")}
+                      {SESSION_TYPE_LABELS[report.sessionType] || report.sessionType} · {report.semester} · {formatDate(report.date)}
                     </p>
                   </div>
 
                   <div className="flex items-center gap-3">
-                    {result.sessionType !== "PROGRESS_ASSESSMENT" && (
+                    {!isProgress && report.finalAverage !== null && (
                       <div className="text-right">
                         <p className="text-xs text-gray-500 font-bold uppercase">
                           Final Average
                         </p>
                         <p className="text-2xl font-black text-indigo-700">
-                          {result.finalAverage}%
+                          {report.finalAverage}%
                         </p>
                       </div>
                     )}
 
                     <button
-                      onClick={() =>
-                        setOpenedReportId(isOpen ? null : result.id)
-                      }
+                      onClick={() => setOpenedReportId(isOpen ? null : report.id)}
                       className="px-4 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700"
                     >
                       {isOpen ? "Hide Details" : "View Details"}
@@ -232,139 +376,106 @@ export default function FeedbackPage() {
                 </div>
 
                 {isOpen && (
-                  <>
-                    {/* DOCUMENT HEADER */}
-                    <div className="bg-indigo-900 p-8 text-white flex flex-col md:flex-row justify-between items-center gap-6 border-b-4 border-indigo-500">
-                      <div className="text-center md:text-left">
-                        <span className="inline-block px-3 py-1 bg-white/10 rounded text-xs font-bold tracking-widest uppercase mb-3 border border-white/20">
-                          {result.rubricName}
+                  <div className="border-t border-gray-200 bg-gray-50 p-5 md:p-6 space-y-6">
+                    <section className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                      <div className="bg-gray-100 px-4 py-2 border-b border-gray-200">
+                        <span className="font-bold text-gray-800 uppercase text-sm tracking-widest">
+                          Candidate and Panel Details
                         </span>
-                        <h2 className="text-3xl font-black uppercase tracking-wide">
-                          {result.sessionType?.replaceAll("_", " ")}
-                        </h2>
-                        <p className="text-indigo-200 font-medium mt-2 flex items-center justify-center md:justify-start gap-2">
-                          <CheckCircle2 className="w-4 h-4 text-green-400" />{" "}
-                          Officially Finalized • {result.semester}
-                        </p>
                       </div>
-                      {result.sessionType !== "PROGRESS_ASSESSMENT" && (
-                        <div className="bg-white text-gray-900 px-8 py-5 rounded-xl text-center shadow-2xl min-w-[180px] border-2 border-indigo-100">
-                          <p className="text-[10px] font-bold uppercase tracking-widest mb-1 text-gray-400">
-                            Combined Final Grade
-                          </p>
-                          <p className="text-5xl font-black text-indigo-700">
-                            {result.finalAverage}%
+                      <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                          <p className="text-xs font-bold text-gray-500 uppercase">Candidate</p>
+                          <p className="font-bold text-gray-900">{user?.name}</p>
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-gray-500 uppercase">Matric Number</p>
+                          <p className="font-mono font-bold text-gray-900">
+                            {user?.matricNumber || user?.userId}
                           </p>
                         </div>
-                      )}
-                    </div>
-
-                    <div className="p-8 bg-gray-50">
-                      {/* SECTION A */}
-                      <div className="border border-gray-300 mb-8 rounded-lg overflow-hidden bg-white shadow-sm">
-                        <div className="bg-gray-100 px-4 py-2 border-b border-gray-300">
-                          <span className="font-bold text-gray-800 uppercase text-sm tracking-widest">
-                            Section A: Candidate's & Examiners' Details
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2">
-                          <div className="p-4 border-b md:border-b-0 md:border-r border-gray-300">
-                            <p className="text-xs font-bold text-gray-500 uppercase mb-1">
-                              Candidate's Name
-                            </p>
-                            <p className="font-bold text-gray-900 text-lg">
-                              {user.name}
-                            </p>
-                          </div>
-                          <div className="p-4 border-b border-gray-300 bg-gray-50">
-                            <p className="text-xs font-bold text-gray-500 uppercase mb-1">
-                              Matric Number
-                            </p>
-                            <p className="font-mono font-bold text-gray-900 text-lg">
-                              {user.matricNumber || user.userId}
-                            </p>
-                          </div>
-                          <div className="p-4 border-t border-gray-300 md:col-span-2">
-                            <p className="text-xs font-bold text-gray-500 uppercase mb-2">
-                              Panel of Examiners
-                            </p>
-                            <ul className="flex flex-wrap gap-3">
-                              {result.panels.map((panel, i) => (
-                                <li
-                                  key={i}
-                                  className="bg-indigo-50 text-indigo-800 px-3 py-1.5 rounded-md text-sm font-bold border border-indigo-100"
-                                >
-                                  {panel}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* SECTION B */}
-                      {result.sessionType !== "PROGRESS_ASSESSMENT" && (
-                        <div className="border border-gray-300 mb-8 rounded-lg overflow-hidden bg-white shadow-sm">
-                          <div className="bg-gray-100 px-4 py-2 border-b border-gray-300">
-                            <span className="font-bold text-gray-800 uppercase text-sm tracking-widest">
-                              Section B: Averaged Criteria Breakdown
-                            </span>
-                          </div>
-                          <div className="divide-y divide-gray-100">
-                            {result.averagedCriteria.map((crit, i) => (
-                              <div
-                                key={i}
-                                className="flex justify-between items-center p-4 hover:bg-gray-50"
+                        <div className="md:col-span-2">
+                          <p className="text-xs font-bold text-gray-500 uppercase mb-2">
+                            Panel of Examiners
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {report.panels.map((panel) => (
+                              <span
+                                key={panel}
+                                className="bg-indigo-50 text-indigo-800 px-3 py-1.5 rounded-md text-sm font-bold border border-indigo-100"
                               >
-                                <p className="font-bold text-gray-800">
-                                  {crit.name}
-                                </p>
-                                <div className="text-right">
-                                  <span className="text-xl font-black text-indigo-700">
-                                    {crit.average}
-                                  </span>
-                                  <span className="text-sm text-gray-400 font-bold">
-                                    {" "}
-                                    / {crit.maxScore}
-                                  </span>
-                                </div>
-                              </div>
+                                {panel}
+                              </span>
                             ))}
                           </div>
                         </div>
-                      )}
+                      </div>
+                    </section>
 
-                      {/* SECTION C */}
-                      <div className="border border-gray-300 rounded-lg overflow-hidden bg-white shadow-sm">
-                        <div className="bg-gray-100 px-4 py-2 border-b border-gray-300">
+                    {!isProgress && (
+                      <section className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                        <div className="bg-gray-100 px-4 py-2 border-b border-gray-200 flex justify-between items-center gap-3">
                           <span className="font-bold text-gray-800 uppercase text-sm tracking-widest">
-                            Section C: Combined Panel Remarks
+                            Criteria Breakdown
                           </span>
+                          {report.finalAverage !== null && (
+                            <span className="text-lg font-black text-indigo-700">
+                              {report.finalAverage}%
+                            </span>
+                          )}
                         </div>
-                        <div className="p-6 space-y-6">
-                          {result.remarks.length === 0 ? (
-                            <p className="text-gray-500 italic">
-                              No formal remarks provided.
-                            </p>
-                          ) : (
-                            result.remarks.map((rem, i) => (
+                        <div className="divide-y divide-gray-100">
+                          {report.averagedCriteria.length ? (
+                            report.averagedCriteria.map((criterion) => (
                               <div
-                                key={i}
-                                className="bg-gray-50 p-5 rounded-lg border border-gray-200"
+                                key={criterion.name}
+                                className="p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2"
                               >
-                                <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 border-b border-gray-200 pb-2">
-                                  Remarks by {rem.panel}
-                                </p>
-                                <p className="text-gray-800 leading-relaxed font-medium whitespace-pre-wrap">
-                                  "{rem.text}"
+                                <p className="font-bold text-gray-800">{criterion.name}</p>
+                                <p className="text-right font-black text-indigo-700">
+                                  {criterion.average} / {criterion.maxScore}
                                 </p>
                               </div>
                             ))
+                          ) : (
+                            <p className="p-4 text-sm text-gray-500">
+                              No criterion score breakdown was provided.
+                            </p>
                           )}
                         </div>
+                      </section>
+                    )}
+
+                    <section className="bg-white border border-gray-200 rounded-xl overflow-hidden">
+                      <div className="bg-gray-100 px-4 py-2 border-b border-gray-200">
+                        <span className="font-bold text-gray-800 uppercase text-sm tracking-widest">
+                          Panel Feedback
+                        </span>
                       </div>
+                      <div className="divide-y divide-gray-100">
+                        {report.remarks.length ? (
+                          report.remarks.map((remark, index) => (
+                            <div key={`${remark.panel}-${index}`} className="p-4">
+                              <p className="text-xs font-bold text-indigo-600 uppercase mb-1">
+                                {remark.panel}
+                              </p>
+                              <p className="whitespace-pre-line text-sm text-gray-700 leading-relaxed">
+                                {remark.text}
+                              </p>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="p-4 text-sm text-gray-500">
+                            No written feedback was provided.
+                          </p>
+                        )}
+                      </div>
+                    </section>
+
+                    <div className="flex items-center gap-2 text-green-700 font-bold text-sm">
+                      <CheckCircle2 className="w-5 h-5" /> Officially Finalized
                     </div>
-                  </>
+                  </div>
                 )}
               </div>
             );
