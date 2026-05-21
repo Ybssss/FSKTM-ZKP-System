@@ -1,36 +1,12 @@
 const express = require("express");
+const multer = require("multer");
+const path = require("path");
+const os = require("os");
+const fs = require("fs");
+
 const router = express.Router();
 const { authenticateToken, requireRole } = require("../middleware/auth");
-const multer = require("multer");
-const os = require("os");
-
-const allowedMimeTypes = [
-  "application/pdf",
-  "application/msword",
-  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-  "application/vnd.ms-powerpoint",
-  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-  "image/png",
-  "image/jpeg",
-];
-
-const upload = multer({
-  dest: os.tmpdir(),
-  limits: {
-    fileSize: 10 * 1024 * 1024,
-  },
-  fileFilter: (req, file, cb) => {
-    if (!allowedMimeTypes.includes(file.mimetype)) {
-      return cb(
-        new Error(
-          "Only PDF, DOC, DOCX, PPT, PPTX, PNG, and JPG files are allowed.",
-        ),
-      );
-    }
-
-    cb(null, true);
-  },
-});
+const evaluationController = require("../controllers/evaluationController");
 
 const {
   createTimetable,
@@ -43,13 +19,69 @@ const {
   deleteDocument,
   addPanelNotes,
   createBulkTimetables,
-  getBatchPrintSchedule,
-  getAvailableBatches,
-  getBatchPrintSchedules,
 } = require("../controllers/timetableController");
 
 const matchingController = require("../controllers/matchingController");
 const expertiseService = require("../services/expertiseService");
+
+const uploadDir = path.join(os.tmpdir(), "fsktm-zkp-uploads");
+fs.mkdirSync(uploadDir, { recursive: true });
+
+const allowedMimeTypes = new Set([
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "text/plain",
+  "image/png",
+  "image/jpeg",
+  "image/webp",
+]);
+
+const upload = multer({
+  storage: multer.diskStorage({
+    destination: (_req, _file, cb) => cb(null, uploadDir),
+    filename: (_req, file, cb) => {
+      const safeName = String(file.originalname || "upload")
+        .replace(/[^a-zA-Z0-9._-]/g, "_")
+        .slice(-120);
+      cb(null, `${Date.now()}-${safeName}`);
+    },
+  }),
+  limits: {
+    fileSize: 25 * 1024 * 1024,
+  },
+  fileFilter: (_req, file, cb) => {
+    if (allowedMimeTypes.has(file.mimetype)) {
+      cb(null, true);
+      return;
+    }
+
+    cb(
+      new Error(
+        "Unsupported file type. Please upload PDF, Word, PowerPoint, Excel, text, PNG, JPG, or WebP files.",
+      ),
+    );
+  },
+});
+
+const handleUploadErrors = (req, res, next) => {
+  upload.single("file")(req, res, (error) => {
+    if (!error) {
+      next();
+      return;
+    }
+
+    const statusCode = error instanceof multer.MulterError ? 400 : 415;
+    res.status(statusCode).json({
+      success: false,
+      message: error.message || "File upload failed.",
+    });
+  });
+};
 
 router.use(authenticateToken);
 
@@ -62,14 +94,16 @@ router.delete("/:id", requireRole(["admin"]), deleteTimetable);
 router.post(
   "/:id/documents",
   requireRole(["student", "admin"]),
-  upload.single("file"),
+  handleUploadErrors,
   uploadDocument,
 );
+
 router.delete(
   "/:id/documents/:documentId",
   requireRole(["student", "admin"]),
   deleteDocument,
 );
+
 router.post("/:id/notes", requireRole(["panel", "admin"]), addPanelNotes);
 
 router.get("/expertise/:userId", requireRole(["admin"]), async (req, res) => {
@@ -94,16 +128,10 @@ router.post(
 
 router.put("/:id", requireRole(["admin"]), updateTimetable);
 router.get("/", requireRole(["admin"]), getTimetables);
-router.get(
-  "/batches/:batchId/print",
-  requireRole(["admin"]),
-  getBatchPrintSchedule,
-);
-
-router.get("/batches", requireRole(["admin"]), getAvailableBatches);
-
-router.get("/batches/print", requireRole(["admin"]), getBatchPrintSchedules);
-
 router.get("/:id", getTimetableById);
+
+router.post("/submit", evaluationController.submitEvaluation);
+router.get("/search", evaluationController.searchHistoricalComments);
+router.get("/", evaluationController.getAllEvaluations);
 
 module.exports = router;
