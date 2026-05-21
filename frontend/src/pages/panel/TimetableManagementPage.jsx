@@ -378,6 +378,12 @@ export default function TimetableManagementPage() {
             >
               <Layers className="w-4 h-4" /> Smart Schedule
             </button>
+            <button
+              onClick={() => navigate("/panel/sessions/batches/print")}
+              className="px-4 py-2 rounded-md font-bold text-sm bg-green-600 text-white hover:bg-green-700"
+            >
+              Export Batches
+            </button>
           </div>
         )}
       </div>

@@ -71,6 +71,10 @@ function App() {
             />
             <Route path="sessions" element={<TimetableManagementPage />} />
             <Route
+              path="sessions/batches/print"
+              element={<BatchSchedulePrintPage />}
+            />
+            <Route
               path="sessions/batch/:batchId/print"
               element={<BatchSchedulePrintPage />}
             />

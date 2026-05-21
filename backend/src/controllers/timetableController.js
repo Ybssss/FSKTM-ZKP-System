@@ -598,6 +598,171 @@ exports.getBatchPrintSchedule = async (req, res) => {
   }
 };
 
+exports.getAvailableBatches = async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Only admin can view printable batches.",
+      });
+    }
+
+    const sessions = await Timetable.find({
+      batchId: { $exists: true, $ne: "" },
+    })
+      .select(
+        "batchId batchName academicSession scheduleTitle date startTime endTime googleMeetLink venue sessionType",
+      )
+      .sort({ date: 1, startTime: 1 });
+
+    const batchMap = new Map();
+
+    sessions.forEach((session) => {
+      const key = session.batchId;
+
+      if (!batchMap.has(key)) {
+        batchMap.set(key, {
+          batchId: session.batchId,
+          batchName: session.batchName || session.batchId,
+          academicSession: session.academicSession || "",
+          scheduleTitle:
+            session.scheduleTitle ||
+            "Postgraduate Progress Presentation Schedule",
+          googleMeetLink: session.googleMeetLink || session.venue || "",
+          earliestDate: session.date,
+          earliestStartTime: session.startTime,
+          sessionTypes: new Set(),
+          totalSessions: 0,
+        });
+      }
+
+      const batch = batchMap.get(key);
+      batch.totalSessions += 1;
+      if (session.sessionType) batch.sessionTypes.add(session.sessionType);
+    });
+
+    const batches = Array.from(batchMap.values())
+      .map((batch) => ({
+        ...batch,
+        sessionTypes: Array.from(batch.sessionTypes),
+      }))
+      .sort((a, b) => {
+        const dateDiff = new Date(a.earliestDate) - new Date(b.earliestDate);
+        if (dateDiff !== 0) return dateDiff;
+        return String(a.earliestStartTime || "").localeCompare(
+          String(b.earliestStartTime || ""),
+        );
+      });
+
+    res.json({
+      success: true,
+      batches,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to load available batches.",
+      error: error.message,
+    });
+  }
+};
+
+exports.getBatchPrintSchedules = async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Only admin can export or print batch schedules.",
+      });
+    }
+
+    const batchIds = String(req.query.batchIds || "")
+      .split(",")
+      .map((id) => decodeURIComponent(id).trim())
+      .filter(Boolean);
+
+    if (batchIds.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "At least one batch ID is required.",
+      });
+    }
+
+    const schedules = [];
+
+    for (const batchId of batchIds) {
+      const sessions = await Timetable.find({ batchId })
+        .populate({
+          path: "students",
+          select:
+            "name userId matricNumber yearOfStudy program researchTitle supervisorId",
+          populate: {
+            path: "supervisorId",
+            select: "name userId email",
+          },
+        })
+        .populate("panels", "name userId email")
+        .populate("rubricId", "name sessionType")
+        .sort({ date: 1, startTime: 1 });
+
+      if (!sessions.length) continue;
+
+      const first = sessions[0];
+      const dateInfo = formatPrintDate(first.date);
+
+      const rows = sessions.map((session, index) => {
+        const student = session.students?.[0] || {};
+        const examiner1 = session.panels?.[0] || {};
+        const examiner2 = session.panels?.[1] || {};
+        const supervisor = student.supervisorId || {};
+
+        return {
+          no: index + 1,
+          time: `${formatPrintTime(session.startTime)} – ${formatPrintTime(
+            session.endTime,
+          )}`,
+          name: student.name || "",
+          matricNumber: student.matricNumber || student.userId || "",
+          yearOfStudy: student.yearOfStudy || "",
+          program: student.program || "",
+          examiner1: examiner1.name || "",
+          examiner2: examiner2.name || "",
+          supervisor: supervisor.name || "",
+          researchTitle: student.researchTitle || "",
+        };
+      });
+
+      schedules.push({
+        title:
+          first.scheduleTitle || "Postgraduate Progress Presentation Schedule",
+        academicSession:
+          first.academicSession || req.query.academicSession || "",
+        batchId: first.batchId,
+        batchName: first.batchName || first.batchId,
+        date: dateInfo.raw,
+        dateDisplay: dateInfo.display,
+        dayName: dateInfo.dayName,
+        googleMeetLink: first.googleMeetLink || first.venue || "",
+        sessionType: first.sessionType,
+        rubricName: first.rubricId?.name || "",
+        generatedAt: new Date(),
+        rows,
+      });
+    }
+
+    res.json({
+      success: true,
+      schedules,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to generate batch schedules.",
+      error: error.message,
+    });
+  }
+};
+
 exports.updateTimetable = async (req, res) => {
   try {
     const { id } = req.params;

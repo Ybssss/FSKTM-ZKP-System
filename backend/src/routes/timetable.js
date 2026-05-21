@@ -44,6 +44,8 @@ const {
   addPanelNotes,
   createBulkTimetables,
   getBatchPrintSchedule,
+  getAvailableBatches,
+  getBatchPrintSchedules,
 } = require("../controllers/timetableController");
 
 const matchingController = require("../controllers/matchingController");
@@ -97,6 +99,11 @@ router.get(
   requireRole(["admin"]),
   getBatchPrintSchedule,
 );
+
+router.get("/batches", requireRole(["admin"]), getAvailableBatches);
+
+router.get("/batches/print", requireRole(["admin"]), getBatchPrintSchedules);
+
 router.get("/:id", getTimetableById);
 
 module.exports = router;
