@@ -68,7 +68,9 @@ export default function PanelAssignmentPage() {
           });
         }
       }
-      alert(`${student.name} unassigned successfully.`);
+      alert(
+        `${student.name}'s default panel assignment was removed for future scheduling only. Existing sessions and evaluations were not changed.`,
+      );
 
       setRecommendations([]);
       setSelectedPanels([]);
@@ -83,6 +85,9 @@ export default function PanelAssignmentPage() {
   // NEW: Send both panels at the exact same time! (NO LOOPING)
   const handleConfirmAssignment = async () => {
     if (!selectedStudentForMatching) return;
+    if (selectedPanels.length !== 2) {
+      return alert("Please select exactly 2 panels for this student.");
+    }
 
     try {
       // Send the entire array of selected panels in ONE single request
@@ -92,7 +97,7 @@ export default function PanelAssignmentPage() {
       });
 
       alert(
-        `Successfully assigned ${selectedPanels.length} panel(s) to ${selectedStudentForMatching.name}!`,
+        `Default panel assignment updated for ${selectedStudentForMatching.name}. Existing scheduled sessions and evaluations were not changed.`,
       );
 
       // Reset UI states
@@ -213,6 +218,11 @@ export default function PanelAssignmentPage() {
             <Target className="w-8 h-8 text-indigo-600" /> Panel Expertise
             Matcher
           </h1>
+          <div className="mb-4 p-3 rounded-lg border border-blue-200 bg-blue-50 text-blue-800 text-sm font-semibold">
+            Panel assignments are used as default panels for future scheduling
+            only. Changing them will not update existing scheduled sessions or
+            submitted/pending evaluations.
+          </div>
           <p className="text-gray-600 mt-2">
             Analyze research titles against UTHM directory tags to find the best
             examiners.
@@ -337,7 +347,7 @@ export default function PanelAssignmentPage() {
                 Expertise Analysis
               </h2>
               <p className="text-sm text-gray-600">
-                Select a student on the left, match, and pick up to 2 panels.
+                Select a student on the left, match, and pick exactly 2 panels.
               </p>
             </div>
           </div>
@@ -403,7 +413,7 @@ export default function PanelAssignmentPage() {
             {recommendations.length > 0 ? (
               <div className="space-y-4">
                 <h3 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">
-                  Matches Found - Select up to 2
+                  Matches Found - Select exactly 2
                 </h3>
                 {recommendations.slice(0, 10).map((rec, index) => {
                   const isSelected = selectedPanels.includes(rec.panelId);

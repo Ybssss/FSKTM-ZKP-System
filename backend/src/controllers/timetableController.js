@@ -1,6 +1,8 @@
 const Timetable = require("../models/Timetable");
 const User = require("../models/User");
 const Evaluation = require("../models/Evaluation");
+const SessionBatch = require("../models/SessionBatch");
+
 const cleanText = (value = "", max = 500) =>
   String(value)
     .normalize("NFKC")
@@ -348,22 +350,67 @@ exports.createBulkTimetables = async (req, res) => {
       });
     }
 
-    const duration = toPositiveInt(slotDurationMinutes, null);
+    let selectedBatch = null;
+
+    if (batchId) {
+      selectedBatch = await SessionBatch.findOne({ batchId });
+
+      if (!selectedBatch && req.body.useExistingBatch) {
+        return res.status(404).json({
+          success: false,
+          message: "Selected batch was not found.",
+        });
+      }
+    }
+
+    const effectiveAcademicSession =
+      academicSession || selectedBatch?.academicSession || "";
+
+    const effectiveScheduleTitle =
+      scheduleTitle ||
+      selectedBatch?.scheduleTitle ||
+      "Postgraduate Progress Presentation Schedule";
+
+    const effectiveDate = date || selectedBatch?.date;
+
+    const effectiveStartTime = startTime || selectedBatch?.startTime;
+
+    const effectiveSlotDuration =
+      slotDurationMinutes || selectedBatch?.slotDurationMinutes;
+
+    const effectiveBreakMinutes =
+      breakBetweenSlotsMinutes ??
+      selectedBatch?.breakBetweenSlotsMinutes ??
+      DEFAULT_BREAK_MINUTES;
+
+    const duration = toPositiveInt(effectiveSlotDuration, null);
+
     const breakMinutes = toNonNegativeInt(
-      breakBetweenSlotsMinutes,
+      effectiveBreakMinutes,
       DEFAULT_BREAK_MINUTES,
     );
 
     const baseStartTime = cleanText(
-      startTime || sessions[0]?.startTime || sessions[0]?.time || "",
+      effectiveStartTime || sessions[0]?.startTime || sessions[0]?.time || "",
       20,
     );
+
     const baseStartMinutes = parseTimeToMinutes(baseStartTime);
 
-    const batchMeetingLink = cleanText(googleMeetLink || venue || "", 500);
-    const cleanBatchName = cleanText(batchName || "", 100);
+    const batchMeetingLink = cleanText(
+      googleMeetLink || venue || selectedBatch?.googleMeetLink || "",
+      500,
+    );
+
+    const cleanBatchName = cleanText(
+      batchName || selectedBatch?.batchName || "",
+      100,
+    );
+
     const cleanBatchId = cleanText(
-      batchId || `${cleanBatchName}-${batchMeetingLink}`,
+      batchId ||
+        selectedBatch?.batchId ||
+        `${cleanBatchName}-${batchMeetingLink}`,
       150,
     );
 
@@ -374,7 +421,7 @@ exports.createBulkTimetables = async (req, res) => {
         throw new Error(`Invalid session type at row ${index + 1}.`);
       }
 
-      const sessionDate = normalizeDateOnly(s.date || date);
+      const sessionDate = normalizeDateOnly(s.date || effectiveDate);
 
       let slotStartTime = cleanText(s.startTime || s.time || "", 20);
       let slotEndTime = cleanText(s.endTime || "", 20);
@@ -422,13 +469,11 @@ exports.createBulkTimetables = async (req, res) => {
         status: "scheduled",
         createdBy: req.user.id,
         academicSession: cleanText(
-          s.academicSession || academicSession || "",
+          s.academicSession || effectiveAcademicSession || "",
           100,
         ),
         scheduleTitle: cleanText(
-          s.scheduleTitle ||
-            scheduleTitle ||
-            "Postgraduate Progress Presentation Schedule",
+          s.scheduleTitle || effectiveScheduleTitle,
           150,
         ),
       };

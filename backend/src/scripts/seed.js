@@ -2,7 +2,7 @@
 const mongoose = require("mongoose");
 const dotenv = require("dotenv");
 const path = require("path");
-
+const SessionBatch = require("../models/SessionBatch");
 const User = require("../models/User");
 const Timetable = require("../models/Timetable");
 const Evaluation = require("../models/Evaluation");
@@ -559,6 +559,7 @@ const seedDatabase = async () => {
     await Timetable.deleteMany({});
     await Rubric.deleteMany({});
     await User.deleteMany({});
+    await SessionBatch.deleteMany({});
 
     // 1. Create Rubrics
     console.log("📚 Seeding UTHM Rubric Templates with FULL Criteria...");
@@ -579,7 +580,7 @@ const seedDatabase = async () => {
     const adminUsers = [
       {
         userId: "admin_samihah",
-        name: "Dr. CHE SAMIHAH BINTI CHE DALIM",
+        name: "CHE SAMIHAH BINTI CHE DALIM",
         email: "samihah@uthm.edu.my",
         role: "admin",
         registrationCode: "temp",
@@ -588,7 +589,7 @@ const seedDatabase = async () => {
       },
       {
         userId: "admin_pendaftar",
-        name: "En. Pendaftar FSKTM",
+        name: "PENDAFTAR FSKTM",
         email: "pendaftar.fsktm@uthm.edu.my",
         role: "admin",
         registrationCode: "temp",
@@ -602,8 +603,8 @@ const seedDatabase = async () => {
     const demoPanels = [
       {
         userId: "panel_zkp",
-        name: "Dr. Farhan ZKP Security",
-        email: "panel.zkp@uthm.edu.my",
+        name: "NUR ZIADAH BINTI HARUN",
+        email: "panel.zkp@example.com",
         role: "panel",
         profession: "Senior Lecturer",
         registrationCode: "PANEL001",
@@ -612,12 +613,14 @@ const seedDatabase = async () => {
           "Cryptography",
           "Passwordless Authentication",
           "Information Security",
+          "Authentication",
+          "Blockchain",
         ],
       },
       {
         userId: "panel_ai",
-        name: "Dr. Aisyah AI Learning",
-        email: "panel.ai@uthm.edu.my",
+        name: "SHAHREEN BINTI KASIM",
+        email: "panel.ai@example.com",
         role: "panel",
         profession: "Senior Lecturer",
         registrationCode: "PANEL002",
@@ -630,8 +633,8 @@ const seedDatabase = async () => {
       },
       {
         userId: "panel_blockchain",
-        name: "Dr. Kumar Blockchain Systems",
-        email: "panel.blockchain@uthm.edu.my",
+        name: "SAPI'EE BIN JAMEL",
+        email: "panel.blockchain@example.com",
         role: "panel",
         profession: "Senior Lecturer",
         registrationCode: "PANEL003",
@@ -644,8 +647,8 @@ const seedDatabase = async () => {
       },
       {
         userId: "panel_web",
-        name: "Ts. Nurul Web Engineering",
-        email: "panel.web@uthm.edu.my",
+        name: "NUR LIYANA BINTI SULAIMAN",
+        email: "panel.web@example.com",
         role: "panel",
         profession: "Senior Lecturer",
         registrationCode: "PANEL004",
@@ -659,8 +662,8 @@ const seedDatabase = async () => {
       },
       {
         userId: "panel_network",
-        name: "Ir. Hakim Network Computing",
-        email: "panel.network@uthm.edu.my",
+        name: "ZUBAILE BIN ABDULLAH",
+        email: "panel.network@example.com",
         role: "panel",
         profession: "Senior Lecturer",
         registrationCode: "PANEL005",
@@ -688,9 +691,9 @@ const seedDatabase = async () => {
         role: "student",
         registrationCode: "111111",
         program: "Master of Information Technology",
-        researchTitle: "Optimization of Zero-Knowledge Proofs",
+        researchTitle: "Optimization of Zero-Knowledge Proof Authentication",
         researchAbstract:
-          "This research focuses on optimizing zero-knowledge proof authentication for passwordless login in a web-based evaluation system. The study evaluates privacy, authentication reliability, and usability for academic assessment workflows.",
+          "This research focuses on optimizing zero-knowledge proof authentication for passwordless login in a web-based evaluation system.",
         supervisorId: createdPanels[0]._id,
       },
       {
@@ -701,10 +704,9 @@ const seedDatabase = async () => {
         role: "student",
         registrationCode: "222222",
         program: "PhD in Computer Science",
-        researchTitle: "Advanced Deep Learning Models",
+        researchTitle: "Advanced Deep Learning Models for Academic Prediction",
         researchAbstract:
-          "This research explores advanced deep learning models for intelligent prediction and classification tasks. The study compares model accuracy, interpretability, and deployment suitability in real-world data environments.",
-
+          "This research explores advanced deep learning models for intelligent prediction and classification tasks in academic data environments.",
         supervisorId: createdPanels[1]._id,
       },
       {
@@ -715,10 +717,9 @@ const seedDatabase = async () => {
         role: "student",
         registrationCode: "333333",
         program: "Master of Software Engineering",
-        researchTitle: "Blockchain Healthcare Systems",
+        researchTitle: "Blockchain-Based Healthcare Information System",
         researchAbstract:
-          "This study proposes a blockchain-based healthcare information system to improve data integrity, auditability, and secure sharing between healthcare stakeholders.",
-
+          "This study proposes a blockchain-based healthcare information system to improve data integrity, auditability, and secure sharing.",
         supervisorId: createdPanels[2]._id,
       },
       {
@@ -731,8 +732,88 @@ const seedDatabase = async () => {
         program: "Master of Information Security",
         researchTitle: "Secure Online Evaluation Workflow Using ZKP",
         researchAbstract:
-          "This research designs a secure online evaluation workflow using zero-knowledge proof authentication. The study focuses on access control, role-based permission, historical evaluation protection, and anti-plagiarism support.",
+          "This research designs a secure online evaluation workflow using zero-knowledge proof authentication and role-based access control.",
+        supervisorId: createdPanels[3]._id,
+      },
+      {
+        userId: "AW240005",
+        matricNumber: "AW240005",
+        name: "Nur Aina Zulkifli",
+        email: "aina@student.uthm.edu.my",
+        role: "student",
+        registrationCode: "555555",
+        program: "Master of Information Security",
+        researchTitle: "Privacy-Preserving Authentication for Academic Systems",
+        researchAbstract:
+          "This research investigates privacy-preserving authentication methods for academic web systems using cryptographic verification.",
+        supervisorId: createdPanels[0]._id,
+      },
+      {
+        userId: "AW240006",
+        matricNumber: "AW240006",
+        name: "Ahmad Danish Hakimi",
+        email: "danish@student.uthm.edu.my",
+        role: "student",
+        registrationCode: "666666",
+        program: "Master of Computer Science",
+        researchTitle:
+          "Natural Language Processing for Academic Feedback Analysis",
+        researchAbstract:
+          "This research applies natural language processing to analyze evaluation comments and identify feedback patterns.",
         supervisorId: createdPanels[1]._id,
+      },
+      {
+        userId: "AW240007",
+        matricNumber: "AW240007",
+        name: "Priya Nair",
+        email: "priya@student.uthm.edu.my",
+        role: "student",
+        registrationCode: "777777",
+        program: "PhD in Computer Science",
+        researchTitle: "Smart Contract Audit Trail for Research Evaluation",
+        researchAbstract:
+          "This study explores smart contract mechanisms for transparent and verifiable audit trails in academic evaluation workflows.",
+        supervisorId: createdPanels[2]._id,
+      },
+      {
+        userId: "AW240008",
+        matricNumber: "AW240008",
+        name: "Lim Jia Wei",
+        email: "jiawei@student.uthm.edu.my",
+        role: "student",
+        registrationCode: "888888",
+        program: "Master of Software Engineering",
+        researchTitle: "Usability Evaluation of Web-Based Assessment Platforms",
+        researchAbstract:
+          "This research evaluates usability factors in web-based academic assessment platforms through structured user testing.",
+        supervisorId: createdPanels[3]._id,
+      },
+      {
+        userId: "AW240009",
+        matricNumber: "AW240009",
+        name: "Mohd Hafiz Rahman",
+        email: "hafiz@student.uthm.edu.my",
+        role: "student",
+        registrationCode: "999999",
+        program: "Master of Computer Networks",
+        researchTitle: "IoT Network Monitoring for Smart Campus Environments",
+        researchAbstract:
+          "This research develops an IoT network monitoring approach for smart campus environments with emphasis on reliability and scalability.",
+        supervisorId: createdPanels[4]._id,
+      },
+      {
+        userId: "AW240010",
+        matricNumber: "AW240010",
+        name: "Amira Sofea",
+        email: "amira@student.uthm.edu.my",
+        role: "student",
+        registrationCode: "101010",
+        program: "Master of Cloud Computing",
+        researchTitle:
+          "Cloud-Based Monitoring Framework for Distributed Applications",
+        researchAbstract:
+          "This research proposes a cloud-based monitoring framework for distributed applications using scalable service metrics.",
+        supervisorId: createdPanels[4]._id,
       },
     ];
 
@@ -741,107 +822,72 @@ const seedDatabase = async () => {
     const getUserId = (email) => allUsers.find((u) => u.email === email)._id;
 
     console.log("🔗 Saving Panel Assignments to Database...");
-    await User.findByIdAndUpdate(getUserId("ali@student.uthm.edu.my"), {
-      assignedPanels: [
-        { panelId: getUserId("samihah@uthm.edu.my") },
-        { panelId: createdPanels[1]._id },
-      ],
-    });
-    await User.findByIdAndUpdate(getUserId("siti@student.uthm.edu.my"), {
-      assignedPanels: [
-        { panelId: getUserId("samihah@uthm.edu.my") },
-        { panelId: createdPanels[2]._id },
-      ],
-    });
-    await User.findByIdAndUpdate(getUserId("chong@student.uthm.edu.my"), {
-      assignedPanels: [
-        { panelId: getUserId("samihah@uthm.edu.my") },
-        { panelId: createdPanels[3]._id },
-      ],
-    });
 
-    await User.findByIdAndUpdate(getUserId("meiling@student.uthm.edu.my"), {
-      assignedPanels: [
-        { panelId: createdPanels[1]._id },
-        { panelId: createdPanels[2]._id },
-      ],
-    });
+    const panelAssignmentMap = [
+      {
+        studentEmail: "ali@student.uthm.edu.my",
+        panelIds: [createdPanels[0]._id, createdPanels[1]._id],
+      },
+      {
+        studentEmail: "siti@student.uthm.edu.my",
+        panelIds: [createdPanels[1]._id, createdPanels[2]._id],
+      },
+      {
+        studentEmail: "chong@student.uthm.edu.my",
+        panelIds: [createdPanels[2]._id, createdPanels[3]._id],
+      },
+      {
+        studentEmail: "meiling@student.uthm.edu.my",
+        panelIds: [createdPanels[3]._id, createdPanels[0]._id],
+      },
+      {
+        studentEmail: "aina@student.uthm.edu.my",
+        panelIds: [createdPanels[0]._id, createdPanels[4]._id],
+      },
+      {
+        studentEmail: "danish@student.uthm.edu.my",
+        panelIds: [createdPanels[1]._id, createdPanels[3]._id],
+      },
+      {
+        studentEmail: "priya@student.uthm.edu.my",
+        panelIds: [createdPanels[2]._id, createdPanels[4]._id],
+      },
+      {
+        studentEmail: "jiawei@student.uthm.edu.my",
+        panelIds: [createdPanels[3]._id, createdPanels[1]._id],
+      },
+      {
+        studentEmail: "hafiz@student.uthm.edu.my",
+        panelIds: [createdPanels[4]._id, createdPanels[0]._id],
+      },
+      {
+        studentEmail: "amira@student.uthm.edu.my",
+        panelIds: [createdPanels[4]._id, createdPanels[2]._id],
+      },
+    ];
 
-    const syncPanelStudentAssignments = async (studentId, panelIds) => {
-      for (const panelId of panelIds) {
+    for (const assignment of panelAssignmentMap) {
+      const studentId = getUserId(assignment.studentEmail);
+
+      await User.findByIdAndUpdate(studentId, {
+        $set: {
+          assignedPanels: assignment.panelIds.map((panelId) => ({
+            panelId,
+            startDate: new Date(),
+            endDate: null,
+          })),
+        },
+      });
+
+      for (const panelId of assignment.panelIds) {
         await User.findByIdAndUpdate(panelId, {
-          $addToSet: { assignedStudents: studentId },
+          $addToSet: {
+            assignedStudents: studentId,
+          },
         });
       }
-    };
+    }
 
-    await User.findByIdAndUpdate(getUserId("siti@student.uthm.edu.my"), {
-      $addToSet: {
-        assignedPanels: {
-          $each: [
-            { panelId: createdPanels[0]._id },
-            { panelId: createdPanels[3]._id },
-          ],
-        },
-      },
-    });
-
-    await User.findByIdAndUpdate(getUserId("meiling@student.uthm.edu.my"), {
-      $addToSet: {
-        assignedPanels: {
-          $each: [
-            { panelId: createdPanels[0]._id },
-            { panelId: createdPanels[4]._id },
-          ],
-        },
-      },
-    });
-
-    await User.findByIdAndUpdate(getUserId("ali@student.uthm.edu.my"), {
-      $addToSet: {
-        assignedPanels: {
-          $each: [
-            { panelId: createdPanels[4]._id },
-            { panelId: createdPanels[3]._id },
-          ],
-        },
-      },
-    });
-
-    await syncPanelStudentAssignments(getUserId("siti@student.uthm.edu.my"), [
-      createdPanels[0]._id,
-      createdPanels[3]._id,
-    ]);
-
-    await syncPanelStudentAssignments(
-      getUserId("meiling@student.uthm.edu.my"),
-      [createdPanels[0]._id, createdPanels[4]._id],
-    );
-
-    await syncPanelStudentAssignments(getUserId("ali@student.uthm.edu.my"), [
-      createdPanels[4]._id,
-      createdPanels[3]._id,
-    ]);
-
-    await syncPanelStudentAssignments(getUserId("ali@student.uthm.edu.my"), [
-      getUserId("samihah@uthm.edu.my"),
-      createdPanels[1]._id,
-    ]);
-
-    await syncPanelStudentAssignments(getUserId("siti@student.uthm.edu.my"), [
-      getUserId("samihah@uthm.edu.my"),
-      createdPanels[2]._id,
-    ]);
-
-    await syncPanelStudentAssignments(getUserId("chong@student.uthm.edu.my"), [
-      getUserId("samihah@uthm.edu.my"),
-      createdPanels[3]._id,
-    ]);
-
-    await syncPanelStudentAssignments(
-      getUserId("meiling@student.uthm.edu.my"),
-      [createdPanels[1]._id, createdPanels[2]._id],
-    );
     // 5. Create Sessions (Using Timetable Model)
     console.log("📅 Seeding Evaluation Sessions...");
 
@@ -872,6 +918,152 @@ const seedDatabase = async () => {
 
     const inOneMonth = new Date();
     inOneMonth.setDate(inOneMonth.getDate() + 30);
+
+    const mainBatchDate = inThreeDays;
+    const mainBatchId = "BATCH-PRS-2026-MAIN";
+    const mainBatchName = "FSKTM PRS Main Batch";
+    const mainBatchMeetLink = "https://meet.google.com/fsktm-prs-main";
+
+    const completedHistoryBatchDate = lastWeek;
+    const completedHistoryBatchId = "BATCH-HIST-2025-A";
+    const completedHistoryBatchName = "FSKTM Completed Progress History";
+    const completedHistoryMeetLink =
+      "https://meet.google.com/fsktm-progress-history";
+
+    await SessionBatch.create([
+      {
+        batchName: "FSKTM PRS Demo Batch A",
+        batchId: "BATCH-PRS-2026-A",
+        academicSession: "2025/2026, Semester 1",
+        scheduleTitle: "Postgraduate Progress Presentation Schedule",
+        sessionType: "PROPOSAL_DEFENSE",
+        rubricId: proposalRubric._id,
+        date: tomorrow,
+        startTime: "10:00",
+        slotDurationMinutes: 60,
+        breakBetweenSlotsMinutes: 5,
+        googleMeetLink: "https://meet.google.com/fsktm-prs-demo-a",
+        status: "active",
+        createdBy: getUserId("samihah@uthm.edu.my"),
+      },
+      {
+        batchName: "FSKTM PRS Demo Batch B",
+        batchId: "BATCH-PRS-2026-B",
+        academicSession: "2025/2026, Semester 1",
+        scheduleTitle: "Postgraduate Progress Presentation Schedule",
+        sessionType: "PROPOSAL_DEFENSE",
+        rubricId: proposalRubric._id,
+        date: lastMonth,
+        startTime: "09:30",
+        slotDurationMinutes: 60,
+        breakBetweenSlotsMinutes: 5,
+        googleMeetLink: "https://meet.google.com/fsktm-prs-demo-b",
+        status: "active",
+        createdBy: getUserId("samihah@uthm.edu.my"),
+      },
+      {
+        batchName: "FSKTM PRS Demo Batch C",
+        batchId: "BATCH-PRS-2026-C",
+        academicSession: "2025/2026, Semester 1",
+        scheduleTitle: "Postgraduate Progress Presentation Schedule",
+        sessionType: "PRE_VIVA",
+        rubricId: preVivaRubric._id,
+        date: inTwoWeeks,
+        startTime: "13:00",
+        slotDurationMinutes: 60,
+        breakBetweenSlotsMinutes: 5,
+        googleMeetLink: "https://meet.google.com/fsktm-prs-demo-c",
+        status: "active",
+        createdBy: getUserId("samihah@uthm.edu.my"),
+      },
+      {
+        batchName: mainBatchName,
+        batchId: mainBatchId,
+        academicSession: "2025/2026, Semester 1",
+        scheduleTitle: "Postgraduate Progress Presentation Schedule",
+        sessionType: "PROPOSAL_DEFENSE",
+        rubricId: proposalRubric._id,
+        date: mainBatchDate,
+        startTime: "09:00",
+        slotDurationMinutes: 60,
+        breakBetweenSlotsMinutes: 5,
+        googleMeetLink: mainBatchMeetLink,
+        status: "active",
+        createdBy: getUserId("samihah@uthm.edu.my"),
+      },
+      {
+        batchName: completedHistoryBatchName,
+        batchId: completedHistoryBatchId,
+        academicSession: "2024/2025, Semester 2",
+        scheduleTitle: "Postgraduate Progress Presentation Schedule",
+        sessionType: "PROGRESS_ASSESSMENT",
+        rubricId: progressRubric._id,
+        date: completedHistoryBatchDate,
+        startTime: "09:00",
+        slotDurationMinutes: 45,
+        breakBetweenSlotsMinutes: 5,
+        googleMeetLink: completedHistoryMeetLink,
+        status: "completed",
+        createdBy: getUserId("samihah@uthm.edu.my"),
+      },
+    ]);
+
+    const addMinutesToHHMM = (time, minutesToAdd) => {
+      const [hours, minutes] = time.split(":").map(Number);
+      const date = new Date();
+      date.setHours(hours, minutes + minutesToAdd, 0, 0);
+      return date.toTimeString().slice(0, 5);
+    };
+
+    const batchSessionPlan = [
+      {
+        studentEmail: "ali@student.uthm.edu.my",
+        panels: [createdPanels[0]._id, createdPanels[1]._id],
+      },
+      {
+        studentEmail: "siti@student.uthm.edu.my",
+        panels: [createdPanels[1]._id, createdPanels[2]._id],
+      },
+      {
+        studentEmail: "chong@student.uthm.edu.my",
+        panels: [createdPanels[2]._id, createdPanels[3]._id],
+      },
+      {
+        studentEmail: "meiling@student.uthm.edu.my",
+        panels: [createdPanels[3]._id, createdPanels[0]._id],
+      },
+      {
+        studentEmail: "aina@student.uthm.edu.my",
+        panels: [createdPanels[0]._id, createdPanels[4]._id],
+      },
+      {
+        studentEmail: "danish@student.uthm.edu.my",
+        panels: [createdPanels[1]._id, createdPanels[3]._id],
+      },
+      {
+        studentEmail: "priya@student.uthm.edu.my",
+        panels: [createdPanels[2]._id, createdPanels[4]._id],
+      },
+      {
+        studentEmail: "jiawei@student.uthm.edu.my",
+        panels: [createdPanels[3]._id, createdPanels[1]._id],
+      },
+      {
+        studentEmail: "hafiz@student.uthm.edu.my",
+        panels: [createdPanels[4]._id, createdPanels[0]._id],
+      },
+      {
+        studentEmail: "amira@student.uthm.edu.my",
+        panels: [createdPanels[4]._id, createdPanels[2]._id],
+      },
+    ];
+
+    const completedHistoryPlan = panelAssignmentMap.map(
+      ({ studentEmail, panelIds }) => ({
+        studentEmail,
+        panels: panelIds,
+      }),
+    );
 
     const sessionsData = [
       // Case 1: Upcoming proposal defense, evaluations pending
@@ -1053,6 +1245,82 @@ const seedDatabase = async () => {
       },
     );
 
+    sessionsData.push(
+      ...batchSessionPlan.map((slot, index) => {
+        const student = allUsers.find((u) => u.email === slot.studentEmail);
+        const startTime = addMinutesToHHMM("09:00", index * 65);
+        const endTime = addMinutesToHHMM(startTime, 60);
+
+        return {
+          students: [getUserId(slot.studentEmail)],
+          panels: slot.panels,
+          title: `Batch Presentation - ${student.name}`,
+          sessionType: "PROPOSAL_DEFENSE",
+          rubricId: proposalRubric._id,
+          date: mainBatchDate,
+          startTime,
+          endTime,
+          venue: mainBatchMeetLink,
+          googleMeetLink: mainBatchMeetLink,
+          status: "scheduled",
+          batchId: mainBatchId,
+          batchName: mainBatchName,
+          academicSession: "2025/2026, Semester 1",
+          scheduleTitle: "Postgraduate Progress Presentation Schedule",
+          slotDurationMinutes: 60,
+          breakBetweenSlotsMinutes: 5,
+        };
+      }),
+    );
+
+    sessionsData.push(
+      ...completedHistoryPlan.map((slot, index) => {
+        const student = allUsers.find((u) => u.email === slot.studentEmail);
+        const startTime = addMinutesToHHMM("09:00", index * 50);
+        const endTime = addMinutesToHHMM(startTime, 45);
+
+        return {
+          students: [getUserId(slot.studentEmail)],
+          panels: slot.panels,
+          title: `Completed Progress Review - ${student.name}`,
+          sessionType: "PROGRESS_ASSESSMENT",
+          rubricId: progressRubric._id,
+          date: completedHistoryBatchDate,
+          startTime,
+          endTime,
+          venue: completedHistoryMeetLink,
+          googleMeetLink: completedHistoryMeetLink,
+          status: "completed",
+          batchId: completedHistoryBatchId,
+          batchName: completedHistoryBatchName,
+          academicSession: "2024/2025, Semester 2",
+          scheduleTitle: "Postgraduate Progress Presentation Schedule",
+          slotDurationMinutes: 45,
+          breakBetweenSlotsMinutes: 5,
+          studentDocuments: [
+            {
+              title: `${student.name} Progress Report`,
+              url: "https://drive.google.com/file/d/demo-progress-report",
+              source: "external-link",
+              type: "report",
+              uploadedBy: getUserId(slot.studentEmail),
+              description:
+                "Seeded progress report uploaded by the student for a completed evaluation.",
+            },
+            {
+              title: `${student.name} Presentation Slides`,
+              url: "https://drive.google.com/file/d/demo-progress-slides",
+              source: "external-link",
+              type: "slides",
+              uploadedBy: getUserId(slot.studentEmail),
+              description:
+                "Seeded presentation slides uploaded by the student for completed panel review.",
+            },
+          ],
+        };
+      }),
+    );
+
     const enrichedSessionsData = sessionsData.map((session, index) => {
       const batchInfo =
         index < 4
@@ -1077,8 +1345,13 @@ const seedDatabase = async () => {
         ...session,
         batchId: session.batchId || batchInfo.batchId,
         batchName: session.batchName || batchInfo.batchName,
+        academicSession: session.academicSession || "2025/2026, Semester 1",
+        scheduleTitle:
+          session.scheduleTitle ||
+          "Postgraduate Progress Presentation Schedule",
         googleMeetLink: session.googleMeetLink || batchInfo.googleMeetLink,
-        venue: batchInfo.googleMeetLink,
+        venue:
+          session.venue || session.googleMeetLink || batchInfo.googleMeetLink,
         slotDurationMinutes: session.slotDurationMinutes || 60,
         breakBetweenSlotsMinutes:
           session.breakBetweenSlotsMinutes === undefined
@@ -1546,6 +1819,48 @@ const seedDatabase = async () => {
       },
     ];
 
+    for (const slot of batchSessionPlan) {
+      const student = allUsers.find((u) => u.email === slot.studentEmail);
+
+      for (const panelId of slot.panels) {
+        evaluationsData.push({
+          sessionId: getSessionIdByTitle(
+            `Batch Presentation - ${student.name}`,
+          ),
+          rubricId: proposalRubric._id,
+          studentId: getUserId(slot.studentEmail),
+          evaluatorId: panelId,
+          semester: "Semester 1, 2025/2026",
+          sessionType: "PROPOSAL_DEFENSE",
+          status: "PENDING",
+        });
+      }
+    }
+
+    for (const slot of completedHistoryPlan) {
+      const student = allUsers.find((u) => u.email === slot.studentEmail);
+
+      for (const panelId of slot.panels) {
+        evaluationsData.push({
+          sessionId: getSessionIdByTitle(
+            `Completed Progress Review - ${student.name}`,
+          ),
+          rubricId: progressRubric._id,
+          studentId: getUserId(slot.studentEmail),
+          evaluatorId: panelId,
+          semester: "Semester 2, 2024/2025",
+          sessionType: "PROGRESS_ASSESSMENT",
+          status: "COMPLETED",
+          summaryOfProgress:
+            "The student has completed the planned milestone and demonstrated acceptable research progress.",
+          commentsForImprovement:
+            "The student should strengthen validation evidence, improve documentation, and prepare clearer analysis for the next stage.",
+          overallSuggestions:
+            "Proceed to the next phase with continuous supervision and scheduled follow-up review.",
+        });
+      }
+    }
+
     const createdEvaluations = await Evaluation.create(evaluationsData);
     console.log("🧾 Seeding attendance records...");
 
@@ -1587,6 +1902,22 @@ const seedDatabase = async () => {
         checkInTime: lastWeek,
       },
     ]);
+
+    await Attendance.create(
+      completedHistoryPlan.map((slot) => {
+        const student = allUsers.find((u) => u.email === slot.studentEmail);
+
+        return {
+          timetableId: getSessionIdByTitle(
+            `Completed Progress Review - ${student.name}`,
+          ),
+          studentId: getUserId(slot.studentEmail),
+          status: "present",
+          checkInTime: completedHistoryBatchDate,
+          notes: "Seeded attendance for completed progress history.",
+        };
+      }),
+    );
 
     console.log("🔐 Seeding permission request demo cases...");
 
@@ -1631,21 +1962,48 @@ const seedDatabase = async () => {
     }
     console.log("\n🧪 DEMO ACCOUNTS");
     console.log("Admin: admin_samihah / registration code: temp");
-    console.log(
-      "Student Ali: AW240001 / code: 111111 / completed progress + pending proposal + pending Pre-Viva",
-    );
-    console.log(
-      "Student Siti: AW240002 / code: 222222 / completed proposal + completed Pre-Viva + pending progress",
-    );
-    console.log(
-      "Student Chong: AW240003 / code: 333333 / completed progress + pending Pre-Viva",
-    );
-    console.log(
-      "Student Mei Ling: AW240004 / code: 444444 / completed progress + pending publication proposal",
-    );
+    console.log("Student Ali: AW240001 / code: 111111");
+    console.log("Student Siti: AW240002 / code: 222222");
+    console.log("Student Chong: AW240003 / code: 333333");
+    console.log("Student Mei Ling: AW240004 / code: 444444");
+    console.log("Student Aina: AW240005 / code: 555555");
+    console.log("Student Danish: AW240006 / code: 666666");
+    console.log("Student Priya: AW240007 / code: 777777");
+    console.log("Student Jia Wei: AW240008 / code: 888888");
+    console.log("Student Hafiz: AW240009 / code: 999999");
+    console.log("Student Amira: AW240010 / code: 101010");
     createdPanels.forEach((panel, index) => {
       console.log(
         `Panel ${index + 1}: ${panel.userId} / ${panel.email} / code: ${panel.registrationCode}`,
+      );
+    });
+    const totalStudents = await User.countDocuments({ role: "student" });
+    const totalPanels = await User.countDocuments({ role: "panel" });
+    const totalBatches = await SessionBatch.countDocuments({});
+    const totalTimetables = await Timetable.countDocuments({});
+    const totalEvaluations = await Evaluation.countDocuments({});
+    const studentsWithCompletedEvaluations = await Evaluation.distinct(
+      "studentId",
+      { status: "COMPLETED" },
+    );
+
+    const seededPanels = await User.find({ role: "panel" })
+      .select("name assignedStudents")
+      .lean();
+
+    console.log("\n📊 SEED VALIDATION SUMMARY");
+    console.log(`Panels: ${totalPanels}`);
+    console.log(`Students: ${totalStudents}`);
+    console.log(`Session batches: ${totalBatches}`);
+    console.log(`Timetables: ${totalTimetables}`);
+    console.log(`Evaluations: ${totalEvaluations}`);
+    console.log(
+      `Students with completed evaluations: ${studentsWithCompletedEvaluations.length}/${totalStudents}`,
+    );
+
+    seededPanels.forEach((panel) => {
+      console.log(
+        `${panel.name}: ${panel.assignedStudents?.length || 0} assigned student(s)`,
       );
     });
     console.log("✅ DATABASE SEEDING COMPLETED SUCCESSFULLY!");

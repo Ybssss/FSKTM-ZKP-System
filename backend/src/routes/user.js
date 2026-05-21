@@ -316,7 +316,8 @@ router.post("/assign-panel", async (req, res) => {
 
     res.json({
       success: true,
-      message: "Panels correctly assigned (Max 2 enforced).",
+      message:
+        "Default panels updated for future scheduling only. Existing scheduled sessions and evaluations were not changed.",
     });
   } catch (error) {
     res.status(500).json({
@@ -329,32 +330,47 @@ router.post("/assign-panel", async (req, res) => {
 
 router.post("/unassign-panel", async (req, res) => {
   try {
-    if (req.user.role !== "admin")
-      return res
-        .status(403)
-        .json({ success: false, message: "Only admins can unassign panels" });
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Only admins can unassign panels",
+      });
+    }
+
     const { studentId, panelId } = req.body;
 
-    const student = await User.findById(studentId);
-    if (student) {
-      student.assignedPanels =
-        student.assignedPanels?.filter(
-          (ap) => ap.panelId.toString() !== panelId,
-        ) || [];
-      await student.save();
+    if (!studentId || !panelId) {
+      return res.status(400).json({
+        success: false,
+        message: "Student ID and panel ID are required.",
+      });
     }
-    const panel = await User.findById(panelId);
-    if (panel) {
-      panel.assignedStudents =
-        panel.assignedStudents?.filter((sid) => sid.toString() !== studentId) ||
-        [];
-      await panel.save();
-    }
-    res.json({ success: true, message: "Panel unassigned successfully" });
+
+    await User.findByIdAndUpdate(studentId, {
+      $pull: {
+        assignedPanels: {
+          panelId,
+        },
+      },
+    });
+
+    await User.findByIdAndUpdate(panelId, {
+      $pull: {
+        assignedStudents: studentId,
+      },
+    });
+
+    res.json({
+      success: true,
+      message:
+        "Default panel removed for future scheduling only. Existing scheduled sessions and evaluations were not changed.",
+    });
   } catch (error) {
-    res
-      .status(500)
-      .json({ success: false, message: "Failed to unassign panel" });
+    res.status(500).json({
+      success: false,
+      message: "Failed to unassign panel",
+      error: error.message,
+    });
   }
 });
 

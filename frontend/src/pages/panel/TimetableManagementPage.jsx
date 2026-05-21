@@ -15,7 +15,7 @@ import {
   Link as LinkIcon,
   AlertTriangle,
 } from "lucide-react";
-import api from "../../services/api";
+import api, { sessionBatchAPI } from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
 import { useNavigate } from "react-router-dom";
 
@@ -38,6 +38,17 @@ export default function TimetableManagementPage() {
     const saved = localStorage.getItem("admin_slot_duration");
     return saved ? parseInt(saved, 10) : 60;
   });
+  const [batches, setBatches] = useState([]);
+  const [batchMode, setBatchMode] = useState("existing"); // existing | new
+  const [selectedBatchId, setSelectedBatchId] = useState("");
+
+  const isExistingBatchMode = batchMode === "existing";
+
+  const batchFieldClass = `w-full p-2 border rounded-lg font-semibold ${
+    isExistingBatchMode
+      ? "bg-gray-100 text-gray-500 cursor-not-allowed"
+      : "bg-gray-50"
+  }`;
 
   const [bulkConfig, setBulkConfig] = useState({
     rubricId: "",
@@ -111,6 +122,9 @@ export default function TimetableManagementPage() {
             ...prev,
             rubricId: fetchedRubrics[0]._id,
           }));
+
+        const batchRes = await sessionBatchAPI.list();
+        setBatches(batchRes.batches || []);
       } catch (error) {
         console.error("Error loading assignment data", error);
       }
@@ -142,6 +156,13 @@ export default function TimetableManagementPage() {
     const date = new Date();
     date.setHours(h, m + Number(mins || 0), 0, 0);
     return date.toTimeString().slice(0, 5);
+  };
+
+  const getExistingBatchSessionCount = () => {
+    if (batchMode !== "existing" || !selectedBatchId) return 0;
+
+    return sessions.filter((session) => session.batchId === selectedBatchId)
+      .length;
   };
 
   const getAutoSlot = (index) => {
@@ -221,6 +242,9 @@ export default function TimetableManagementPage() {
   };
 
   const toggleStudentForBulk = (student) => {
+    if (batchMode === "existing" && !selectedBatchId) {
+      return alert("Please select an existing batch first.");
+    }
     const studentId = student._id;
     if (!student.assignedPanels || student.assignedPanels.length < 2) {
       return alert(
@@ -243,7 +267,7 @@ export default function TimetableManagementPage() {
           student.assignedPanels[1]?.panelId?._id ||
           student.assignedPanels[1]?.panelId ||
           student.assignedPanels[1];
-        const nextIndex = prev.length;
+        const nextIndex = getExistingBatchSessionCount() + prev.length;
         const autoSlot = getAutoSlot(nextIndex);
 
         setSessionDrafts({
@@ -261,14 +285,25 @@ export default function TimetableManagementPage() {
   };
 
   const handleBulkSubmit = async () => {
+    if (batchMode === "existing" && !selectedBatchId) {
+      return alert("Please select an existing batch first.");
+    }
+
     if (!bulkConfig.batchName.trim()) {
       return alert("Please enter a Batch / Session Name, e.g., PIXEL.");
     }
-    if (!bulkConfig.venue) return alert("Please set an Online Meeting Link.");
-    if (!bulkConfig.rubricId)
+
+    if (!bulkConfig.venue) {
+      return alert("Please set an Online Meeting Link.");
+    }
+
+    if (!bulkConfig.rubricId) {
       return alert("Please select an Evaluation Rubric.");
-    if (selectedStudentIds.length === 0)
+    }
+
+    if (selectedStudentIds.length === 0) {
       return alert("Select at least one student.");
+    }
 
     try {
       setIsSaving(true);
@@ -279,7 +314,7 @@ export default function TimetableManagementPage() {
 
       const payload = selectedStudentIds.map((studentId, index) => {
         const draft = sessionDrafts[studentId] || {};
-        const autoSlot = getAutoSlot(index);
+        const autoSlot = getAutoSlot(getExistingBatchSessionCount() + index);
         if (!draft.panel1Id || !draft.panel2Id)
           throw new Error(`Missing panels for a student.`);
 
@@ -297,10 +332,33 @@ export default function TimetableManagementPage() {
       });
 
       const finalBatchId =
-        bulkConfig.batchId.trim() ||
-        `${bulkConfig.batchName.trim()}-${bulkConfig.date}`;
+        batchMode === "existing"
+          ? selectedBatchId
+          : bulkConfig.batchId.trim() ||
+            `${bulkConfig.batchName.trim()}-${bulkConfig.date}`;
+
+      if (batchMode === "new") {
+        await sessionBatchAPI.create({
+          batchName: bulkConfig.batchName.trim(),
+          batchId: finalBatchId,
+          academicSession: bulkConfig.academicSession,
+          scheduleTitle: "Postgraduate Progress Presentation Schedule",
+          sessionType,
+          rubricId: bulkConfig.rubricId,
+          date: bulkConfig.date,
+          startTime: bulkConfig.startTime,
+          slotDurationMinutes: slotDuration,
+          breakBetweenSlotsMinutes: bulkConfig.breakBetweenSlotsMinutes,
+          googleMeetLink: bulkConfig.venue,
+          status: "active",
+        });
+
+        const batchRes = await sessionBatchAPI.list();
+        setBatches(batchRes.batches || []);
+      }
 
       await api.post("/timetables/bulk", {
+        useExistingBatch: batchMode === "existing",
         academicSession: bulkConfig.academicSession,
         scheduleTitle: "Postgraduate Progress Presentation Schedule",
         batchName: bulkConfig.batchName.trim(),
@@ -314,6 +372,7 @@ export default function TimetableManagementPage() {
         semester: bulkConfig.academicSession,
         sessions: payload,
       });
+
       alert("✅ Bulk Sessions Created Successfully!");
       navigate(
         `/panel/sessions/batch/${encodeURIComponent(finalBatchId)}/print`,
@@ -609,6 +668,108 @@ export default function TimetableManagementPage() {
               <h2 className="font-bold text-lg mb-4 text-gray-900 border-b pb-2">
                 1. Base Settings
               </h2>
+              <div className="mb-4">
+                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
+                  Batch Mode
+                </label>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBatchMode("existing");
+                      setSelectedStudentIds([]);
+                      setSessionDrafts({});
+                    }}
+                    className={`px-3 py-2 rounded-lg font-bold text-sm ${
+                      batchMode === "existing"
+                        ? "bg-indigo-600 text-white"
+                        : "bg-gray-100 text-gray-700"
+                    }`}
+                  >
+                    Use Existing Batch
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBatchMode("new");
+                      setSelectedBatchId("");
+                      setBulkConfig((prev) => ({
+                        ...prev,
+                        batchName: "",
+                        batchId: "",
+                        venue: "",
+                        date: new Date().toISOString().split("T")[0],
+                        startTime: "09:00",
+                        breakBetweenSlotsMinutes: 5,
+                      }));
+                      setSelectedStudentIds([]);
+                      setSessionDrafts({});
+                    }}
+                    className={`px-3 py-2 rounded-lg font-bold text-sm ${
+                      batchMode === "new"
+                        ? "bg-indigo-600 text-white"
+                        : "bg-gray-100 text-gray-700"
+                    }`}
+                  >
+                    Create New Batch
+                  </button>
+                </div>
+              </div>
+
+              {batchMode === "existing" && (
+                <div className="mb-4">
+                  <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
+                    Select Batch
+                  </label>
+
+                  <select
+                    value={selectedBatchId}
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      setSelectedBatchId(value);
+
+                      const batch = batches.find((b) => b.batchId === value);
+                      if (!batch) return;
+
+                      setBulkConfig({
+                        rubricId: batch.rubricId?._id || batch.rubricId || "",
+                        academicSession: batch.academicSession || "",
+                        batchName: batch.batchName || "",
+                        batchId: batch.batchId || "",
+                        date: batch.date
+                          ? new Date(batch.date).toISOString().split("T")[0]
+                          : "",
+                        startTime: batch.startTime || "09:00",
+                        venue: batch.googleMeetLink || "",
+                        breakBetweenSlotsMinutes:
+                          batch.breakBetweenSlotsMinutes ?? 5,
+                      });
+
+                      setSlotDuration(batch.slotDurationMinutes || 60);
+                      setSelectedStudentIds([]);
+                      setSessionDrafts({});
+                    }}
+                    className="w-full p-2 border rounded-lg bg-gray-50 font-semibold"
+                  >
+                    <option value="">Select existing batch...</option>
+                    {batches.map((batch) => (
+                      <option key={batch.batchId} value={batch.batchId}>
+                        {batch.batchName} —{" "}
+                        {batch.date
+                          ? new Date(batch.date).toLocaleDateString("en-MY")
+                          : "No date"}
+                      </option>
+                    ))}
+                  </select>
+
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    Latest created batch appears first. Selecting a batch
+                    auto-fills the schedule settings.
+                  </p>
+                </div>
+              )}
               <div>
                 <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
                   Academic Session
@@ -616,13 +777,14 @@ export default function TimetableManagementPage() {
                 <input
                   type="text"
                   value={bulkConfig.academicSession}
+                  disabled={isExistingBatchMode}
+                  className={batchFieldClass}
                   onChange={(e) =>
                     setBulkConfig({
                       ...bulkConfig,
                       academicSession: e.target.value,
                     })
                   }
-                  className="w-full p-2 border rounded-lg bg-gray-50 font-semibold"
                   placeholder="2025/2026, Semester 1"
                 />
               </div>
@@ -634,10 +796,11 @@ export default function TimetableManagementPage() {
                 <input
                   type="text"
                   value={bulkConfig.batchName}
+                  disabled={isExistingBatchMode}
+                  className={batchFieldClass}
                   onChange={(e) =>
                     setBulkConfig({ ...bulkConfig, batchName: e.target.value })
                   }
-                  className="w-full p-2 border rounded-lg bg-gray-50 font-semibold"
                   placeholder="e.g., PIXEL"
                 />
               </div>
@@ -649,25 +812,27 @@ export default function TimetableManagementPage() {
                 <input
                   type="text"
                   value={bulkConfig.batchId}
+                  disabled={isExistingBatchMode}
+                  className={batchFieldClass}
                   onChange={(e) =>
                     setBulkConfig({ ...bulkConfig, batchId: e.target.value })
                   }
-                  className="w-full p-2 border rounded-lg bg-gray-50 font-semibold"
                   placeholder="Auto if empty"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
-                  First Slot Start Time
+                  Start Time
                 </label>
                 <input
                   type="time"
                   value={bulkConfig.startTime}
+                  disabled={isExistingBatchMode}
+                  className={batchFieldClass}
                   onChange={(e) =>
                     setBulkConfig({ ...bulkConfig, startTime: e.target.value })
                   }
-                  className="w-full p-2 border rounded-lg bg-gray-50 font-semibold"
                 />
               </div>
 
@@ -681,13 +846,14 @@ export default function TimetableManagementPage() {
                   max="60"
                   step="5"
                   value={bulkConfig.breakBetweenSlotsMinutes}
+                  disabled={isExistingBatchMode}
+                  className={batchFieldClass}
                   onChange={(e) =>
                     setBulkConfig({
                       ...bulkConfig,
                       breakBetweenSlotsMinutes: Number(e.target.value),
                     })
                   }
-                  className="w-full p-2 border rounded-lg bg-gray-50 font-semibold"
                 />
               </div>
               <div className="space-y-4">
@@ -697,10 +863,11 @@ export default function TimetableManagementPage() {
                   </label>
                   <select
                     value={bulkConfig.rubricId}
+                    disabled={isExistingBatchMode}
+                    className={batchFieldClass}
                     onChange={(e) =>
                       setBulkConfig({ ...bulkConfig, rubricId: e.target.value })
                     }
-                    className="w-full p-2 border rounded-lg bg-gray-50 font-semibold"
                   >
                     {rubrics.map((r) => (
                       <option key={r._id} value={r._id}>
@@ -719,8 +886,9 @@ export default function TimetableManagementPage() {
                     max="240"
                     step="5"
                     value={slotDuration}
+                    disabled={isExistingBatchMode}
                     onChange={handleDurationChange}
-                    className="w-full p-2 border border-gray-300 rounded-lg bg-white font-bold text-indigo-700 focus:ring-2 focus:ring-indigo-500"
+                    className={batchFieldClass}
                     placeholder="e.g., 60"
                   />
                   <p className="text-[10px] text-gray-500 mt-1 font-semibold uppercase">
@@ -734,10 +902,11 @@ export default function TimetableManagementPage() {
                   <input
                     type="date"
                     value={bulkConfig.date}
+                    disabled={isExistingBatchMode}
+                    className={batchFieldClass}
                     onChange={(e) =>
                       setBulkConfig({ ...bulkConfig, date: e.target.value })
                     }
-                    className="w-full p-2 border rounded-lg bg-gray-50"
                   />
                 </div>
                 <div>
@@ -747,10 +916,11 @@ export default function TimetableManagementPage() {
                   <input
                     type="url"
                     value={bulkConfig.venue}
+                    disabled={isExistingBatchMode}
                     onChange={(e) =>
                       setBulkConfig({ ...bulkConfig, venue: e.target.value })
                     }
-                    className="w-full p-2 border rounded-lg bg-gray-50"
+                    className={batchFieldClass}
                   />
                 </div>
               </div>
@@ -858,8 +1028,10 @@ export default function TimetableManagementPage() {
                               type="time"
                               value={
                                 sessionDrafts[id]?.startTime ||
-                                getAutoSlot(selectedStudentIds.indexOf(id))
-                                  .startTime
+                                getAutoSlot(
+                                  getExistingBatchSessionCount() +
+                                    selectedStudentIds.indexOf(id),
+                                ).startTime
                               }
                               onChange={(e) =>
                                 setSessionDrafts((prev) => ({
@@ -880,8 +1052,10 @@ export default function TimetableManagementPage() {
                               type="time"
                               value={
                                 sessionDrafts[id]?.endTime ||
-                                getAutoSlot(selectedStudentIds.indexOf(id))
-                                  .endTime
+                                getAutoSlot(
+                                  getExistingBatchSessionCount() +
+                                    selectedStudentIds.indexOf(id),
+                                ).endTime
                               }
                               onChange={(e) =>
                                 setSessionDrafts((prev) => ({

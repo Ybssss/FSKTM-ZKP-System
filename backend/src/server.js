@@ -9,6 +9,7 @@ const app = express();
 const expertiseRoutes = require("./routes/expertiseRoutes");
 const helmet = require("helmet");
 const mongoSanitize = require("express-mongo-sanitize");
+const sessionBatchRoutes = require("./routes/sessionBatch");
 
 // Middleware
 app.use(
@@ -86,11 +87,13 @@ app.use("/api/users", userRoutes);
 app.use("/api/evaluations", evaluationRoutes);
 app.use("/api/rubrics", rubricRoutes);
 app.use("/api/timetables", timetableRoutes);
+app.use("/api/session-batches", sessionBatchRoutes);
 app.use("/api/feedback", feedbackRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/qr", qrRoutes);
 app.use("/api/analytics", analyticsRoutes); // ← NEW: Register analytics route
 app.use("/api", expertiseRoutes);
+
 // Root route
 app.get("/", (req, res) => {
   res.json({

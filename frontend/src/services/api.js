@@ -423,4 +423,32 @@ export const analyticsAPI = {
   },
 };
 
+// session batch API
+export const sessionBatchAPI = {
+  create: async (payload) => {
+    const response = await api.post("/session-batches", payload);
+    return response.data;
+  },
+
+  list: async () => {
+    const response = await api.get("/session-batches");
+    return response.data;
+  },
+
+  get: async (batchId) => {
+    const response = await api.get(
+      `/session-batches/${encodeURIComponent(batchId)}`,
+    );
+    return response.data;
+  },
+
+  update: async (batchId, payload) => {
+    const response = await api.put(
+      `/session-batches/${encodeURIComponent(batchId)}`,
+      payload,
+    );
+    return response.data;
+  },
+};
+
 export default api;
