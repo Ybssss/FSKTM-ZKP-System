@@ -585,7 +585,15 @@ const seedDatabase = async () => {
         role: "admin",
         registrationCode: "temp",
         // 🔴 FIXED: Since admins can be assigned to panels now, give them tags!
-        expertiseTags: ["System Architecture", "Software Engineering", "HCI"],
+        profession: "DS13 Pensyarah Kanan — Jabatan Multimedia",
+        expertiseTags: [
+          "Multimedia",
+          "Interface Design",
+          "Augmented Reality",
+          "User Experience",
+          "Human-Computer Interaction",
+          "Child-Computer Interaction",
+        ],
       },
       {
         userId: "admin_pendaftar",
@@ -606,15 +614,16 @@ const seedDatabase = async () => {
         name: "NUR ZIADAH BINTI HARUN",
         email: "panel.zkp@example.com",
         role: "panel",
-        profession: "Senior Lecturer",
+        profession:
+          "DS13 Pensyarah Kanan — Jabatan Keselamatan Maklumat dan Teknologi Web",
         registrationCode: "PANEL001",
         expertiseTags: [
-          "Zero-Knowledge Proof",
+          "Security System",
           "Cryptography",
-          "Passwordless Authentication",
-          "Information Security",
+          "Quantum Key Distribution",
+          "Quantum Communication",
           "Authentication",
-          "Blockchain",
+          "Blockchain Technology",
         ],
       },
       {
@@ -622,13 +631,16 @@ const seedDatabase = async () => {
         name: "SHAHREEN BINTI KASIM",
         email: "panel.ai@example.com",
         role: "panel",
-        profession: "Senior Lecturer",
+        profession:
+          "DS14 Profesor Madya — Jabatan Keselamatan Maklumat dan Teknologi Web",
         registrationCode: "PANEL002",
         expertiseTags: [
-          "Artificial Intelligence",
-          "Machine Learning",
-          "Deep Learning",
-          "Data Mining",
+          "Bioinformatics",
+          "Gene Expression Analysis",
+          "Gene Function Prediction",
+          "Classification",
+          "Support Vector Machine",
+          "Semantic Similarity",
         ],
       },
       {
@@ -636,13 +648,16 @@ const seedDatabase = async () => {
         name: "SAPI'EE BIN JAMEL",
         email: "panel.blockchain@example.com",
         role: "panel",
-        profession: "Senior Lecturer",
+        profession:
+          "DS14 Profesor Madya — Jabatan Keselamatan Maklumat dan Teknologi Web",
         registrationCode: "PANEL003",
         expertiseTags: [
-          "Blockchain",
-          "Smart Contract",
-          "Healthcare Information Systems",
-          "Distributed Ledger",
+          "Data Management",
+          "Data Encryption",
+          "Information Security",
+          "Block Cipher",
+          "Cryptanalysis",
+          "Message Authentication Code",
         ],
       },
       {
@@ -650,14 +665,15 @@ const seedDatabase = async () => {
         name: "NUR LIYANA BINTI SULAIMAN",
         email: "panel.web@example.com",
         role: "panel",
-        profession: "Senior Lecturer",
+        profession: "DS13 Pensyarah Kanan — Jabatan Kejuruteraan Perisian",
         registrationCode: "PANEL004",
         expertiseTags: [
-          "Web Application",
           "Software Engineering",
-          "React",
-          "Node.js",
-          "Usability Testing",
+          "Software Process Models",
+          "Agile Software Development",
+          "Software Process Quality",
+          "Software Process Improvement",
+          "Software Assessment and Certification",
         ],
       },
       {
@@ -665,13 +681,16 @@ const seedDatabase = async () => {
         name: "ZUBAILE BIN ABDULLAH",
         email: "panel.network@example.com",
         role: "panel",
-        profession: "Senior Lecturer",
+        profession:
+          "DS13 Pensyarah Kanan — Jabatan Keselamatan Maklumat dan Teknologi Web",
         registrationCode: "PANEL005",
         expertiseTags: [
-          "Computer Networks",
-          "IoT",
-          "Cloud Computing",
-          "Distributed Systems",
+          "Security System",
+          "Malware",
+          "Worms and Viruses",
+          "Android Botnet Detection",
+          "Information Security",
+          "Wireless and Mobile Computing Security",
         ],
       },
     ];
@@ -927,8 +946,7 @@ const seedDatabase = async () => {
     const completedHistoryBatchDate = lastWeek;
     const completedHistoryBatchId = "BATCH-HIST-2025-A";
     const completedHistoryBatchName = "FSKTM Completed Progress History";
-    const completedHistoryMeetLink =
-      "https://meet.google.com/fsktm-progress-history";
+    const completedHistoryMeetLink = "https://meet.google.com/fsktm-progress-history";
 
     await SessionBatch.create([
       {

@@ -16,6 +16,7 @@ export default function BatchSchedulePrintPage() {
   const [availableBatches, setAvailableBatches] = useState([]);
   const [selectedBatchIds, setSelectedBatchIds] = useState([]);
   const [schedules, setSchedules] = useState([]);
+  const [batchSearch, setBatchSearch] = useState("");
 
   const parseStartTimeToMinutes = (timeRange = "") => {
     const startTime = String(timeRange).split(/[–-]/)[0].trim().toLowerCase();
@@ -51,6 +52,30 @@ export default function BatchSchedulePrintPage() {
       rows: sortRowsByTime(schedule.rows || []),
     }));
   }, [schedules]);
+
+  const filteredAvailableBatches = useMemo(() => {
+    const term = batchSearch.trim().toLowerCase();
+    if (!term) return availableBatches;
+
+    return availableBatches.filter((batch) =>
+      [
+        batch.batchName,
+        batch.batchId,
+        batch.academicSession,
+        batch.scheduleTitle,
+        batch.googleMeetLink,
+        batch.sessionTypes?.join(" "),
+        batch.earliestDate
+          ? new Date(batch.earliestDate).toLocaleDateString("en-MY")
+          : "",
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(term),
+    );
+  }, [availableBatches, batchSearch]);
+
 
   useEffect(() => {
     const init = async () => {
@@ -457,10 +482,25 @@ export default function BatchSchedulePrintPage() {
       </div>
 
       <div className="no-print max-w-7xl mx-auto mt-6 bg-white border rounded-xl p-4 shadow-sm">
-        <h2 className="text-lg font-bold mb-3">Available Batches</h2>
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-3">
+          <div>
+            <h2 className="text-lg font-bold">Available Batches</h2>
+            <p className="text-xs text-gray-500 font-semibold">
+              Search and tick one or multiple batches to preview/export.
+            </p>
+          </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-          {availableBatches.map((batch) => (
+          <input
+            type="text"
+            value={batchSearch}
+            onChange={(e) => setBatchSearch(e.target.value)}
+            placeholder="Search batch, ID, date, type, link..."
+            className="w-full md:w-96 px-3 py-2 border rounded-lg bg-gray-50 font-semibold text-sm"
+          />
+        </div>
+
+        <div className="max-h-80 overflow-y-auto pr-1 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {filteredAvailableBatches.map((batch) => (
             <label
               key={batch.batchId}
               className={`border rounded-lg p-3 cursor-pointer ${

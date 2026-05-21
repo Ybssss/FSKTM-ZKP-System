@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Calendar as CalendarIcon,
   Clock,
@@ -14,6 +14,9 @@ import {
   X,
   Link as LinkIcon,
   AlertTriangle,
+  ChevronUp,
+  ChevronDown,
+  Save,
 } from "lucide-react";
 import api, { sessionBatchAPI } from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
@@ -75,6 +78,23 @@ export default function TimetableManagementPage() {
     panel1Id: "",
     panel2Id: "",
   });
+
+  const [isBatchEditOpen, setIsBatchEditOpen] = useState(false);
+  const [batchEditForm, setBatchEditForm] = useState({
+    batchName: "",
+    batchId: "",
+    academicSession: "",
+    scheduleTitle: "Postgraduate Progress Presentation Schedule",
+    sessionType: "PROPOSAL_DEFENSE",
+    rubricId: "",
+    date: "",
+    startTime: "09:00",
+    slotDurationMinutes: 60,
+    breakBetweenSlotsMinutes: 5,
+    googleMeetLink: "",
+    status: "active",
+  });
+  const [arrangedBatchSessionIds, setArrangedBatchSessionIds] = useState([]);
 
   useEffect(() => {
     loadData();
@@ -158,11 +178,61 @@ export default function TimetableManagementPage() {
     return date.toTimeString().slice(0, 5);
   };
 
+  const getSessionId = (session) => session?._id || session?.id;
+
+  const getSessionDateOnly = (session) => {
+    const raw = session?.schedule?.date || session?.date || "";
+    if (!raw) return "";
+    const parsed = new Date(raw);
+    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().split("T")[0];
+    return String(raw).split("T")[0];
+  };
+
+  const getSessionStartTime = (session) =>
+    session?.schedule?.time || session?.time || session?.startTime || "";
+
+  const getSessionEndTime = (session) => session?.endTime || "";
+
+  const getStudentName = (session) => {
+    const student = session?.student || session?.students?.[0];
+    return student?.name || student?.userId || "Student not loaded";
+  };
+
+  const getStudentMatric = (session) => {
+    const student = session?.student || session?.students?.[0];
+    return student?.matricNumber || student?.userId || "";
+  };
+
+  const getPanelNames = (session) => {
+    const sessionPanels = session?.panels || [];
+    const p1 = session?.panel1Id || sessionPanels[0];
+    const p2 = session?.panel2Id || sessionPanels[1];
+    const resolveName = (value, fallback) => {
+      const id = value?._id || value;
+      return value?.name || panels.find((p) => p._id === id)?.name || fallback;
+    };
+    return [resolveName(p1, "Panel 1"), resolveName(p2, "Panel 2")];
+  };
+
+  const isPanelReplacementLocked = (dateValue) => {
+    const dateOnly = dateValue || "";
+    if (!dateOnly) return false;
+    const sessionDate = new Date(`${dateOnly}T00:00:00`);
+    if (Number.isNaN(sessionDate.getTime())) return false;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffDays = Math.ceil((sessionDate - today) / (1000 * 60 * 60 * 24));
+    return diffDays < 7;
+  };
+
   const getExistingBatchSessionCount = () => {
     if (batchMode !== "existing" || !selectedBatchId) return 0;
 
-    return sessions.filter((session) => session.batchId === selectedBatchId)
-      .length;
+    return sessions.filter(
+      (session) =>
+        session.batchId === selectedBatchId &&
+        !["completed", "cancelled"].includes(String(session.status || "").toLowerCase()),
+    ).length;
   };
 
   const getAutoSlot = (index) => {
@@ -177,6 +247,142 @@ export default function TimetableManagementPage() {
       startTime: start,
       endTime: addMinutesToTime(start, duration),
     };
+  };
+
+  const selectedBatch = useMemo(
+    () => batches.find((batch) => batch.batchId === selectedBatchId) || null,
+    [batches, selectedBatchId],
+  );
+
+  const selectedBatchSessions = useMemo(() => {
+    if (!selectedBatchId) return [];
+    return sessions
+      .filter(
+        (session) =>
+          session.batchId === selectedBatchId &&
+          !["completed", "cancelled"].includes(
+            String(session.status || "").toLowerCase(),
+          ),
+      )
+      .sort((a, b) => {
+        const dateDiff = new Date(getSessionDateOnly(a)) - new Date(getSessionDateOnly(b));
+        if (dateDiff !== 0) return dateDiff;
+        return String(getSessionStartTime(a)).localeCompare(String(getSessionStartTime(b)));
+      });
+  }, [sessions, selectedBatchId]);
+
+  useEffect(() => {
+    setArrangedBatchSessionIds(selectedBatchSessions.map((session) => getSessionId(session)));
+  }, [selectedBatchId, selectedBatchSessions.length]);
+
+  const arrangedBatchSessions = useMemo(() => {
+    const byId = new Map(selectedBatchSessions.map((session) => [String(getSessionId(session)), session]));
+    const ordered = arrangedBatchSessionIds
+      .map((id) => byId.get(String(id)))
+      .filter(Boolean);
+    const missing = selectedBatchSessions.filter(
+      (session) => !arrangedBatchSessionIds.includes(getSessionId(session)),
+    );
+    return [...ordered, ...missing];
+  }, [selectedBatchSessions, arrangedBatchSessionIds]);
+
+  const moveCurrentBatchSession = (index, direction) => {
+    setArrangedBatchSessionIds((prev) => {
+      const next = [...prev];
+      const targetIndex = index + direction;
+      if (targetIndex < 0 || targetIndex >= next.length) return prev;
+      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      return next;
+    });
+  };
+
+  const saveCurrentBatchArrangement = async () => {
+    if (!selectedBatchId || arrangedBatchSessions.length === 0) return;
+    if (!window.confirm("Save the current order and recalculate the session time slots?")) return;
+
+    try {
+      setIsSaving(true);
+      for (let index = 0; index < arrangedBatchSessions.length; index += 1) {
+        const session = arrangedBatchSessions[index];
+        const sessionId = getSessionId(session);
+        const autoSlot = getAutoSlot(index);
+        await api.put(`/timetables/${sessionId}`, {
+          date: bulkConfig.date || getSessionDateOnly(session),
+          time: autoSlot.startTime,
+          endTime: autoSlot.endTime,
+          venue: session.venue || session.googleMeetLink || bulkConfig.venue,
+          googleMeetLink: session.googleMeetLink || session.venue || bulkConfig.venue,
+        });
+      }
+      alert("Batch session order saved.");
+      await loadData();
+    } catch (error) {
+      alert(error.response?.data?.message || "Failed to save batch arrangement.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const openBatchEditModal = (batch = selectedBatch) => {
+    if (!batch) return alert("Please select a batch first.");
+    setBatchEditForm({
+      batchName: batch.batchName || "",
+      batchId: batch.batchId || "",
+      academicSession: batch.academicSession || "",
+      scheduleTitle: batch.scheduleTitle || "Postgraduate Progress Presentation Schedule",
+      sessionType: batch.sessionType || "PROPOSAL_DEFENSE",
+      rubricId: batch.rubricId?._id || batch.rubricId || "",
+      date: batch.date ? new Date(batch.date).toISOString().split("T")[0] : "",
+      startTime: batch.startTime || "09:00",
+      slotDurationMinutes: batch.slotDurationMinutes || 60,
+      breakBetweenSlotsMinutes: batch.breakBetweenSlotsMinutes ?? 5,
+      googleMeetLink: batch.googleMeetLink || "",
+      status: batch.status || "active",
+    });
+    setIsBatchEditOpen(true);
+  };
+
+  const submitBatchEdit = async (e) => {
+    e.preventDefault();
+    try {
+      setIsSaving(true);
+      await sessionBatchAPI.update(batchEditForm.batchId, {
+        batchName: batchEditForm.batchName,
+        academicSession: batchEditForm.academicSession,
+        scheduleTitle: batchEditForm.scheduleTitle,
+        sessionType: batchEditForm.sessionType,
+        rubricId: batchEditForm.rubricId,
+        date: batchEditForm.date,
+        startTime: batchEditForm.startTime,
+        slotDurationMinutes: Number(batchEditForm.slotDurationMinutes || 60),
+        breakBetweenSlotsMinutes: Number(batchEditForm.breakBetweenSlotsMinutes || 0),
+        googleMeetLink: batchEditForm.googleMeetLink,
+        status: batchEditForm.status,
+      });
+
+      const batchRes = await sessionBatchAPI.list();
+      setBatches(batchRes.batches || []);
+      if (selectedBatchId === batchEditForm.batchId) {
+        setBulkConfig((prev) => ({
+          ...prev,
+          rubricId: batchEditForm.rubricId,
+          academicSession: batchEditForm.academicSession,
+          batchName: batchEditForm.batchName,
+          batchId: batchEditForm.batchId,
+          date: batchEditForm.date,
+          startTime: batchEditForm.startTime,
+          venue: batchEditForm.googleMeetLink,
+          breakBetweenSlotsMinutes: Number(batchEditForm.breakBetweenSlotsMinutes || 0),
+        }));
+        setSlotDuration(Number(batchEditForm.slotDurationMinutes || 60));
+      }
+      setIsBatchEditOpen(false);
+      alert("Batch updated.");
+    } catch (error) {
+      alert(error.response?.data?.message || "Failed to update batch.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleEditClick = (session) => {
@@ -231,6 +437,28 @@ export default function TimetableManagementPage() {
       const sessionType = selectedRubric
         ? selectedRubric.sessionType
         : editingSession.sessionType;
+
+      const oldPanel1 =
+        editingSession.panel1Id?._id ||
+        editingSession.panel1Id ||
+        editingSession.panels?.[0]?._id ||
+        editingSession.panels?.[0] ||
+        "";
+      const oldPanel2 =
+        editingSession.panel2Id?._id ||
+        editingSession.panel2Id ||
+        editingSession.panels?.[1]?._id ||
+        editingSession.panels?.[1] ||
+        "";
+      const panelChanged =
+        String(oldPanel1) !== String(editForm.panel1Id || "") ||
+        String(oldPanel2) !== String(editForm.panel2Id || "");
+
+      if (panelChanged && isPanelReplacementLocked(editForm.date)) {
+        return alert(
+          "Panel replacement is only allowed at least 1 week before the session date.",
+        );
+      }
 
       await api.put(`/timetables/${sessionId}`, { ...editForm, sessionType });
       alert("Session updated successfully!");
@@ -764,10 +992,116 @@ export default function TimetableManagementPage() {
                     ))}
                   </select>
 
+                  <div className="mt-2 flex flex-col sm:flex-row gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openBatchEditModal()}
+                      disabled={!selectedBatchId}
+                      className="px-3 py-2 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 font-bold text-xs hover:bg-indigo-100 disabled:opacity-50"
+                    >
+                      Edit Selected Batch
+                    </button>
+                    <button
+                      type="button"
+                      onClick={saveCurrentBatchArrangement}
+                      disabled={!selectedBatchId || arrangedBatchSessions.length === 0 || isSaving}
+                      className="px-3 py-2 rounded-lg border border-green-200 bg-green-50 text-green-700 font-bold text-xs hover:bg-green-100 disabled:opacity-50 flex items-center justify-center gap-1"
+                    >
+                      <Save className="w-3 h-3" /> Save Current Order
+                    </button>
+                  </div>
+
                   <p className="text-[11px] text-gray-500 mt-1">
                     Latest created batch appears first. Selecting a batch
-                    auto-fills the schedule settings.
+                    auto-fills the schedule settings and displays existing scheduled sessions below.
                   </p>
+                </div>
+              )}
+
+              {batchMode === "existing" && selectedBatchId && (
+                <div className="mb-4 border border-blue-100 bg-blue-50 rounded-xl p-3">
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <div>
+                      <p className="text-xs font-bold text-blue-900 uppercase">
+                        Current Scheduled Sessions
+                      </p>
+                      <p className="text-[11px] text-blue-700">
+                        Reorder with ↑ ↓, then save current order. Use Edit for individual replacement.
+                      </p>
+                    </div>
+                    <span className="text-xs font-bold text-blue-900 bg-white px-2 py-1 rounded">
+                      {arrangedBatchSessions.length}
+                    </span>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
+                    {arrangedBatchSessions.length === 0 ? (
+                      <div className="text-xs text-blue-700 bg-white rounded-lg p-3 border border-blue-100">
+                        No scheduled session exists in this batch yet.
+                      </div>
+                    ) : (
+                      arrangedBatchSessions.map((session, index) => {
+                        const sessionId = getSessionId(session);
+                        const [p1Name, p2Name] = getPanelNames(session);
+                        return (
+                          <div
+                            key={sessionId}
+                            className="bg-white border border-blue-100 rounded-lg p-3 text-xs"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <p className="font-bold text-gray-900 truncate">
+                                  {index + 1}. {getStudentName(session)}
+                                </p>
+                                <p className="font-mono text-gray-500">
+                                  {getStudentMatric(session)}
+                                </p>
+                                <p className="text-gray-700 mt-1">
+                                  {getSessionDateOnly(session)} · {getSessionStartTime(session)} - {getSessionEndTime(session)}
+                                </p>
+                                <p className="text-gray-600 mt-1 truncate">
+                                  {p1Name} / {p2Name}
+                                </p>
+                              </div>
+                              <div className="flex flex-col gap-1 shrink-0">
+                                <button
+                                  type="button"
+                                  onClick={() => moveCurrentBatchSession(index, -1)}
+                                  disabled={index === 0}
+                                  className="p-1 rounded border hover:bg-gray-50 disabled:opacity-30"
+                                >
+                                  <ChevronUp className="w-4 h-4" />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => moveCurrentBatchSession(index, 1)}
+                                  disabled={index === arrangedBatchSessions.length - 1}
+                                  className="p-1 rounded border hover:bg-gray-50 disabled:opacity-30"
+                                >
+                                  <ChevronDown className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleEditClick(session)}
+                                className="px-2 py-1 rounded bg-indigo-50 text-indigo-700 font-bold border border-indigo-100"
+                              >
+                                Edit Session
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDelete(sessionId)}
+                                className="px-2 py-1 rounded bg-red-50 text-red-700 font-bold border border-red-100"
+                              >
+                                Drop Session
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
                 </div>
               )}
               <div>
@@ -1023,7 +1357,72 @@ export default function TimetableManagementPage() {
                               {student.matricNumber}
                             </p>
                           </div>
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentIndex = selectedStudentIds.indexOf(id);
+                                if (currentIndex <= 0) return;
+                                const nextIds = [...selectedStudentIds];
+                                [nextIds[currentIndex - 1], nextIds[currentIndex]] = [
+                                  nextIds[currentIndex],
+                                  nextIds[currentIndex - 1],
+                                ];
+                                setSelectedStudentIds(nextIds);
+                                setSessionDrafts((prev) => {
+                                  const next = { ...prev };
+                                  nextIds.forEach((studentId, idx) => {
+                                    const slot = getAutoSlot(getExistingBatchSessionCount() + idx);
+                                    next[studentId] = {
+                                      ...next[studentId],
+                                      startTime: slot.startTime,
+                                      endTime: slot.endTime,
+                                    };
+                                  });
+                                  return next;
+                                });
+                              }}
+                              className="p-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30"
+                              disabled={selectedStudentIds.indexOf(id) === 0}
+                            >
+                              <ChevronUp className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const currentIndex = selectedStudentIds.indexOf(id);
+                                if (currentIndex < 0 || currentIndex >= selectedStudentIds.length - 1) return;
+                                const nextIds = [...selectedStudentIds];
+                                [nextIds[currentIndex], nextIds[currentIndex + 1]] = [
+                                  nextIds[currentIndex + 1],
+                                  nextIds[currentIndex],
+                                ];
+                                setSelectedStudentIds(nextIds);
+                                setSessionDrafts((prev) => {
+                                  const next = { ...prev };
+                                  nextIds.forEach((studentId, idx) => {
+                                    const slot = getAutoSlot(getExistingBatchSessionCount() + idx);
+                                    next[studentId] = {
+                                      ...next[studentId],
+                                      startTime: slot.startTime,
+                                      endTime: slot.endTime,
+                                    };
+                                  });
+                                  return next;
+                                });
+                              }}
+                              className="p-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30"
+                              disabled={selectedStudentIds.indexOf(id) === selectedStudentIds.length - 1}
+                            >
+                              <ChevronDown className="w-4 h-4" />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => toggleStudentForBulk(student)}
+                              className="p-2 border rounded-lg text-red-600 hover:bg-red-50"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
                             <input
                               type="time"
                               value={
@@ -1095,6 +1494,139 @@ export default function TimetableManagementPage() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* BATCH EDIT MODAL */}
+      {isBatchEditOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
+          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setIsBatchEditOpen(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-700"
+            >
+              <X className="w-6 h-6" />
+            </button>
+            <h2 className="text-xl font-bold mb-6 flex items-center gap-2 border-b pb-2">
+              <Layers className="w-5 h-5 text-indigo-600" /> Edit Batch
+            </h2>
+            <form onSubmit={submitBatchEdit} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Batch Name</label>
+                  <input
+                    required
+                    value={batchEditForm.batchName}
+                    onChange={(e) => setBatchEditForm({ ...batchEditForm, batchName: e.target.value })}
+                    className="w-full border rounded p-2 font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Batch ID</label>
+                  <input
+                    value={batchEditForm.batchId}
+                    disabled
+                    className="w-full border rounded p-2 font-semibold bg-gray-100 text-gray-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Academic Session</label>
+                  <input
+                    value={batchEditForm.academicSession}
+                    onChange={(e) => setBatchEditForm({ ...batchEditForm, academicSession: e.target.value })}
+                    className="w-full border rounded p-2 font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Session Type</label>
+                  <select
+                    value={batchEditForm.sessionType}
+                    onChange={(e) => setBatchEditForm({ ...batchEditForm, sessionType: e.target.value })}
+                    className="w-full border rounded p-2 font-semibold bg-white"
+                  >
+                    <option value="PROPOSAL_DEFENSE">Proposal Defense</option>
+                    <option value="PROGRESS_ASSESSMENT">Progress Assessment</option>
+                    <option value="PRE_VIVA">Pre-Viva</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={batchEditForm.date}
+                    onChange={(e) => setBatchEditForm({ ...batchEditForm, date: e.target.value })}
+                    className="w-full border rounded p-2 font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Start Time</label>
+                  <input
+                    type="time"
+                    value={batchEditForm.startTime}
+                    onChange={(e) => setBatchEditForm({ ...batchEditForm, startTime: e.target.value })}
+                    className="w-full border rounded p-2 font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Slot Duration</label>
+                  <input
+                    type="number"
+                    min="5"
+                    step="5"
+                    value={batchEditForm.slotDurationMinutes}
+                    onChange={(e) => setBatchEditForm({ ...batchEditForm, slotDurationMinutes: e.target.value })}
+                    className="w-full border rounded p-2 font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-gray-700 mb-1">Break Between Slots</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="5"
+                    value={batchEditForm.breakBetweenSlotsMinutes}
+                    onChange={(e) => setBatchEditForm({ ...batchEditForm, breakBetweenSlotsMinutes: e.target.value })}
+                    className="w-full border rounded p-2 font-semibold"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-1">Schedule Title</label>
+                <input
+                  value={batchEditForm.scheduleTitle}
+                  onChange={(e) => setBatchEditForm({ ...batchEditForm, scheduleTitle: e.target.value })}
+                  className="w-full border rounded p-2 font-semibold"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-bold text-indigo-700 mb-1 flex items-center gap-1">
+                  <LinkIcon className="w-4 h-4" /> Google Meet / Online Link
+                </label>
+                <input
+                  type="url"
+                  value={batchEditForm.googleMeetLink}
+                  onChange={(e) => setBatchEditForm({ ...batchEditForm, googleMeetLink: e.target.value })}
+                  className="w-full border-2 border-indigo-200 rounded p-2 bg-indigo-50 font-semibold text-blue-700"
+                />
+              </div>
+              <div className="pt-4 flex justify-end gap-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => setIsBatchEditOpen(false)}
+                  className="px-5 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSaving}
+                  className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 disabled:bg-gray-400"
+                >
+                  Save Batch
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

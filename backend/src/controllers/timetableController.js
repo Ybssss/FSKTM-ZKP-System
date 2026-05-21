@@ -94,6 +94,25 @@ const ensureNotBackdated = (dateValue, startTime) => {
   }
 };
 
+const isAtLeastOneWeekBeforeSession = (dateValue) => {
+  const dateOnly = normalizeDateOnly(dateValue);
+  if (!dateOnly) return false;
+
+  const sessionDate = new Date(`${dateOnly}T00:00:00`);
+  if (Number.isNaN(sessionDate.getTime())) return false;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const diffDays = Math.ceil((sessionDate - today) / (1000 * 60 * 60 * 24));
+
+  return diffDays >= 7;
+};
+
+const sameIdList = (left = [], right = []) => {
+  const normalize = (items) => items.map((item) => String(item || "")).filter(Boolean).sort();
+  return JSON.stringify(normalize(left)) === JSON.stringify(normalize(right));
+};
+
 const buildPendingEvaluations = (timetable, payload, semester) => {
   const studentId = payload.students?.[0];
 
@@ -850,6 +869,7 @@ exports.updateTimetable = async (req, res) => {
 
     if (req.body.venue !== undefined) {
       updates.venue = cleanText(req.body.venue, 500);
+      updates.googleMeetLink = updates.venue;
     }
 
     if (req.body.rubricId !== undefined) {
@@ -915,40 +935,88 @@ exports.updateTimetable = async (req, res) => {
       ensureNotBackdated(effectiveDate, effectiveStartTime);
     }
 
-    // Reconstruct the array for updating
-    const oldP1 = existingSession.panels?.[0]?.toString();
-    const oldP2 = existingSession.panels?.[1]?.toString();
+    // Reconstruct panels array for updating. `panel1Id` and `panel2Id` are frontend helpers,
+    // while the database stores the actual panel assignment in `panels`.
+    const oldPanels = (existingSession.panels || []).map((panelId) =>
+      String(panelId),
+    );
+    const oldP1 = oldPanels[0] || "";
+    const oldP2 = oldPanels[1] || "";
 
-    if (updates.panel1Id || updates.panel2Id) {
-      updates.panels = [
-        updates.panel1Id || oldP1,
-        updates.panel2Id || oldP2,
-      ].filter(Boolean);
+    if (updates.panel1Id !== undefined || updates.panel2Id !== undefined) {
+      const nextPanels = [
+        updates.panel1Id !== undefined ? updates.panel1Id : oldP1,
+        updates.panel2Id !== undefined ? updates.panel2Id : oldP2,
+      ]
+        .filter(Boolean)
+        .map(String);
+
+      const uniquePanels = [...new Set(nextPanels)];
+
+      if (uniquePanels.length !== nextPanels.length) {
+        return res.status(400).json({
+          success: false,
+          message: "Panel 1 and Panel 2 must be different people.",
+        });
+      }
+
+      const panelChanged = !sameIdList(oldPanels, uniquePanels);
+
+      if (panelChanged && !isAtLeastOneWeekBeforeSession(effectiveDate)) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Panel replacement is only allowed at least 1 week before the session date.",
+        });
+      }
+
+      updates.panels = uniquePanels;
     }
-    if (updates.time) updates.startTime = updates.time;
+
+    delete updates.panel1Id;
+    delete updates.panel2Id;
 
     const updatedSession = await Timetable.findByIdAndUpdate(id, updates, {
       new: true,
     });
 
-    // Panel Swaps
-    if (updates.panel1Id && oldP1 && updates.panel1Id !== oldP1) {
-      await Evaluation.findOneAndUpdate(
-        { sessionId: id, evaluatorId: oldP1, status: "PENDING" },
-        {
-          evaluatorId: updates.panel1Id,
-          rubricId: updates.rubricId || existingSession.rubricId,
-        },
-      );
-    }
-    if (updates.panel2Id && oldP2 && updates.panel2Id !== oldP2) {
-      await Evaluation.findOneAndUpdate(
-        { sessionId: id, evaluatorId: oldP2, status: "PENDING" },
-        {
-          evaluatorId: updates.panel2Id,
-          rubricId: updates.rubricId || existingSession.rubricId,
-        },
-      );
+    // Refresh pending evaluations only for this scheduled session when panels change.
+    // Completed evaluations remain untouched as academic records.
+    if (updates.panels) {
+      const newPanelIds = updates.panels.map(String);
+      const studentId = existingSession.students?.[0];
+      const rubricId = updates.rubricId || existingSession.rubricId;
+      const sessionType = updates.sessionType || existingSession.sessionType;
+
+      await Evaluation.deleteMany({
+        sessionId: id,
+        status: "PENDING",
+        evaluatorId: { $nin: newPanelIds },
+      });
+
+      for (const evaluatorId of newPanelIds) {
+        const existingEvaluation = await Evaluation.findOne({
+          sessionId: id,
+          evaluatorId,
+        }).select("_id status");
+
+        if (!existingEvaluation && studentId) {
+          await Evaluation.create({
+            sessionId: id,
+            studentId,
+            evaluatorId,
+            rubricId,
+            semester: existingSession.academicSession || "",
+            sessionType,
+            status: "PENDING",
+          });
+        } else if (existingEvaluation?.status === "PENDING") {
+          await Evaluation.findByIdAndUpdate(existingEvaluation._id, {
+            rubricId,
+            sessionType,
+          });
+        }
+      }
     }
     if (updates.rubricId) {
       const evaluationUpdate = {

@@ -1,12 +1,13 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
-  Eye,
-  Lock,
-  Unlock,
   CheckCircle,
-  XCircle,
-  Send,
+  Eye,
+  FileText,
+  Lock,
+  Search,
   Shield,
+  Unlock,
+  XCircle,
   X,
 } from "lucide-react";
 import api from "../../services/api";
@@ -20,13 +21,14 @@ export default function HistoricalFeedbackPage() {
   const [evaluations, setEvaluations] = useState([]);
   const [lockedEvals, setLockedEvals] = useState([]);
   const [incomingRequests, setIncomingRequests] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [approvedRequests, setApprovedRequests] = useState([]);
-  // Modals & UI State
+  const [myRequests, setMyRequests] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("my-access");
+  const [searchTerm, setSearchTerm] = useState("");
   const [selectedEvaluation, setSelectedEvaluation] = useState(null);
-  const [activeTab, setActiveTab] = useState("my-access"); // 'my-access' | 'locked' | 'requests'
-  const [requestReason, setRequestReason] = useState("");
   const [requestModalData, setRequestModalData] = useState(null);
+  const [requestReason, setRequestReason] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
@@ -36,40 +38,142 @@ export default function HistoricalFeedbackPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const res = await api.get("/evaluations");
 
-      const completed = (res.data.data || []).filter(
-        (e) => e.status === "COMPLETED",
+      const res = await api.get("/evaluations");
+      const completed = (res.data.data || res.data.evaluations || []).filter(
+        (evaluation) => evaluation.status === "COMPLETED",
       );
+
       setEvaluations(completed);
       setLockedEvals(res.data.locked || []);
 
-      if (user?.role === "panel" || user?.role === "admin") {
-        const reqRes = await api.get(
-          "/feedback/permissions/incoming?status=PENDING",
-        );
-        setIncomingRequests(reqRes.data.requests || []);
-        const approvedReqRes = await api.get(
-          "/feedback/permissions/incoming?status=APPROVED",
-        );
-        setApprovedRequests(approvedReqRes.data.requests || []);
+      if (canManagePermissions) {
+        const [pendingRes, approvedRes, myRes] = await Promise.all([
+          api.get("/feedback/permissions/incoming?status=PENDING"),
+          api.get("/feedback/permissions/incoming?status=APPROVED"),
+          api.get("/feedback/permissions/my"),
+        ]);
+
+        setIncomingRequests(pendingRes.data.requests || []);
+        setApprovedRequests(approvedRes.data.requests || []);
+        setMyRequests(myRes.data.requests || []);
       }
     } catch (error) {
       console.error("Error loading historical data:", error);
+      alert(error.response?.data?.message || "Failed to load historical data.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleRequestAccess = async (e) => {
-    e.preventDefault();
+  const getId = (value) => (typeof value === "object" ? value?._id : value);
+
+  const getPersonName = (value, fallback = "-") => {
+    if (!value) return fallback;
+    if (typeof value === "string") return value;
+    return value.name || value.userId || value.email || fallback;
+  };
+
+  const getStudent = (item) =>
+    item?.studentId || item?.targetEvaluationId?.studentId || item?.sessionId?.students?.[0];
+
+  const getEvaluation = (item) => item?.targetEvaluationId || item;
+
+  const getSession = (item) => {
+    const evaluation = getEvaluation(item);
+    return evaluation?.sessionId || item?.currentSessionId || item?.sessionId;
+  };
+
+  const getRubric = (item) => getEvaluation(item)?.rubricId;
+
+  const formatDate = (value) => {
+    if (!value) return "-";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return "-";
+    return date.toLocaleDateString("en-MY", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
+  };
+
+  const buildSearchText = (item) => {
+    const evaluation = getEvaluation(item);
+    const session = getSession(item);
+    const student = getStudent(item);
+    const rubric = getRubric(item);
+
+    return [
+      student?.name,
+      student?.matricNumber,
+      student?.userId,
+      student?.program,
+      evaluation?.semester,
+      evaluation?.sessionType,
+      evaluation?.status,
+      rubric?.name,
+      session?.title,
+      session?.sessionType,
+      session?.batchName,
+      session?.batchId,
+      session?.academicSession,
+      getPersonName(evaluation?.evaluatorId, ""),
+      getPersonName(item?.requestingPanelId, ""),
+      getPersonName(item?.owningPanelId, ""),
+      item?.scope,
+      item?.status,
+      item?.reason,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+  };
+
+  const filterItems = (items) => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return items;
+    return items.filter((item) => buildSearchText(item).includes(term));
+  };
+
+  const visibleEvaluations = useMemo(
+    () => filterItems(evaluations),
+    [evaluations, searchTerm],
+  );
+  const visibleLocked = useMemo(
+    () => filterItems(lockedEvals),
+    [lockedEvals, searchTerm],
+  );
+  const visiblePending = useMemo(
+    () => filterItems(incomingRequests),
+    [incomingRequests, searchTerm],
+  );
+  const visibleApproved = useMemo(
+    () => filterItems(approvedRequests),
+    [approvedRequests, searchTerm],
+  );
+  const visibleMyRequests = useMemo(
+    () => filterItems(myRequests),
+    [myRequests, searchTerm],
+  );
+
+  const getScoreColor = (score) => {
+    if (!score && score !== 0) return "text-gray-600 bg-gray-100";
+    if (score >= 80) return "text-green-700 bg-green-100";
+    if (score >= 65) return "text-yellow-700 bg-yellow-100";
+    return "text-red-700 bg-red-100";
+  };
+
+  const handleRequestAccess = async (event) => {
+    event.preventDefault();
     setActionLoading(true);
+
     try {
       await api.post("/feedback/permissions/request", {
         targetEvaluationId: requestModalData._id,
         reason: requestReason,
       });
-      alert("Access request sent successfully!");
+
+      alert("Access request sent successfully.");
       setRequestModalData(null);
       setRequestReason("");
       loadData();
@@ -85,647 +189,380 @@ export default function HistoricalFeedbackPage() {
   };
 
   const handleRespondToRequest = async (requestId, action) => {
-    if (
-      !window.confirm(
-        `Are you sure you want to ${action.toLowerCase()} this request?`,
-      )
-    )
+    if (!window.confirm(`Are you sure you want to ${action.toLowerCase()} this request?`)) {
       return;
+    }
+
     try {
       await api.post("/feedback/permissions/respond", { requestId, action });
       loadData();
     } catch (error) {
-      alert(
-        error.response?.data?.message ||
-          error.response?.data?.error ||
-          "Failed to respond to request.",
-      );
+      alert(error.response?.data?.message || error.response?.data?.error || "Failed to respond.");
     }
   };
 
-  const handleWithdrawPermission = async (requestId) => {
-    if (!window.confirm("Withdraw this approved access permission?")) return;
+  const handleWithdrawPermission = async (request) => {
+    const evaluation = getEvaluation(request);
+    const session = getSession(request);
+    const student = getStudent(request);
+
+    const confirmed = window.confirm(
+      `Withdraw approved access?\n\nStudent: ${getPersonName(student)}\nSession: ${session?.title || "-"}\nBatch: ${session?.batchName || session?.batchId || "-"}\nAccess holder: ${getPersonName(request.requestingPanelId)}`,
+    );
+
+    if (!confirmed) return;
 
     try {
-      await api.post("/feedback/permissions/withdraw", { requestId });
+      await api.post("/feedback/permissions/withdraw", { requestId: getId(request) });
       loadData();
+      alert("Approved access withdrawn.");
     } catch (error) {
       alert(error.response?.data?.message || "Failed to withdraw permission.");
     }
   };
 
-  const getScoreColor = (score) => {
-    if (!score && score !== 0) return "text-gray-500";
-    if (score >= 80) return "text-green-600";
-    if (score >= 65) return "text-yellow-600";
-    return "text-red-600";
+  const InfoLine = ({ label, value }) => (
+    <div>
+      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">{label}</p>
+      <p className="text-sm font-semibold text-gray-900 break-words">{value || "-"}</p>
+    </div>
+  );
+
+  const EvaluationCard = ({ evaluation, locked = false }) => {
+    const session = getSession(evaluation);
+    const student = getStudent(evaluation);
+    const rubric = getRubric(evaluation);
+
+    return (
+      <div className="p-4 sm:p-5 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-b-0">
+        <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
+          <div className="space-y-3 flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-700">
+                {evaluation.sessionType || session?.sessionType || "Evaluation"}
+              </span>
+              <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-gray-100 text-gray-700">
+                {evaluation.semester || session?.academicSession || "No semester"}
+              </span>
+              {locked && (
+                <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-red-100 text-red-700 flex items-center gap-1">
+                  <Lock className="w-3 h-3" /> Locked
+                </span>
+              )}
+            </div>
+
+            <div>
+              <h3 className="font-bold text-gray-900 text-base sm:text-lg break-words">
+                {student?.name || "Unknown Student"}
+              </h3>
+              <p className="text-xs text-gray-500 font-mono font-bold">
+                {student?.matricNumber || student?.userId || "-"}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+              <InfoLine label="Session" value={session?.title} />
+              <InfoLine label="Batch" value={session?.batchName || session?.batchId} />
+              <InfoLine label="Date / Time" value={`${formatDate(session?.date)} · ${session?.startTime || "-"} - ${session?.endTime || "-"}`} />
+              <InfoLine label="Evaluator" value={getPersonName(evaluation.evaluatorId)} />
+              <InfoLine label="Rubric" value={rubric?.name || evaluation.sessionType} />
+              <InfoLine label="Materials" value={`${session?.studentDocuments?.length || 0} file(s)`} />
+            </div>
+          </div>
+
+          <div className="flex flex-row xl:flex-col items-center xl:items-end gap-2 shrink-0">
+            {!locked && (
+              <span className={`px-3 py-1 rounded-full text-sm font-bold ${getScoreColor(evaluation.totalMarks)}`}>
+                {evaluation.totalMarks || evaluation.totalMarks === 0 ? `${evaluation.totalMarks}%` : "Completed"}
+              </span>
+            )}
+            <button
+              onClick={() => (locked ? setRequestModalData(evaluation) : setSelectedEvaluation(evaluation))}
+              className={`px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 ${
+                locked
+                  ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                  : "bg-gray-900 text-white hover:bg-gray-800"
+              }`}
+            >
+              {locked ? <Unlock className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              {locked ? "Request" : "View"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   };
 
+  const PermissionCard = ({ request, mode }) => {
+    const evaluation = getEvaluation(request);
+    const session = getSession(request);
+    const student = getStudent(request);
+    const currentSession = request.currentSessionId;
+    const rubric = getRubric(request);
+
+    return (
+      <div className="p-4 sm:p-5 border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
+        <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
+          <div className="space-y-3 flex-1 min-w-0">
+            <div className="flex flex-wrap gap-2">
+              <span className={`px-2 py-1 rounded-full text-[11px] font-bold ${
+                request.status === "APPROVED"
+                  ? "bg-green-100 text-green-700"
+                  : request.status === "REJECTED"
+                    ? "bg-red-100 text-red-700"
+                    : request.status === "WITHDRAWN"
+                      ? "bg-gray-200 text-gray-700"
+                      : "bg-yellow-100 text-yellow-700"
+              }`}>
+                {request.status}
+              </span>
+              <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-blue-100 text-blue-700">
+                {request.scope || "SINGLE_EVALUATION"}
+              </span>
+              {request.batchId && (
+                <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-purple-100 text-purple-700">
+                  Request batch {request.batchId}
+                </span>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+              <InfoLine label="Student" value={`${getPersonName(student)} ${student?.matricNumber ? `(${student.matricNumber})` : ""}`} />
+              <InfoLine label="Historical Session" value={session?.title} />
+              <InfoLine label="Historical Batch" value={session?.batchName || session?.batchId} />
+              <InfoLine label="Historical Date" value={`${formatDate(session?.date)} · ${session?.startTime || "-"} - ${session?.endTime || "-"}`} />
+              <InfoLine label="Rubric / Type" value={rubric?.name || evaluation?.sessionType} />
+              <InfoLine label="Original Owner" value={getPersonName(request.owningPanelId || evaluation?.evaluatorId)} />
+              <InfoLine label="Access Holder" value={getPersonName(request.requestingPanelId)} />
+              <InfoLine label="Current Session" value={currentSession?.title || "-"} />
+              <InfoLine label="Current Batch" value={currentSession?.batchName || currentSession?.batchId || "-"} />
+            </div>
+
+            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Reason</p>
+              <p className="text-sm text-gray-800 break-words">{request.reason || "-"}</p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap xl:flex-col gap-2 shrink-0 xl:min-w-[150px]">
+            {mode === "pending" && (
+              <>
+                <button
+                  onClick={() => handleRespondToRequest(request._id, "APPROVED")}
+                  className="px-3 py-2 rounded-lg bg-green-600 text-white text-sm font-bold hover:bg-green-700 flex items-center gap-2"
+                >
+                  <CheckCircle className="w-4 h-4" /> Approve
+                </button>
+                <button
+                  onClick={() => handleRespondToRequest(request._id, "REJECTED")}
+                  className="px-3 py-2 rounded-lg bg-red-600 text-white text-sm font-bold hover:bg-red-700 flex items-center gap-2"
+                >
+                  <XCircle className="w-4 h-4" /> Reject
+                </button>
+              </>
+            )}
+            {mode === "approved" && (
+              <button
+                onClick={() => handleWithdrawPermission(request)}
+                className="px-3 py-2 rounded-lg bg-red-600 text-white text-sm font-bold hover:bg-red-700 flex items-center gap-2"
+              >
+                <X className="w-4 h-4" /> Withdraw
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const EmptyState = ({ text }) => (
+    <div className="p-12 text-center text-gray-500 font-semibold">{text}</div>
+  );
+
+  const ScrollPanel = ({ children }) => (
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+      <div className="max-h-[68vh] overflow-y-auto overscroll-contain">{children}</div>
+    </div>
+  );
+
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      <div className="mb-8 flex flex-col md:flex-row justify-between md:items-end gap-4">
+    <div className="max-w-7xl mx-auto space-y-5 px-1 sm:px-0">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">
-            Historical Feedback Vault
-          </h1>
-          <p className="text-gray-600 mt-2">
-            View past feedback or manage access requests.
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Historical Feedback Vault</h1>
+          <p className="text-gray-600 mt-1 text-sm sm:text-base">
+            View completed evaluations, request historical access, and manage approved access clearly.
           </p>
         </div>
 
         {canManagePermissions && (
-          <div className="flex bg-gray-200 p-1 rounded-lg self-start">
-            <button
-              onClick={() => setActiveTab("my-access")}
-              className={`px-4 py-2 rounded-md font-bold text-sm transition-all ${activeTab === "my-access" ? "bg-white text-indigo-700 shadow-sm" : "text-gray-600"}`}
-            >
-              My Access
-            </button>
-            {!isAdmin && (
-              <button
-                onClick={() => setActiveTab("locked")}
-                className={`px-4 py-2 rounded-md font-bold text-sm transition-all flex items-center gap-1 ${
-                  activeTab === "locked"
-                    ? "bg-white text-indigo-700 shadow-sm"
-                    : "text-gray-600"
-                }`}
-              >
-                <Lock className="w-4 h-4" /> Locked Records
+          <div className="w-full lg:w-auto overflow-x-auto pb-1">
+            <div className="inline-flex bg-gray-200 p-1 rounded-lg min-w-max">
+              <button onClick={() => setActiveTab("my-access")} className={`px-3 py-2 rounded-md font-bold text-xs sm:text-sm ${activeTab === "my-access" ? "bg-white text-indigo-700 shadow-sm" : "text-gray-600"}`}>
+                My Access
               </button>
-            )}
-            <button
-              onClick={() => setActiveTab("requests")}
-              className={`relative px-4 py-2 rounded-md font-bold text-sm transition-all ${activeTab === "requests" ? "bg-indigo-600 text-white shadow-sm" : "text-gray-600"}`}
-            >
-              Pending Approvals
-              {incomingRequests.length > 0 && (
-                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full animate-bounce">
-                  {incomingRequests.length}
-                </span>
+              {!isAdmin && (
+                <button onClick={() => setActiveTab("locked")} className={`px-3 py-2 rounded-md font-bold text-xs sm:text-sm flex items-center gap-1 ${activeTab === "locked" ? "bg-white text-indigo-700 shadow-sm" : "text-gray-600"}`}>
+                  <Lock className="w-4 h-4" /> Locked
+                </button>
               )}
-            </button>
-            <button
-              onClick={() => setActiveTab("approved")}
-              className={`relative px-4 py-2 rounded-md font-bold text-sm transition-all ${
-                activeTab === "approved"
-                  ? "bg-red-600 text-white shadow-sm"
-                  : "text-gray-600"
-              }`}
-            >
-              Approved Access
-              {approvedRequests.length > 0 && (
-                <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs w-5 h-5 flex items-center justify-center rounded-full">
-                  {approvedRequests.length}
-                </span>
-              )}
-            </button>
+              <button onClick={() => setActiveTab("requests")} className={`relative px-3 py-2 rounded-md font-bold text-xs sm:text-sm ${activeTab === "requests" ? "bg-indigo-600 text-white shadow-sm" : "text-gray-600"}`}>
+                Pending
+                {incomingRequests.length > 0 && <span className="ml-1 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{incomingRequests.length}</span>}
+              </button>
+              <button onClick={() => setActiveTab("approved")} className={`relative px-3 py-2 rounded-md font-bold text-xs sm:text-sm ${activeTab === "approved" ? "bg-red-600 text-white shadow-sm" : "text-gray-600"}`}>
+                Approved Access
+                {approvedRequests.length > 0 && <span className="ml-1 bg-red-500 text-white text-[10px] px-1.5 py-0.5 rounded-full">{approvedRequests.length}</span>}
+              </button>
+              <button onClick={() => setActiveTab("my-requests")} className={`px-3 py-2 rounded-md font-bold text-xs sm:text-sm ${activeTab === "my-requests" ? "bg-white text-indigo-700 shadow-sm" : "text-gray-600"}`}>
+                My Requests
+              </button>
+            </div>
           </div>
         )}
       </div>
 
+      <div className="bg-white border border-gray-200 rounded-xl p-3 flex items-center gap-2 shadow-sm">
+        <Search className="w-5 h-5 text-gray-400 shrink-0" />
+        <input
+          value={searchTerm}
+          onChange={(event) => setSearchTerm(event.target.value)}
+          placeholder="Search student, matric, evaluator, session, batch, rubric, semester, reason..."
+          className="w-full outline-none text-sm font-semibold"
+        />
+      </div>
+
       {loading ? (
-        <div className="text-center p-12 text-gray-500 font-bold">
-          Loading historical data...
-        </div>
+        <div className="text-center p-12 text-gray-500 font-bold">Loading historical data...</div>
       ) : (
         <>
-          {/* TAB 1: MY ACCESS */}
           {activeTab === "my-access" && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="divide-y divide-gray-100">
-                {evaluations.length === 0 && (
-                  <div className="p-12 text-center text-gray-500">
-                    No historical records available.
-                  </div>
-                )}
-                {evaluations.map((ev) => (
-                  <div
-                    key={ev._id}
-                    className="p-6 hover:bg-gray-50 transition-colors"
-                  >
-                    <div className="flex flex-col md:flex-row items-start justify-between gap-4">
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-2">
-                          <h3 className="text-xl font-bold text-gray-900">
-                            {ev.studentId?.name || "Unknown Student"}
-                          </h3>
-                          <span className="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-gray-200 text-gray-700">
-                            {ev.sessionType?.replace("_", " ")}
-                          </span>
-                          {ev.evaluatorId?._id !== user.id && !isAdmin && (
-                            <span className="flex items-center gap-1 text-xs font-bold text-green-700 bg-green-100 px-2 py-1 rounded">
-                              <Unlock className="w-3 h-3" /> Access Granted
-                            </span>
-                          )}
-                        </div>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm text-gray-600 mb-3 bg-gray-50 p-3 rounded border">
-                          <div>
-                            <span className="font-semibold block text-xs uppercase text-gray-400">
-                              Evaluator
-                            </span>{" "}
-                            {ev.evaluatorId?.name || "Unknown"}
-                          </div>
-                          <div>
-                            <span className="font-semibold block text-xs uppercase text-gray-400">
-                              Semester
-                            </span>{" "}
-                            {ev.sessionId?.semester || "Unknown"}
-                          </div>
-                          <div>
-                            <span className="font-semibold block text-xs uppercase text-gray-400">
-                              Score
-                            </span>{" "}
-                            <span
-                              className={`font-bold ${getScoreColor(ev.totalMarks)}`}
-                            >
-                              {ev.sessionType === "PROGRESS_ASSESSMENT"
-                                ? "N/A"
-                                : `${ev.totalMarks}%`}
-                            </span>
-                          </div>
-                        </div>
-                        <p className="text-sm text-gray-700 italic border-l-4 border-indigo-200 pl-3">
-                          "
-                          {ev.sessionType === "PROGRESS_ASSESSMENT"
-                            ? ev.summaryOfProgress || "No summary provided."
-                            : ev.overallComments ||
-                              "No overall comments provided."}
-                          "
-                        </p>
-                      </div>
-                      <button
-                        onClick={() => setSelectedEvaluation(ev)}
-                        className="w-full md:w-auto px-5 py-2.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 rounded-lg font-bold flex justify-center items-center gap-2 transition-colors"
-                      >
-                        <Eye className="w-5 h-5" /> View Full Report
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <ScrollPanel>
+              {visibleEvaluations.length === 0 ? (
+                <EmptyState text="No completed historical records available." />
+              ) : (
+                visibleEvaluations.map((evaluation) => <EvaluationCard key={evaluation._id} evaluation={evaluation} />)
+              )}
+            </ScrollPanel>
           )}
 
-          {/* TAB 2: LOCKED RECORDS */}
           {activeTab === "locked" && !isAdmin && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="p-4 bg-gray-50 border-b flex items-center gap-3">
-                <Lock className="w-5 h-5 text-gray-500" />
-                <p className="text-sm text-gray-600">
-                  These are historical evaluations for your currently assigned
-                  students, authored by other panels. You must request
-                  permission to read them.
-                </p>
-              </div>
-              <div className="divide-y divide-gray-100">
-                {lockedEvals.length === 0 && (
-                  <div className="p-12 text-center text-gray-500">
-                    No locked records found for your current students.
-                  </div>
-                )}
-                {lockedEvals.map((locked) => (
-                  <div
-                    key={locked._id}
-                    className="p-6 flex flex-col md:flex-row justify-between items-center gap-4 bg-white hover:bg-gray-50"
-                  >
-                    <div className="w-full md:w-auto">
-                      <h3 className="text-lg font-bold text-gray-900">
-                        {locked.studentId?.name}
-                      </h3>
-                      <div className="flex flex-wrap gap-2 items-center mt-2">
-                        <span className="px-2 py-1 bg-gray-100 rounded text-xs font-bold text-gray-600 uppercase">
-                          {locked.sessionType?.replace("_", " ")}
-                        </span>
-                        <span className="text-sm text-gray-500">
-                          Semester: {locked.semester}
-                        </span>
-                        <span className="text-sm text-gray-500 ml-4">
-                          Evaluator:{" "}
-                          <strong className="text-gray-700">
-                            {locked.evaluatorId?.name}
-                          </strong>
-                        </span>
-                      </div>
-                    </div>
-                    <button
-                      onClick={() => setRequestModalData(locked)}
-                      className="w-full md:w-auto px-5 py-2.5 bg-gray-800 text-white text-sm font-bold rounded-lg shadow-sm hover:bg-black flex justify-center items-center gap-2"
-                    >
-                      <Lock className="w-4 h-4" /> Request Access
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
+            <ScrollPanel>
+              {visibleLocked.length === 0 ? (
+                <EmptyState text="No locked records found." />
+              ) : (
+                visibleLocked.map((evaluation) => <EvaluationCard key={evaluation._id} evaluation={evaluation} locked />)
+              )}
+            </ScrollPanel>
           )}
 
-          {/* TAB 3: PENDING APPROVALS */}
-          {activeTab === "requests" && canManagePermissions && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="p-4 bg-indigo-50 border-b border-indigo-100 flex items-center gap-3">
-                <Shield className="w-5 h-5 text-indigo-700" />
-                <p className="text-sm text-indigo-900 font-semibold">
-                  {isAdmin
-                    ? "All pending historical access requests are shown here."
-                    : "Other panels are requesting access to evaluations you authored."}
-                </p>
-              </div>
-              <div className="divide-y divide-gray-100">
-                {incomingRequests.length === 0 && (
-                  <div className="p-12 text-center text-gray-500">
-                    You have no pending access requests.
-                  </div>
-                )}
-                {incomingRequests.map((req) => (
-                  <div key={req._id} className="p-6 bg-white hover:bg-gray-50">
-                    <div className="flex flex-col md:flex-row justify-between items-start gap-4 mb-4">
-                      <div>
-                        <p className="text-xs text-gray-500 uppercase font-bold tracking-widest mb-1">
-                          Request From Panel:
-                        </p>
-                        <h3 className="text-lg font-bold text-gray-900">
-                          {req.requestingPanelId?.name}
-                        </h3>
-                        <p className="text-sm text-gray-600">
-                          {req.requestingPanelId?.email}
-                        </p>
-                      </div>
-                      <div className="md:text-right">
-                        <p className="text-xs text-gray-500 uppercase font-bold tracking-widest mb-1">
-                          Wants to view record of:
-                        </p>
-                        <p className="font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded inline-block">
-                          {req.studentId?.name}
-                        </p>
-                        <p className="text-sm text-gray-600 mt-1">
-                          {req.targetEvaluationId?.sessionType?.replace(
-                            "_",
-                            " ",
-                          )}{" "}
-                          ({req.targetEvaluationId?.semester})
-                        </p>
-                      </div>
-                    </div>
-                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-6 relative">
-                      <div className="absolute -top-3 left-4 bg-gray-50 px-2 text-xs font-bold text-gray-500 uppercase">
-                        Reason for request
-                      </div>
-                      <p className="text-sm text-gray-800 italic leading-relaxed">
-                        "{req.reason}"
-                      </p>
-                    </div>
-                    <div className="flex justify-end gap-3 border-t pt-4">
-                      <button
-                        onClick={() =>
-                          handleRespondToRequest(req._id, "REJECTED")
-                        }
-                        className="px-5 py-2.5 border-2 border-red-200 text-red-600 bg-white hover:bg-red-50 font-bold rounded-lg flex items-center gap-2 transition-colors"
-                      >
-                        <XCircle className="w-5 h-5" /> Reject
-                      </button>
-                      <button
-                        onClick={() =>
-                          handleRespondToRequest(req._id, "APPROVED")
-                        }
-                        className="px-5 py-2.5 bg-green-600 text-white hover:bg-green-700 font-bold rounded-lg shadow-sm flex items-center gap-2 transition-colors"
-                      >
-                        <CheckCircle className="w-5 h-5" /> Grant Access
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+          {activeTab === "requests" && (
+            <ScrollPanel>
+              {visiblePending.length === 0 ? (
+                <EmptyState text="No pending approval requests." />
+              ) : (
+                visiblePending.map((request) => <PermissionCard key={request._id} request={request} mode="pending" />)
+              )}
+            </ScrollPanel>
           )}
-          {activeTab === "approved" && canManagePermissions && (
-            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="p-4 bg-red-50 border-b border-red-100 flex items-center gap-3">
-                <Shield className="w-5 h-5 text-red-700" />
-                <p className="text-sm text-red-900 font-semibold">
-                  {isAdmin
-                    ? "All approved historical access permissions are shown here and can be withdrawn."
-                    : "These panels currently have approved access to evaluations you authored."}
-                </p>
-              </div>
 
-              <div className="divide-y divide-gray-100">
-                {approvedRequests.length === 0 && (
-                  <div className="p-12 text-center text-gray-500">
-                    No approved access permissions found.
-                  </div>
-                )}
+          {activeTab === "approved" && (
+            <ScrollPanel>
+              {visibleApproved.length === 0 ? (
+                <EmptyState text="No approved access permissions." />
+              ) : (
+                visibleApproved.map((request) => <PermissionCard key={request._id} request={request} mode="approved" />)
+              )}
+            </ScrollPanel>
+          )}
 
-                {approvedRequests.map((req) => (
-                  <div key={req._id} className="p-6 bg-white hover:bg-gray-50">
-                    <div className="flex flex-col md:flex-row justify-between items-start gap-4">
-                      <div>
-                        <p className="text-xs text-gray-500 uppercase font-bold tracking-widest mb-1">
-                          Access Granted To
-                        </p>
-                        <h3 className="text-lg font-bold text-gray-900">
-                          {req.requestingPanelId?.name}
-                        </h3>
-                        <p className="text-sm text-gray-600">
-                          {req.requestingPanelId?.email}
-                        </p>
-                        <p className="text-sm text-gray-600 mt-2">
-                          Student:{" "}
-                          <span className="font-bold text-indigo-700">
-                            {req.studentId?.name}
-                          </span>
-                        </p>
-                      </div>
-
-                      <button
-                        onClick={() => handleWithdrawPermission(req._id)}
-                        className="px-5 py-2.5 bg-red-600 text-white hover:bg-red-700 font-bold rounded-lg shadow-sm flex items-center gap-2 transition-colors"
-                      >
-                        <XCircle className="w-5 h-5" />
-                        Withdraw Access
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
+          {activeTab === "my-requests" && (
+            <ScrollPanel>
+              {visibleMyRequests.length === 0 ? (
+                <EmptyState text="You have not requested historical access yet." />
+              ) : (
+                visibleMyRequests.map((request) => <PermissionCard key={request._id} request={request} mode="readonly" />)
+              )}
+            </ScrollPanel>
           )}
         </>
       )}
 
-      {/* REQUEST ACCESS MODAL */}
-      {requestModalData && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-8">
-            <h2 className="text-2xl font-bold mb-2 flex items-center gap-2">
-              <Lock className="w-6 h-6 text-gray-700" /> Request Record Access
-            </h2>
-            <p className="text-sm text-gray-600 mb-6 leading-relaxed">
-              You are requesting permission from{" "}
-              <strong>{requestModalData.evaluatorId?.name}</strong> to view
-              their evaluation of{" "}
-              <strong>{requestModalData.studentId?.name}</strong>.
-            </p>
-
-            <form onSubmit={handleRequestAccess}>
-              <label className="block text-sm font-bold text-gray-700 mb-2">
-                Reason for Access *
-              </label>
-              <textarea
-                required
-                rows="4"
-                className="w-full border border-gray-300 p-3 rounded-lg focus:ring-2 focus:ring-indigo-500 mb-6"
-                placeholder="e.g., I am evaluating this student's Pre-Viva today and need to verify their Proposal feedback..."
-                value={requestReason}
-                onChange={(e) => setRequestReason(e.target.value)}
-              />
-              <div className="flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={() => setRequestModalData(null)}
-                  className="px-5 py-2.5 text-gray-600 hover:bg-gray-100 font-bold rounded-lg transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={actionLoading}
-                  className="px-6 py-2.5 bg-gray-900 text-white font-bold rounded-lg shadow hover:bg-black flex items-center gap-2 transition-colors"
-                >
-                  {actionLoading ? (
-                    "Sending..."
-                  ) : (
-                    <>
-                      <Send className="w-4 h-4" /> Send Request
-                    </>
-                  )}
-                </button>
+      {selectedEvaluation && (
+        <div className="fixed inset-0 bg-black/60 z-[100] p-4 flex items-center justify-center">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-5 border-b flex items-start justify-between gap-4 sticky top-0 bg-white rounded-t-2xl">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Evaluation Details</h2>
+                <p className="text-sm text-gray-500">{getSession(selectedEvaluation)?.title || selectedEvaluation.sessionType}</p>
               </div>
-            </form>
+              <button onClick={() => setSelectedEvaluation(null)} className="p-2 rounded-lg hover:bg-gray-100">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <InfoLine label="Student" value={getPersonName(getStudent(selectedEvaluation))} />
+                <InfoLine label="Evaluator" value={getPersonName(selectedEvaluation.evaluatorId)} />
+                <InfoLine label="Rubric" value={getRubric(selectedEvaluation)?.name || selectedEvaluation.sessionType} />
+                <InfoLine label="Marks" value={selectedEvaluation.totalMarks || selectedEvaluation.totalMarks === 0 ? `${selectedEvaluation.totalMarks}%` : "Qualitative"} />
+              </div>
+              {selectedEvaluation.overallComments && (
+                <div className="bg-gray-50 rounded-xl border p-4">
+                  <p className="font-bold text-gray-700 mb-1">Overall Comments</p>
+                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{selectedEvaluation.overallComments}</p>
+                </div>
+              )}
+              {(selectedEvaluation.summaryOfProgress || selectedEvaluation.commentsForImprovement || selectedEvaluation.overallSuggestions) && (
+                <div className="grid grid-cols-1 gap-3">
+                  <InfoLine label="Summary of Progress" value={selectedEvaluation.summaryOfProgress} />
+                  <InfoLine label="Comments for Improvement" value={selectedEvaluation.commentsForImprovement} />
+                  <InfoLine label="Overall Suggestions" value={selectedEvaluation.overallSuggestions} />
+                </div>
+              )}
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
+                <p className="font-bold text-blue-800 flex items-center gap-2"><FileText className="w-4 h-4" /> Student Materials</p>
+                {(getSession(selectedEvaluation)?.studentDocuments || []).length === 0 ? (
+                  <p className="text-sm text-blue-700 mt-2">No material attached.</p>
+                ) : (
+                  <div className="mt-3 space-y-2">
+                    {(getSession(selectedEvaluation)?.studentDocuments || []).map((doc) => (
+                      <a key={doc._id || doc.url} href={doc.url} target="_blank" rel="noreferrer" className="block p-3 bg-white rounded-lg border text-sm font-semibold text-blue-700 hover:underline">
+                        {doc.title} · {doc.type || "material"}
+                      </a>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </div>
       )}
 
-      {/* VIEW EVALUATION MODAL */}
-      {selectedEvaluation && (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[100] p-4 sm:p-6 lg:p-8 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-2xl max-w-4xl w-full my-8 flex flex-col max-h-[90vh] overflow-hidden">
-            {/* DOCUMENT HEADER */}
-            <div className="bg-indigo-900 p-8 text-white flex flex-col md:flex-row justify-between items-center gap-6 border-b-4 border-indigo-500 relative">
-              <button
-                onClick={() => setSelectedEvaluation(null)}
-                className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full transition-colors"
-              >
-                <X className="w-6 h-6 text-white" />
-              </button>
-
-              <div className="text-center md:text-left w-full mt-4 md:mt-0">
-                <span className="inline-block px-3 py-1 bg-white/10 rounded text-xs font-bold tracking-widest uppercase mb-3 border border-white/20">
-                  {selectedEvaluation.rubricId?.name || "Official Record"}
-                </span>
-                <h2 className="text-3xl font-black uppercase tracking-wide">
-                  {selectedEvaluation.sessionType?.replace("_", " ")}
-                </h2>
-                <p className="text-indigo-200 font-medium mt-2 flex items-center justify-center md:justify-start gap-2">
-                  <CheckCircle className="w-4 h-4 text-green-400" /> Historical
-                  Vault Copy • {selectedEvaluation.semester}
-                </p>
+      {requestModalData && (
+        <div className="fixed inset-0 bg-black/60 z-[100] p-4 flex items-center justify-center">
+          <form onSubmit={handleRequestAccess} className="bg-white rounded-2xl shadow-2xl max-w-lg w-full p-6 space-y-4">
+            <div className="flex justify-between items-start gap-4">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2"><Shield className="w-5 h-5 text-indigo-600" /> Request Access</h2>
+                <p className="text-sm text-gray-600 mt-1">Explain why this historical record is needed.</p>
               </div>
-
-              {selectedEvaluation.sessionType !== "PROGRESS_ASSESSMENT" && (
-                <div className="bg-white text-gray-900 px-8 py-5 rounded-xl text-center shadow-2xl min-w-[180px] border-2 border-indigo-100">
-                  <p className="text-[10px] font-bold uppercase tracking-widest mb-1 text-gray-400">
-                    Final Official Score
-                  </p>
-                  <p className="text-5xl font-black text-indigo-700">
-                    {selectedEvaluation.totalMarks}%
-                  </p>
-                </div>
-              )}
-            </div>
-
-            {/* DOCUMENT BODY */}
-            <div className="p-8 overflow-y-auto bg-gray-50 flex-1">
-              {/* SECTION A */}
-              <div className="border border-gray-300 mb-8 rounded-lg overflow-hidden bg-white shadow-sm">
-                <div className="bg-gray-100 px-4 py-2 border-b border-gray-300">
-                  <span className="font-bold text-gray-800 uppercase text-sm tracking-widest">
-                    Section A: Candidate's & Examiner's Details
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 md:grid-cols-2">
-                  <div className="p-4 border-b md:border-b-0 md:border-r border-gray-300">
-                    <p className="text-xs font-bold text-gray-500 uppercase mb-1">
-                      Candidate's Name
-                    </p>
-                    <p className="font-bold text-gray-900 text-lg">
-                      {selectedEvaluation.studentId?.name}
-                    </p>
-                  </div>
-                  <div className="p-4 border-b border-gray-300 bg-gray-50">
-                    <p className="text-xs font-bold text-gray-500 uppercase mb-1">
-                      Matric Number
-                    </p>
-                    <p className="font-mono font-bold text-gray-900 text-lg">
-                      {selectedEvaluation.studentId?.matricNumber ||
-                        selectedEvaluation.studentId?.userId}
-                    </p>
-                  </div>
-                  <div className="p-4 border-t border-gray-300 md:col-span-2">
-                    <p className="text-xs font-bold text-gray-500 uppercase mb-1">
-                      Evaluating Panel
-                    </p>
-                    <p className="font-bold text-indigo-700 text-lg">
-                      {selectedEvaluation.evaluatorId?.name}
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              {selectedEvaluation.sessionType === "PROGRESS_ASSESSMENT" ? (
-                <div className="space-y-6">
-                  <div className="bg-white border border-gray-300 rounded-lg overflow-hidden shadow-sm">
-                    <div className="bg-gray-100 px-4 py-2 border-b border-gray-300">
-                      <span className="font-bold text-gray-800 uppercase text-sm tracking-widest">
-                        Section B: Progress Report Details
-                      </span>
-                    </div>
-                    <div className="p-6 space-y-6">
-                      <div>
-                        <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 border-b pb-1">
-                          Summary of Progress
-                        </p>
-                        <p className="text-gray-800 whitespace-pre-wrap leading-relaxed">
-                          {selectedEvaluation.summaryOfProgress ||
-                            "No summary provided."}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 border-b pb-1">
-                          Comments for Improvement
-                        </p>
-                        <p className="text-gray-800 whitespace-pre-wrap leading-relaxed">
-                          {selectedEvaluation.commentsForImprovement ||
-                            "No comments provided."}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 border-b pb-1">
-                          Overall Suggestions
-                        </p>
-                        <p className="text-gray-800 whitespace-pre-wrap leading-relaxed">
-                          {selectedEvaluation.overallSuggestions ||
-                            "No suggestions provided."}
-                        </p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div>
-                  {/* SECTION B */}
-                  {selectedEvaluation.rubricId?.criteria && (
-                    <div className="border border-gray-300 mb-8 rounded-lg overflow-hidden bg-white shadow-sm">
-                      <div className="bg-gray-100 px-4 py-2 border-b border-gray-300">
-                        <span className="font-bold text-gray-800 uppercase text-sm tracking-widest">
-                          Section B: Detailed Criteria Breakdown
-                        </span>
-                      </div>
-                      <div className="divide-y divide-gray-100">
-                        {selectedEvaluation.rubricId.criteria.map(
-                          (criterion) => {
-                            const score =
-                              selectedEvaluation.scores?.[criterion.key] || 0;
-                            const percentage = criterion.maxScore
-                              ? (score / criterion.maxScore) * 100
-                              : 0;
-                            const specificFeedback =
-                              selectedEvaluation.qualitativeFeedback?.[
-                                criterion.key
-                              ];
-
-                            return (
-                              <div
-                                key={criterion.key}
-                                className="p-6 hover:bg-gray-50 transition-colors"
-                              >
-                                <div className="flex items-start justify-between gap-4 mb-4">
-                                  <div className="flex-1">
-                                    <span className="font-bold text-gray-900 text-lg block mb-2">
-                                      {criterion.title}
-                                    </span>
-                                    <div className="w-full max-w-xs bg-gray-200 rounded-full h-2">
-                                      <div
-                                        className={`h-2 rounded-full ${percentage >= 80 ? "bg-green-500" : percentage >= 60 ? "bg-yellow-500" : "bg-red-500"}`}
-                                        style={{ width: `${percentage}%` }}
-                                      ></div>
-                                    </div>
-                                  </div>
-                                  <div className="text-right flex-shrink-0">
-                                    <span className="text-2xl font-black text-indigo-700 bg-indigo-50 px-4 py-2 rounded-lg border border-indigo-100">
-                                      {score}{" "}
-                                      <span className="text-sm font-semibold text-indigo-400">
-                                        / {criterion.maxScore}
-                                      </span>
-                                    </span>
-                                  </div>
-                                </div>
-
-                                {/* Remarks specifically for this row */}
-                                <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-2">
-                                    Examiner's Specific Remarks
-                                  </span>
-                                  <p className="text-gray-800 text-sm leading-relaxed">
-                                    {specificFeedback ? (
-                                      `"${specificFeedback}"`
-                                    ) : (
-                                      <span className="italic text-gray-400">
-                                        No specific remarks provided.
-                                      </span>
-                                    )}
-                                  </p>
-                                </div>
-                              </div>
-                            );
-                          },
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* SECTION C */}
-                  <div className="border border-gray-300 rounded-lg overflow-hidden bg-white shadow-sm">
-                    <div className="bg-gray-100 px-4 py-2 border-b border-gray-300">
-                      <span className="font-bold text-gray-800 uppercase text-sm tracking-widest">
-                        Section C: Overall Summary & Recommendations
-                      </span>
-                    </div>
-                    <div className="p-6">
-                      <p className="text-gray-900 whitespace-pre-wrap leading-relaxed text-lg italic border-l-4 border-indigo-400 pl-4">
-                        "
-                        {selectedEvaluation.overallComments ||
-                          "No overall feedback provided."}
-                        "
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* DOCUMENT FOOTER */}
-            <div className="px-6 py-4 border-t border-gray-200 bg-gray-100 rounded-b-xl flex justify-between items-center">
-              <p className="text-xs text-gray-500 font-bold uppercase tracking-widest">
-                Confidential FSKTM Record
-              </p>
-              <button
-                onClick={() => setSelectedEvaluation(null)}
-                className="px-8 py-2.5 bg-gray-900 text-white rounded-lg font-bold hover:bg-black shadow-sm transition-colors"
-              >
-                Close Report
+              <button type="button" onClick={() => setRequestModalData(null)} className="p-2 rounded-lg hover:bg-gray-100">
+                <X className="w-5 h-5" />
               </button>
             </div>
-          </div>
+            <textarea
+              value={requestReason}
+              onChange={(event) => setRequestReason(event.target.value)}
+              required
+              rows={5}
+              className="w-full border rounded-xl p-3 text-sm focus:ring-2 focus:ring-indigo-500"
+              placeholder="Example: I need to review previous panel feedback before evaluating the current session."
+            />
+            <button disabled={actionLoading} className="w-full py-3 rounded-xl bg-indigo-600 text-white font-bold hover:bg-indigo-700 disabled:bg-gray-400">
+              {actionLoading ? "Sending..." : "Send Request"}
+            </button>
+          </form>
         </div>
       )}
     </div>

@@ -19,6 +19,38 @@ const isSameId = (a, b) => String(a || "") === String(b || "");
 
 const hasActivePermissionStatus = ["PENDING", "APPROVED"];
 
+const detailedPermissionPopulate = (query) =>
+  query
+    .populate("requestingPanelId", "name email userId role")
+    .populate("studentId", "name matricNumber userId program email researchTitle")
+    .populate("owningPanelId", "name email userId role")
+    .populate("approvedBy", "name email userId role")
+    .populate("withdrawnBy", "name email userId role")
+    .populate({
+      path: "targetEvaluationId",
+      select:
+        "sessionType semester status totalMarks createdAt updatedAt rubricId evaluatorId studentId sessionId overallComments summaryOfProgress commentsForImprovement overallSuggestions",
+      populate: [
+        { path: "studentId", select: "name matricNumber userId program email" },
+        { path: "evaluatorId", select: "name email userId role" },
+        { path: "rubricId", select: "name sessionType" },
+        {
+          path: "sessionId",
+          select:
+            "title sessionType date startTime endTime venue googleMeetLink batchId batchName academicSession scheduleTitle status studentDocuments",
+          populate: {
+            path: "studentDocuments.uploadedBy",
+            select: "name userId matricNumber email role",
+          },
+        },
+      ],
+    })
+    .populate({
+      path: "currentSessionId",
+      select:
+        "title sessionType date startTime endTime venue googleMeetLink batchId batchName academicSession scheduleTitle status",
+    });
+
 const canRequesterAccessStudent = async ({
   requester,
   requesterId,
@@ -100,7 +132,7 @@ exports.searchFeedback = async (req, res) => {
       .populate({
         path: "sessionId",
         select:
-          "title sessionType date startTime endTime venue studentDocuments",
+          "title sessionType date startTime endTime venue googleMeetLink batchId batchName academicSession scheduleTitle status studentDocuments",
         populate: {
           path: "studentDocuments.uploadedBy",
           select: "name userId matricNumber email role",
@@ -650,10 +682,19 @@ exports.requestUnlockEvaluation = async (req, res) => {
 // @access  Private (Panels)
 exports.getMyPermissions = async (req, res) => {
   try {
-    const requestingPanelId = req.user.id || req.user._id || req.user.userId;
-    const requests = await PermissionRequest.find({ requestingPanelId });
+    const requestingPanelId = getAuthUserId(req);
+    const requestedStatus = cleanText(req.query.status || "", 20);
 
-    res.json({ success: true, requests });
+    const filter = { requestingPanelId };
+    if (["PENDING", "APPROVED", "REJECTED", "WITHDRAWN"].includes(requestedStatus)) {
+      filter.status = requestedStatus;
+    }
+
+    const requests = await detailedPermissionPopulate(
+      PermissionRequest.find(filter),
+    ).sort({ createdAt: -1 });
+
+    res.json({ success: true, count: requests.length, requests });
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -777,19 +818,9 @@ exports.getIncomingPermissions = async (req, res) => {
       });
     }
 
-    const requests = await PermissionRequest.find(filter)
-      .populate("requestingPanelId", "name email userId")
-      .populate("studentId", "name matricNumber userId")
-      .populate("owningPanelId", "name email userId")
-      .populate({
-        path: "targetEvaluationId",
-        select: "sessionType semester status createdAt updatedAt",
-      })
-      .populate({
-        path: "currentSessionId",
-        select: "title sessionType date startTime endTime",
-      })
-      .sort({ createdAt: -1 });
+    const requests = await detailedPermissionPopulate(
+      PermissionRequest.find(filter),
+    ).sort({ createdAt: -1 });
 
     res.json({
       success: true,
@@ -885,18 +916,19 @@ exports.getAllPermissions = async (req, res) => {
       });
     }
 
-    const requests = await PermissionRequest.find()
-      .populate("requestingPanelId", "name email userId")
-      .populate("studentId", "name matricNumber userId")
-      .populate("owningPanelId", "name email userId")
-      .populate({
-        path: "targetEvaluationId",
-        select: "sessionType semester status createdAt updatedAt",
-      })
-      .sort({ createdAt: -1 });
+    const requestedStatus = cleanText(req.query.status || "", 20);
+    const filter = {};
+    if (["PENDING", "APPROVED", "REJECTED", "WITHDRAWN"].includes(requestedStatus)) {
+      filter.status = requestedStatus;
+    }
+
+    const requests = await detailedPermissionPopulate(
+      PermissionRequest.find(filter),
+    ).sort({ createdAt: -1 });
 
     res.json({
       success: true,
+      count: requests.length,
       requests,
     });
   } catch (error) {
