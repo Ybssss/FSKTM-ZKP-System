@@ -1,15 +1,15 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import {
-  AlertCircle,
-  ArrowLeft,
-  ArrowRight,
   Calendar,
+  ChevronLeft,
+  ChevronRight,
   Clock,
-  FileText,
   MapPin,
+  AlertCircle,
+  ArrowRight,
+  FileText,
   Settings,
-  Users,
 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../../services/api";
@@ -26,52 +26,90 @@ export default function PanelDashboard() {
     const now = new Date();
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
+  const [selectedDate, setSelectedDate] = useState(() =>
+    new Date().toISOString().slice(0, 10),
+  );
 
   useEffect(() => {
     loadData();
   }, []);
 
-  const getDateOnly = (session) => {
-    const raw = session?.schedule?.date || session?.date || "";
-    if (!raw) return "";
-    const parsed = new Date(raw);
-    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
-    return String(raw).slice(0, 10);
+  const normalizeDateKey = (value) => {
+    if (!value) return "";
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
+    return date.toISOString().slice(0, 10);
   };
 
-  const getStartTime = (session) =>
-    session?.schedule?.time || session?.time || session?.startTime || "";
+  const getSessionDate = (session) =>
+    session.schedule?.date || session.date || session.startDate || "";
 
-  const getEndTime = (session) => session?.endTime || "";
+  const getSessionTime = (session) =>
+    session.schedule?.time || session.time || session.startTime || "";
 
   const getStudentName = (session) => {
-    const student = session?.student || session?.students?.[0];
-    return student?.name || student?.userId || "Student not loaded";
+    const student = session.student || session.students?.[0];
+    return student?.name || student?.userId || "Student TBA";
   };
 
   const getSessionTitle = (session) =>
-    session?.title ||
-    session?.rubric?.name ||
-    String(session?.sessionType || "Session").replaceAll("_", " ");
+    session.title || session.rubric || session.sessionType?.replaceAll("_", " ") || "Session";
 
   const loadData = async () => {
     try {
       setLoading(true);
       setError(null);
 
-      const response = await api.get("/timetables/my");
-      const allSessions =
-        response.data?.data || response.data?.sessions || response.data?.timetables || [];
+      let allSessions = [];
+
+      try {
+        const myResponse = await api.get("/timetables/my");
+        allSessions =
+          myResponse.data?.data ||
+          myResponse.data?.sessions ||
+          myResponse.data?.timetables ||
+          [];
+      } catch (myError) {
+        if (!isAdmin) throw myError;
+      }
+
+      if (isAdmin && allSessions.length === 0) {
+        const adminResponse = await api.get("/timetables");
+        allSessions =
+          adminResponse.data?.data ||
+          adminResponse.data?.sessions ||
+          adminResponse.data?.timetables ||
+          [];
+      }
+
+      allSessions = [...allSessions].sort((a, b) => {
+        const dateA = new Date(`${normalizeDateKey(getSessionDate(a))}T${getSessionTime(a) || "00:00"}`);
+        const dateB = new Date(`${normalizeDateKey(getSessionDate(b))}T${getSessionTime(b) || "00:00"}`);
+        return dateA - dateB;
+      });
 
       setSessions(allSessions);
     } catch (error) {
       console.error("❌ Error loading dashboard:", error);
-      setError(error.response?.data?.message || error.message || "Failed to load sessions");
+      setError(
+        error.response?.data?.message || error.message || "Failed to load sessions",
+      );
       setSessions([]);
     } finally {
       setLoading(false);
     }
   };
+
+  const sessionsByDate = useMemo(() => {
+    const grouped = {};
+    sessions.forEach((session) => {
+      const key = normalizeDateKey(getSessionDate(session));
+      if (!key) return;
+      grouped[key] = grouped[key] || [];
+      grouped[key].push(session);
+    });
+    return grouped;
+  }, [sessions]);
 
   const upcomingSessions = useMemo(() => {
     const today = new Date();
@@ -79,72 +117,100 @@ export default function PanelDashboard() {
 
     return sessions
       .filter((session) => {
-        const dateOnly = getDateOnly(session);
-        if (!dateOnly) return false;
-        const date = new Date(`${dateOnly}T00:00:00`);
-        return date >= today && String(session.status || "").toLowerCase() !== "cancelled";
+        const dateKey = normalizeDateKey(getSessionDate(session));
+        if (!dateKey) return false;
+        return new Date(`${dateKey}T00:00`) >= today;
       })
-      .sort((a, b) => {
-        const dateDiff = new Date(getDateOnly(a)) - new Date(getDateOnly(b));
-        if (dateDiff !== 0) return dateDiff;
-        return String(getStartTime(a)).localeCompare(String(getStartTime(b)));
-      });
+      .slice(0, 6);
   }, [sessions]);
+
+  const selectedDateSessions = sessionsByDate[selectedDate] || [];
 
   const monthLabel = calendarMonth.toLocaleDateString("en-MY", {
     month: "long",
     year: "numeric",
   });
 
-  const calendarDays = useMemo(() => {
+  const monthDays = useMemo(() => {
     const year = calendarMonth.getFullYear();
     const month = calendarMonth.getMonth();
     const firstDay = new Date(year, month, 1);
-    const startDate = new Date(firstDay);
-    startDate.setDate(firstDay.getDate() - firstDay.getDay());
+    const lastDay = new Date(year, month + 1, 0);
+    const days = [];
 
-    return Array.from({ length: 42 }, (_, index) => {
-      const date = new Date(startDate);
-      date.setDate(startDate.getDate() + index);
-      const dateOnly = date.toISOString().slice(0, 10);
-      return {
-        date,
-        dateOnly,
-        inCurrentMonth: date.getMonth() === month,
-        isToday: dateOnly === new Date().toISOString().slice(0, 10),
-      };
-    });
+    const startOffset = firstDay.getDay();
+    for (let i = 0; i < startOffset; i += 1) days.push(null);
+
+    for (let day = 1; day <= lastDay.getDate(); day += 1) {
+      days.push(new Date(year, month, day));
+    }
+
+    while (days.length % 7 !== 0) days.push(null);
+
+    return days;
   }, [calendarMonth]);
 
-  const sessionsByDate = useMemo(() => {
-    const grouped = new Map();
-    sessions.forEach((session) => {
-      const dateOnly = getDateOnly(session);
-      if (!dateOnly) return;
-      if (!grouped.has(dateOnly)) grouped.set(dateOnly, []);
-      grouped.get(dateOnly).push(session);
-    });
-
-    grouped.forEach((items) => {
-      items.sort((a, b) => String(getStartTime(a)).localeCompare(String(getStartTime(b))));
-    });
-
-    return grouped;
-  }, [sessions]);
-
-  const shiftMonth = (direction) => {
-    setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + direction, 1));
+  const changeMonth = (offset) => {
+    setCalendarMonth(
+      (prev) => new Date(prev.getFullYear(), prev.getMonth() + offset, 1),
+    );
   };
 
-  const goToSession = (session) => {
-    const sessionId = session?._id || session?.id;
-    if (!sessionId) return;
+  const renderSessionCard = (session) => {
+    const sessionId = session.id || session._id;
+    const dateKey = normalizeDateKey(getSessionDate(session));
 
-    if (isAdmin) {
-      navigate(`/panel/sessions/${sessionId}`);
-    } else {
-      navigate(`/panel/evaluation?sessionId=${sessionId}`);
-    }
+    return (
+      <div
+        key={sessionId}
+        className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm hover:border-indigo-300 transition-colors"
+      >
+        <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="font-bold text-gray-900 text-sm sm:text-base truncate">
+              {getSessionTitle(session)}
+            </h3>
+            <p className="text-xs font-semibold text-indigo-700 mt-1">
+              {getStudentName(session)}
+            </p>
+            <div className="flex flex-wrap gap-3 text-xs text-gray-600 mt-2">
+              <span className="inline-flex items-center gap-1">
+                <Calendar className="w-3.5 h-3.5" />
+                {dateKey || "No date"}
+              </span>
+              <span className="inline-flex items-center gap-1">
+                <Clock className="w-3.5 h-3.5" />
+                {getSessionTime(session) || "No time"}
+              </span>
+              {(session.schedule?.venue || session.venue || session.googleMeetLink) && (
+                <span className="inline-flex items-center gap-1 max-w-full truncate">
+                  <MapPin className="w-3.5 h-3.5 shrink-0" />
+                  <span className="truncate">
+                    {session.schedule?.venue || session.venue || session.googleMeetLink}
+                  </span>
+                </span>
+              )}
+            </div>
+          </div>
+
+          <button
+            onClick={() =>
+              isAdmin
+                ? navigate(`/panel/sessions/${sessionId}`)
+                : navigate(`/panel/evaluation?sessionId=${sessionId}`)
+            }
+            className={`inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold w-full sm:w-auto ${
+              isAdmin
+                ? "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                : "bg-indigo-600 text-white hover:bg-indigo-700"
+            }`}
+          >
+            {isAdmin ? <Settings className="w-3.5 h-3.5" /> : <FileText className="w-3.5 h-3.5" />}
+            {isAdmin ? "Manage" : "Evaluate"}
+          </button>
+        </div>
+      </div>
+    );
   };
 
   if (loading) {
@@ -153,10 +219,10 @@ export default function PanelDashboard() {
         {[1, 2, 3].map((i) => (
           <div
             key={i}
-            className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 animate-pulse"
+            className="bg-white rounded-lg shadow-sm border border-gray-200 p-5 animate-pulse"
           >
-            <div className="h-4 bg-gray-200 rounded w-24 mb-4" />
-            <div className="h-8 bg-gray-200 rounded w-32" />
+            <div className="h-4 bg-gray-200 rounded w-24 mb-4"></div>
+            <div className="h-8 bg-gray-200 rounded w-32"></div>
           </div>
         ))}
       </div>
@@ -164,27 +230,21 @@ export default function PanelDashboard() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-            Welcome back, {user?.name}!
-          </h1>
-          <p className="text-gray-600 mt-2">Here is your session calendar and upcoming work.</p>
-        </div>
-        <Link
-          to="/panel/sessions"
-          className="inline-flex items-center justify-center gap-1 text-sm text-indigo-700 hover:text-indigo-900 font-bold bg-indigo-50 px-4 py-2 rounded-lg border border-indigo-100"
-        >
-          Open Session Management <ArrowRight className="w-4 h-4" />
-        </Link>
+    <div className="max-w-7xl mx-auto space-y-5">
+      <div>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+          Welcome back, {user?.name}!
+        </h1>
+        <p className="text-gray-600 mt-1 text-sm sm:text-base">
+          Compact calendar and upcoming evaluation sessions.
+        </p>
       </div>
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
           <div className="flex-1">
-            <p className="text-sm font-medium text-red-800">Unable to Load Sessions</p>
+            <p className="text-sm font-bold text-red-800">Unable to Load Sessions</p>
             <p className="text-xs text-red-700 mt-1">{error}</p>
             <button
               onClick={loadData}
@@ -196,199 +256,114 @@ export default function PanelDashboard() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="p-4 sm:p-5 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-gray-50">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 flex items-center gap-2">
-              <Calendar className="w-5 h-5 text-indigo-600" /> Calendar
-            </h2>
-            <p className="text-xs text-gray-500 mt-1">Admin sees all sessions; panels see assigned sessions.</p>
-          </div>
-          <div className="flex items-center gap-2">
+      <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-4 items-start">
+        <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 w-full xl:max-w-sm">
+          <div className="flex items-center justify-between mb-3">
             <button
-              onClick={() => shiftMonth(-1)}
-              className="p-2 rounded-lg border bg-white hover:bg-gray-50"
+              type="button"
+              onClick={() => changeMonth(-1)}
+              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
             >
-              <ArrowLeft className="w-4 h-4" />
+              <ChevronLeft className="w-4 h-4" />
             </button>
-            <div className="min-w-[150px] text-center font-bold text-gray-900">{monthLabel}</div>
+            <h2 className="text-sm font-extrabold text-gray-900">{monthLabel}</h2>
             <button
-              onClick={() => shiftMonth(1)}
-              className="p-2 rounded-lg border bg-white hover:bg-gray-50"
+              type="button"
+              onClick={() => changeMonth(1)}
+              className="p-2 rounded-lg hover:bg-gray-100 text-gray-600"
             >
-              <ArrowRight className="w-4 h-4" />
+              <ChevronRight className="w-4 h-4" />
             </button>
           </div>
-        </div>
 
-        <div className="hidden md:grid grid-cols-7 bg-gray-100 text-[11px] font-bold uppercase text-gray-500">
-          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-            <div key={day} className="p-2 border-r border-gray-200 last:border-r-0">
-              {day}
-            </div>
-          ))}
-        </div>
+          <div className="grid grid-cols-7 gap-1 text-center text-[10px] font-bold text-gray-500 uppercase mb-1">
+            {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+              <div key={day}>{day}</div>
+            ))}
+          </div>
 
-        <div className="hidden md:grid grid-cols-7 border-t border-gray-200">
-          {calendarDays.map((day) => {
-            const daySessions = sessionsByDate.get(day.dateOnly) || [];
-            return (
-              <div
-                key={day.dateOnly}
-                className={`min-h-[130px] p-2 border-r border-b border-gray-200 last:border-r-0 ${
-                  day.inCurrentMonth ? "bg-white" : "bg-gray-50 text-gray-400"
-                } ${day.isToday ? "ring-2 ring-inset ring-indigo-300" : ""}`}
-              >
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-xs font-bold">{day.date.getDate()}</span>
-                  {daySessions.length > 0 && (
-                    <span className="text-[10px] bg-indigo-100 text-indigo-700 font-bold rounded-full px-2 py-0.5">
-                      {daySessions.length}
+          <div className="grid grid-cols-7 gap-1">
+            {monthDays.map((date, index) => {
+              if (!date) return <div key={`blank-${index}`} className="h-11" />;
+
+              const dateKey = date.toISOString().slice(0, 10);
+              const count = sessionsByDate[dateKey]?.length || 0;
+              const isSelected = dateKey === selectedDate;
+              const isToday = dateKey === new Date().toISOString().slice(0, 10);
+
+              return (
+                <button
+                  key={dateKey}
+                  type="button"
+                  onClick={() => setSelectedDate(dateKey)}
+                  className={`h-11 rounded-lg border text-xs font-bold flex flex-col items-center justify-center transition-colors ${
+                    isSelected
+                      ? "border-indigo-600 bg-indigo-600 text-white"
+                      : isToday
+                        ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                        : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                  }`}
+                >
+                  <span>{date.getDate()}</span>
+                  {count > 0 && (
+                    <span
+                      className={`mt-0.5 rounded-full px-1.5 py-0.5 text-[9px] leading-none ${
+                        isSelected ? "bg-white text-indigo-700" : "bg-indigo-600 text-white"
+                      }`}
+                    >
+                      {count}
                     </span>
                   )}
-                </div>
-                <div className="space-y-1 max-h-[90px] overflow-y-auto pr-1">
-                  {daySessions.slice(0, 4).map((session) => (
-                    <button
-                      key={session._id || session.id}
-                      onClick={() => goToSession(session)}
-                      className="w-full text-left rounded bg-indigo-50 border border-indigo-100 hover:bg-indigo-100 p-1.5"
-                    >
-                      <p className="text-[11px] font-bold text-indigo-900 truncate">
-                        {getStartTime(session)} {getSessionTitle(session)}
-                      </p>
-                      <p className="text-[10px] text-indigo-700 truncate">{getStudentName(session)}</p>
-                    </button>
-                  ))}
-                  {daySessions.length > 4 && (
-                    <p className="text-[10px] text-gray-500 font-bold">+{daySessions.length - 4} more</p>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="md:hidden divide-y divide-gray-100 max-h-[460px] overflow-y-auto">
-          {calendarDays
-            .filter((day) => day.inCurrentMonth && (sessionsByDate.get(day.dateOnly) || []).length > 0)
-            .map((day) => (
-              <div key={day.dateOnly} className="p-3">
-                <p className="font-bold text-sm text-gray-900 mb-2">
-                  {day.date.toLocaleDateString("en-MY", {
-                    weekday: "short",
-                    day: "numeric",
-                    month: "short",
-                  })}
-                </p>
-                <div className="space-y-2">
-                  {(sessionsByDate.get(day.dateOnly) || []).map((session) => (
-                    <button
-                      key={session._id || session.id}
-                      onClick={() => goToSession(session)}
-                      className="w-full text-left rounded-lg bg-indigo-50 border border-indigo-100 p-3"
-                    >
-                      <p className="font-bold text-indigo-900 text-sm">{getSessionTitle(session)}</p>
-                      <p className="text-xs text-indigo-700 mt-1">
-                        {getStartTime(session)}{getEndTime(session) ? ` - ${getEndTime(session)}` : ""} · {getStudentName(session)}
-                      </p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            ))}
-          {calendarDays.every((day) => !day.inCurrentMonth || (sessionsByDate.get(day.dateOnly) || []).length === 0) && (
-            <div className="p-8 text-center text-gray-500 font-semibold">No sessions in this month.</div>
-          )}
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6">
-        <div className="flex items-center justify-between mb-5">
-          <h2 className="text-xl sm:text-2xl font-bold text-gray-900">Upcoming Sessions</h2>
-          <span className="text-xs font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-full">
-            {upcomingSessions.length} upcoming
-          </span>
-        </div>
-
-        {upcomingSessions.length === 0 ? (
-          <div className="text-center py-12 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
-            <Calendar className="w-16 h-16 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-600 font-medium">Your schedule is clear.</p>
-            <p className="text-sm text-gray-500 mt-1">No upcoming sessions assigned at the moment.</p>
-          </div>
-        ) : (
-          <div className="space-y-3 max-h-[520px] overflow-y-auto pr-1">
-            {upcomingSessions.slice(0, 12).map((session) => {
-              const sessionId = session.id || session._id;
-              return (
-                <div
-                  key={sessionId}
-                  className="p-4 sm:p-5 border border-gray-200 rounded-xl hover:shadow-md hover:border-indigo-300 transition-all bg-white flex flex-col md:flex-row md:items-center justify-between gap-4"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                      <h3 className="text-base sm:text-lg font-bold text-gray-900 truncate">
-                        {getSessionTitle(session)}
-                      </h3>
-                      <span className="bg-green-100 text-green-800 text-[10px] uppercase font-bold px-2 py-0.5 rounded">
-                        Upcoming
-                      </span>
-                    </div>
-
-                    <p className="text-sm font-semibold text-indigo-700 mb-3 bg-indigo-50 inline-block px-2 py-1 rounded">
-                      <Users className="w-3 h-3 inline mr-1" /> {getStudentName(session)}
-                    </p>
-
-                    <div className="flex flex-wrap gap-4 text-sm text-gray-600">
-                      <div className="flex items-center gap-1.5">
-                        <Calendar className="w-4 h-4 text-gray-400" />
-                        <span className="font-medium">
-                          {new Date(`${getDateOnly(session)}T00:00:00`).toLocaleDateString("en-MY", {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          })}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1.5">
-                        <Clock className="w-4 h-4 text-gray-400" />
-                        <span className="font-medium">
-                          {getStartTime(session)}{getEndTime(session) ? ` - ${getEndTime(session)}` : ""}
-                        </span>
-                      </div>
-                      {(session.schedule?.venue || session.venue) && (
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <MapPin className="w-4 h-4 text-gray-400 shrink-0" />
-                          <span className="truncate">{session.schedule?.venue || session.venue}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-3 md:border-l md:pl-4 pt-4 md:pt-0 border-t md:border-t-0">
-                    {isAdmin ? (
-                      <button
-                        onClick={() => navigate(`/panel/sessions/${sessionId}`)}
-                        className="flex items-center justify-center gap-2 w-full md:w-auto px-4 py-2 bg-gray-100 text-gray-700 hover:bg-gray-200 font-bold rounded-lg transition-colors"
-                      >
-                        <Settings className="w-4 h-4" /> Manage Session
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => navigate(`/panel/evaluation?sessionId=${sessionId}`)}
-                        className="flex items-center justify-center gap-2 w-full md:w-auto px-5 py-2.5 bg-indigo-600 text-white hover:bg-indigo-700 font-bold rounded-lg shadow-sm transition-colors"
-                      >
-                        <FileText className="w-4 h-4" /> Evaluate Now
-                      </button>
-                    )}
-                  </div>
-                </div>
+                </button>
               );
             })}
           </div>
-        )}
+        </section>
+
+        <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 min-w-0">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+            <div>
+              <h2 className="text-lg font-bold text-gray-900">Selected Day</h2>
+              <p className="text-sm text-gray-500">{selectedDate}</p>
+            </div>
+            <Link
+              to="/panel/sessions"
+              className="text-sm text-indigo-600 hover:text-indigo-800 font-bold inline-flex items-center gap-1 bg-indigo-50 px-3 py-2 rounded-lg w-full sm:w-auto justify-center"
+            >
+              Session Management <ArrowRight className="w-4 h-4" />
+            </Link>
+          </div>
+
+          {selectedDateSessions.length === 0 ? (
+            <div className="rounded-xl border-2 border-dashed border-gray-200 bg-gray-50 p-8 text-center">
+              <Calendar className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+              <p className="font-semibold text-gray-600">No sessions on this day.</p>
+            </div>
+          ) : (
+            <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+              {selectedDateSessions.map(renderSessionCard)}
+            </div>
+          )}
+        </section>
       </div>
+
+      <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-lg font-bold text-gray-900">Upcoming Sessions</h2>
+          <span className="text-xs font-bold text-gray-500">Next {upcomingSessions.length}</span>
+        </div>
+
+        {upcomingSessions.length === 0 ? (
+          <div className="text-center py-10 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+            <Calendar className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-600 font-medium">Your schedule is clear.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {upcomingSessions.map(renderSessionCard)}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

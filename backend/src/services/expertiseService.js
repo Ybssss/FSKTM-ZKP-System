@@ -4,262 +4,224 @@ const cheerio = require("cheerio");
 class ExpertiseService {
   constructor() {
     this.baseUrl = "https://community.uthm.edu.my";
-    this.cache = new Map(); // Simple in-memory cache
-    this.cacheExpiry = 24 * 60 * 60 * 1000; // 24 hours
+    this.cache = new Map();
+    this.cacheExpiry = 24 * 60 * 60 * 1000;
+
+    this.profileSlugMap = {
+      admin_samihah: "samihah",
+      samihah: "samihah",
+      panel_zkp: "nurziadah",
+      nurziadah: "nurziadah",
+      panel_ai: "shahreen",
+      shahreen: "shahreen",
+      panel_blockchain: "sapiee",
+      sapiee: "sapiee",
+      panel_web: "nrliyana",
+      nurliyana: "nrliyana",
+      nrliyana: "nrliyana",
+      panel_network: "zubaile",
+      zubaile: "zubaile",
+    };
   }
 
-  /**
-   * Fetch expertise data for a specific user from UTHM Community
-   * @param {string} userId - The user ID to fetch expertise for
-   * @returns {Promise<Array>} Array of expertise tags
-   */
-  async fetchUserExpertise(userId) {
+  normalizeKey(value = "") {
+    return String(value)
+      .trim()
+      .toLowerCase()
+      .replace(/^https?:\/\/community\.uthm\.edu\.my\//, "")
+      .replace(/^staff\/people\//, "")
+      .replace(/^profile\//, "")
+      .replace(/\?.*$/, "")
+      .replace(/\/$/, "");
+  }
+
+  resolveProfileIdentifier(identifier = "") {
+    const key = this.normalizeKey(identifier);
+    const mapped = this.profileSlugMap[key] || key;
+
+    if (!mapped) return null;
+
+    if (/^https?:\/\//i.test(String(identifier))) {
+      return String(identifier).trim();
+    }
+
+    return `${this.baseUrl}/${mapped}`;
+  }
+
+  async fetchUserExpertise(identifier) {
     try {
-      // Check cache first
-      const cached = this.getCachedExpertise(userId);
-      if (cached) {
-        return cached;
-      }
+      const cacheKey = this.normalizeKey(identifier);
+      const cached = this.getCachedExpertise(cacheKey);
+      if (cached) return cached;
 
-      // Fetch from UTHM Community site
-      const expertise = await this.scrapeUserExpertise(userId);
-
-      // Cache the result
-      this.setCachedExpertise(userId, expertise);
-
-      return expertise;
+      const result = await this.scrapeUserExpertise(identifier);
+      this.setCachedExpertise(cacheKey, result);
+      return result;
     } catch (error) {
-      console.error(
-        `Error fetching expertise for user ${userId}:`,
-        error.message,
-      );
-      // Return empty array on error to prevent system failure
+      console.error(`Error fetching expertise for ${identifier}:`, error.message);
       return [];
     }
   }
 
-  /**
-   * Scrape expertise data from UTHM Community profile
-   * @param {string} userId - The user ID
-   * @returns {Promise<Array>} Array of expertise tags
-   */
-  async scrapeUserExpertise(userId) {
-    try {
-      // Construct the profile URL - this may need adjustment based on actual URL structure
-      const profileUrl = `${this.baseUrl}/profile/${userId}`;
+  async scrapeUserExpertise(identifier) {
+    const directUrl = this.resolveProfileIdentifier(identifier);
+    if (!directUrl) return [];
 
-      console.log(`🔍 Fetching expertise from: ${profileUrl}`);
+    const fallbackUrl = `${this.baseUrl}/profile/${this.normalizeKey(identifier)}`;
+    const urlsToTry = [...new Set([directUrl, fallbackUrl])];
 
-      const response = await axios.get(profileUrl, {
-        timeout: 10000, // 10 second timeout
-        headers: {
-          "User-Agent": "UTHM-ZKP-System/1.0 (Academic Research System)",
-        },
-      });
+    for (const profileUrl of urlsToTry) {
+      try {
+        console.log(`🔍 Fetching expertise from: ${profileUrl}`);
 
-      if (response.status !== 200) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      // Parse the HTML to extract expertise
-      const expertise = this.parseExpertiseFromHTML(response.data);
-
-      console.log(
-        `✅ Found ${expertise.length} expertise areas for ${userId}:`,
-        expertise,
-      );
-      return expertise;
-    } catch (error) {
-      if (error.code === "ENOTFOUND" || error.code === "ECONNREFUSED") {
-        console.warn(`⚠️ UTHM Community site unreachable: ${error.message}`);
-      } else {
-        console.error(
-          `❌ Error scraping expertise for ${userId}:`,
-          error.message,
-        );
-      }
-      return [];
-    }
-  }
-
-  /**
-   * Parse expertise from HTML content
-   * @param {string} html - The HTML content
-   * @returns {Array} Array of expertise strings
-   */
-  parseExpertiseFromHTML(html) {
-    try {
-      const $ = cheerio.load(html);
-      const expertise = [];
-
-      // Look for common patterns in academic profile pages
-      // These selectors may need adjustment based on actual site structure
-
-      // Try multiple possible selectors for expertise/research areas
-      const selectors = [
-        ".expertise",
-        ".research-areas",
-        ".specialization",
-        ".field-of-study",
-        ".research-interests",
-        ".expertise-tags",
-        ".research-tags",
-        '[data-field="expertise"]',
-        '[data-field="research"]',
-        ".profile-expertise",
-        ".academic-interests",
-      ];
-
-      for (const selector of selectors) {
-        $(selector).each((i, elem) => {
-          const text = $(elem).text().trim();
-          if (text && text.length > 0) {
-            // Split by common delimiters and clean up
-            const tags = text
-              .split(/[,;|\n]/)
-              .map((tag) => tag.trim())
-              .filter((tag) => tag.length > 0 && tag.length < 100); // Reasonable length filter
-
-            expertise.push(...tags);
-          }
+        const response = await axios.get(profileUrl, {
+          timeout: 12000,
+          headers: {
+            "User-Agent": "UTHM-ZKP-System/1.0 (Academic Research System)",
+          },
         });
 
-        // If we found expertise, break
-        if (expertise.length > 0) break;
+        if (response.status !== 200) continue;
+
+        const parsed = this.parseProfile(response.data);
+        const expertise = parsed.expertiseTags;
+
+        if (expertise.length > 0) {
+          console.log(`✅ Found ${expertise.length} expertise entries for ${identifier}`);
+          return expertise;
+        }
+      } catch (error) {
+        console.warn(`⚠️ Could not read ${profileUrl}: ${error.message}`);
       }
-
-      // Remove duplicates and clean
-      const uniqueExpertise = [...new Set(expertise)]
-        .map((exp) => exp.toLowerCase().trim())
-        .filter((exp) => exp.length > 1); // Remove single characters
-
-      return uniqueExpertise;
-    } catch (error) {
-      console.error("Error parsing HTML for expertise:", error.message);
-      return [];
     }
+
+    return [];
   }
 
-  /**
-   * Get cached expertise data
-   * @param {string} userId
-   * @returns {Array|null} Cached expertise or null if not found/expired
-   */
-  getCachedExpertise(userId) {
-    const cached = this.cache.get(userId);
+  cleanLine(value = "") {
+    return String(value)
+      .replace(/\u00a0/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  addExpertise(target, value) {
+    const cleaned = this.cleanLine(value)
+      .replace(/^Field Category \(KPT\)\s*:\s*/i, "")
+      .replace(/^Field \(KPT\)\s*:\s*/i, "")
+      .replace(/^Field of Specialization \(KPT\)\s*:\s*/i, "")
+      .replace(/^Category Expertise$/i, "")
+      .trim();
+
+    if (!cleaned) return;
+    if (cleaned === "* * *") return;
+    if (/^(FIELD OF EXPERTISE|AREAS OF RESEARCH INTEREST|INNOVATION FIELD OF INTEREST)$/i.test(cleaned)) return;
+    if (/^(CONTACT DETAILS|PROFESSIONAL APPOINTMENTS|ACADEMIC QUALIFICATION|MANAGEMENT EXPERIENCE)$/i.test(cleaned)) return;
+    if (cleaned.length < 2 || cleaned.length > 140) return;
+
+    cleaned
+      .split(/[,;|]/)
+      .map((item) => this.cleanLine(item))
+      .filter((item) => item.length >= 2 && item.length <= 100)
+      .forEach((item) => target.add(item));
+  }
+
+  getLinesBetween(lines, startHeader, endHeaders = []) {
+    const startIndex = lines.findIndex((line) =>
+      line.toUpperCase() === startHeader.toUpperCase(),
+    );
+
+    if (startIndex === -1) return [];
+
+    const endIndex = lines.findIndex((line, index) => {
+      if (index <= startIndex) return false;
+      return endHeaders.some(
+        (header) => line.toUpperCase() === header.toUpperCase(),
+      );
+    });
+
+    return lines.slice(startIndex + 1, endIndex === -1 ? lines.length : endIndex);
+  }
+
+  parseProfile(html) {
+    const $ = cheerio.load(html);
+    const bodyText = $("body").text();
+    const lines = bodyText
+      .split(/\n+/)
+      .map((line) => this.cleanLine(line))
+      .filter(Boolean);
+
+    const expertise = new Set();
+
+    const fieldLines = this.getLinesBetween(lines, "FIELD OF EXPERTISE", [
+      "AREAS OF RESEARCH INTEREST",
+      "INNOVATION FIELD OF INTEREST",
+      "MANAGEMENT EXPERIENCE",
+      "TEACHING EXPERIENCE",
+    ]);
+
+    const researchLines = this.getLinesBetween(lines, "AREAS OF RESEARCH INTEREST", [
+      "INNOVATION FIELD OF INTEREST",
+      "MANAGEMENT EXPERIENCE",
+      "TEACHING EXPERIENCE",
+    ]);
+
+    const innovationLines = this.getLinesBetween(lines, "INNOVATION FIELD OF INTEREST", [
+      "MANAGEMENT EXPERIENCE",
+      "TEACHING EXPERIENCE",
+      "RESEARCH GRANTS AND CONTRACTS",
+      "PUBLICATIONS",
+    ]);
+
+    [...fieldLines, ...researchLines, ...innovationLines].forEach((line) => {
+      if (/Field Category \(KPT\)\s*:/i.test(line)) return;
+      this.addExpertise(expertise, line);
+    });
+
+    const profileName = lines.find((line) =>
+      /^(PROF\.|PROF|DR\.|TS\.|IR\.|EN\.|PN\.)/i.test(line),
+    );
+
+    const professionalAppointment = lines.find((line) =>
+      /^DS\d+\s+/i.test(line),
+    );
+
+    return {
+      name: profileName || "",
+      profession: professionalAppointment || "",
+      expertiseTags: [...expertise],
+    };
+  }
+
+  parseExpertiseFromHTML(html) {
+    return this.parseProfile(html).expertiseTags;
+  }
+
+  getCachedExpertise(key) {
+    const cached = this.cache.get(key);
     if (!cached) return null;
 
-    // Check if cache is expired
     if (Date.now() - cached.timestamp > this.cacheExpiry) {
-      this.cache.delete(userId);
+      this.cache.delete(key);
       return null;
     }
 
     return cached.data;
   }
 
-  /**
-   * Set cached expertise data
-   * @param {string} userId
-   * @param {Array} expertise
-   */
-  setCachedExpertise(userId, expertise) {
-    this.cache.set(userId, {
-      data: expertise,
+  setCachedExpertise(key, expertise) {
+    this.cache.set(key, {
+      data: Array.isArray(expertise) ? expertise : [],
       timestamp: Date.now(),
     });
   }
 
-  /**
-   * Clear cache for a specific user
-   * @param {string} userId
-   */
-  clearUserCache(userId) {
-    this.cache.delete(userId);
+  clearUserCache(identifier) {
+    this.cache.delete(this.normalizeKey(identifier));
   }
 
-  /**
-   * Clear all cached data
-   */
   clearAllCache() {
     this.cache.clear();
-  }
-
-  /**
-   * Match student research title with panel expertise
-   * @param {string} researchTitle - Student's research title
-   * @param {Array} panelExpertise - Array of panel's expertise tags
-   * @returns {Object} Match result with score and matched terms
-   */
-  matchExpertise(researchTitle, panelExpertise) {
-    if (!researchTitle || !panelExpertise || panelExpertise.length === 0) {
-      return { score: 0, matches: [], isMatch: false };
-    }
-
-    const title = researchTitle.toLowerCase();
-    const matches = [];
-    let totalScore = 0;
-
-    for (const expertise of panelExpertise) {
-      const exp = expertise.toLowerCase();
-
-      // Exact match gets highest score
-      if (title.includes(exp) || exp.includes(title)) {
-        matches.push({ term: expertise, type: "exact", score: 100 });
-        totalScore += 100;
-      }
-      // Partial word matches
-      else {
-        const words = exp.split(/\s+/);
-        let wordMatches = 0;
-
-        for (const word of words) {
-          if (word.length > 2 && title.includes(word)) {
-            wordMatches++;
-          }
-        }
-
-        if (wordMatches > 0) {
-          const score = Math.min(80, wordMatches * 20);
-          matches.push({ term: expertise, type: "partial", score });
-          totalScore += score;
-        }
-      }
-    }
-
-    // Average score across all expertise areas
-    const avgScore = matches.length > 0 ? totalScore / matches.length : 0;
-
-    return {
-      score: Math.round(avgScore),
-      matches,
-      isMatch: avgScore >= 30, // Consider it a match if score >= 30
-    };
-  }
-
-  /**
-   * Get recommended panels for a student based on research title
-   * @param {string} researchTitle - Student's research title
-   * @param {Array} availablePanels - Array of panel objects with userId and cached expertise
-   * @returns {Array} Sorted array of panel recommendations
-   */
-  getPanelRecommendations(researchTitle, availablePanels) {
-    const recommendations = [];
-
-    for (const panel of availablePanels) {
-      const match = this.matchExpertise(researchTitle, panel.expertise || []);
-      if (match.isMatch) {
-        recommendations.push({
-          panelId: panel._id || panel.id,
-          userId: panel.userId,
-          name: panel.name,
-          match,
-        });
-      }
-    }
-
-    // Sort by match score (highest first)
-    return recommendations.sort((a, b) => b.match.score - a.match.score);
   }
 }
 

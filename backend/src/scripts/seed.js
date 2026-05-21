@@ -580,7 +580,7 @@ const seedDatabase = async () => {
     const adminUsers = [
       {
         userId: "admin_samihah",
-        name: "CHE SAMIHAH BINTI CHE DALIM",
+        name: "Dr. CHE SAMIHAH BINTI CHE DALIM",
         email: "samihah@uthm.edu.my",
         role: "admin",
         registrationCode: "temp",
@@ -611,7 +611,7 @@ const seedDatabase = async () => {
     const demoPanels = [
       {
         userId: "panel_zkp",
-        name: "NUR ZIADAH BINTI HARUN",
+        name: "Dr. NUR ZIADAH BINTI HARUN",
         email: "panel.zkp@example.com",
         role: "panel",
         profession:
@@ -628,7 +628,7 @@ const seedDatabase = async () => {
       },
       {
         userId: "panel_ai",
-        name: "SHAHREEN BINTI KASIM",
+        name: "PROF. MADYA Dr. SHAHREEN BINTI KASIM",
         email: "panel.ai@example.com",
         role: "panel",
         profession:
@@ -645,7 +645,7 @@ const seedDatabase = async () => {
       },
       {
         userId: "panel_blockchain",
-        name: "SAPI'EE BIN JAMEL",
+        name: "PROF. MADYA Dr. SAPI'EE BIN JAMEL",
         email: "panel.blockchain@example.com",
         role: "panel",
         profession:
@@ -662,7 +662,7 @@ const seedDatabase = async () => {
       },
       {
         userId: "panel_web",
-        name: "NUR LIYANA BINTI SULAIMAN",
+        name: "Dr. NUR LIYANA BINTI SULAIMAN",
         email: "panel.web@example.com",
         role: "panel",
         profession: "DS13 Pensyarah Kanan — Jabatan Kejuruteraan Perisian",
@@ -678,7 +678,7 @@ const seedDatabase = async () => {
       },
       {
         userId: "panel_network",
-        name: "ZUBAILE BIN ABDULLAH",
+        name: "Ts. Dr. ZUBAILE BIN ABDULLAH",
         email: "panel.network@example.com",
         role: "panel",
         profession:

@@ -1,5 +1,6 @@
 const User = require("../models/User");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const expertiseService = require("../services/expertiseService");
 
 exports.assignPanelToStudent = async (req, res) => {
   try {
@@ -7,24 +8,32 @@ exports.assignPanelToStudent = async (req, res) => {
     const student = await User.findById(studentId);
     const panel = await User.findById(panelId);
 
-    if (!student || !panel)
-      return res
-        .status(404)
-        .json({ success: false, message: "Student or panel not found" });
+    if (!student || !panel) {
+      return res.status(404).json({
+        success: false,
+        message: "Student or panel not found",
+      });
+    }
 
-    // Use $addToSet to prevent duplicates safely
-    if (!student.assignedPanels.includes(panelId)) {
-      student.assignedPanels.push(panelId);
+    const alreadyAssigned = student.assignedPanels?.some((assignment) => {
+      const assignedPanelId = assignment.panelId || assignment;
+      return String(assignedPanelId) === String(panelId);
+    });
+
+    if (!alreadyAssigned) {
+      student.assignedPanels.push({ panelId, startDate: new Date(), endDate: null });
       await student.save();
     }
-    if (!panel.assignedStudents.includes(studentId)) {
+
+    if (!panel.assignedStudents.some((id) => String(id) === String(studentId))) {
       panel.assignedStudents.push(studentId);
       await panel.save();
     }
 
     res.json({
       success: true,
-      message: "Panel assigned to student successfully",
+      message:
+        "Default panel assignment updated for future scheduling only. Existing sessions and evaluations were not changed.",
     });
   } catch (error) {
     res.status(500).json({ success: false, message: "Error assigning panel" });
@@ -35,29 +44,44 @@ exports.getMyStudents = async (req, res) => {
   try {
     const panel = await User.findById(req.user.id || req.user._id).populate(
       "assignedStudents",
-      "name matricNumber program researchTitle",
+      "name matricNumber program researchTitle researchAbstract",
     );
-    res.json({ success: true, students: panel.assignedStudents || [] });
+    res.json({ success: true, students: panel?.assignedStudents || [] });
   } catch (error) {
-    res
-      .status(500)
-      .json({ success: false, message: "Error fetching students" });
+    res.status(500).json({ success: false, message: "Error fetching students" });
   }
 };
 
 exports.getMyPanels = async (req, res) => {
   try {
     const student = await User.findById(req.user.id || req.user._id).populate(
-      "assignedPanels",
-      "name email",
+      "assignedPanels.panelId",
+      "name email profession expertiseTags",
     );
-    res.json({ success: true, panels: student.assignedPanels || [] });
+    res.json({ success: true, panels: student?.assignedPanels || [] });
   } catch (error) {
     res.status(500).json({ success: false, message: "Error fetching panels" });
   }
 };
 
-// @desc    Match Student Research Title/Abstract with best Panels
+const AI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
+
+const EXACT_SHORT_TERMS = new Set([
+  "ai",
+  "ml",
+  "dl",
+  "nlp",
+  "zkp",
+  "iot",
+  "ux",
+  "ui",
+  "ar",
+  "vr",
+  "mac",
+  "otp",
+  "api",
+]);
+
 const STOPWORDS = new Set([
   "the",
   "and",
@@ -67,6 +91,8 @@ const STOPWORDS = new Set([
   "into",
   "using",
   "based",
+  "system",
+  "systems",
   "study",
   "research",
   "approach",
@@ -74,6 +100,7 @@ const STOPWORDS = new Set([
   "model",
   "framework",
   "application",
+  "applications",
   "development",
   "implementation",
   "analysis",
@@ -84,128 +111,199 @@ const STOPWORDS = new Set([
   "to",
   "a",
   "an",
+  "and",
+  "or",
+  "by",
+  "for",
 ]);
 
-const IMPORTANT_SHORT_TOKENS = new Set(["ai", "ml", "dl", "nlp", "zkp", "iot", "ui", "ux"]);
-
 const synonymGroups = [
-  ["zero", "knowledge", "proof", "zkp", "cryptography", "authentication", "passwordless", "privacy", "encryption"],
-  ["security", "secure", "cybersecurity", "information", "privacy", "encryption", "authentication", "access", "control"],
-  ["artificial", "intelligence", "ai", "machine", "learning", "ml", "deep", "dl", "neural", "prediction", "classification"],
-  ["natural", "language", "processing", "nlp", "text", "feedback", "sentiment", "comments"],
-  ["web", "frontend", "backend", "react", "node", "express", "database", "usability", "interface", "platform"],
-  ["blockchain", "distributed", "ledger", "smart", "contract", "audit", "traceability"],
-  ["image", "vision", "computer", "classification", "recognition"],
-  ["data", "analytics", "mining", "prediction", "classification"],
-  ["network", "iot", "wireless", "sensor", "protocol", "cloud", "distributed", "monitoring"],
+  ["zero", "knowledge", "proof", "zkp", "cryptography", "authentication", "passwordless"],
+  ["security", "secure", "cybersecurity", "information", "privacy", "encryption", "malware", "forensic"],
+  ["artificial", "intelligence", "ai", "machine", "learning", "ml", "deep", "dl", "neural"],
+  ["bioinformatics", "gene", "protein", "biological", "semantic", "classification"],
+  ["web", "frontend", "backend", "react", "node", "express", "database", "mobile"],
+  ["software", "engineering", "agile", "process", "quality", "testing", "assessment", "certification"],
+  ["blockchain", "distributed", "ledger", "smart", "contract"],
+  ["data", "management", "analytics", "mining", "prediction", "classification", "database"],
+  ["network", "iot", "wireless", "sensor", "protocol", "mobile"],
+  ["multimedia", "interface", "ux", "ui", "hci", "augmented", "reality", "ar", "vr"],
+  ["quantum", "key", "distribution", "communication", "cryptography"],
 ];
 
 const normalizeTokens = (value = "") =>
   String(value)
     .toLowerCase()
     .normalize("NFKC")
-    .replace(/zero-knowledge/g, "zero knowledge")
-    .replace(/passwordless/g, "passwordless authentication")
     .replace(/[^a-z0-9\s-]/g, " ")
     .split(/\s+/)
     .map((word) => word.trim())
     .filter(
       (word) =>
         word &&
-        !STOPWORDS.has(word) &&
-        (word.length > 2 || IMPORTANT_SHORT_TOKENS.has(word)),
+        (word.length > 2 || EXACT_SHORT_TERMS.has(word)) &&
+        !STOPWORDS.has(word),
     );
+
+const unique = (items = []) => [
+  ...new Set(
+    items
+      .map((item) => String(item || "").trim())
+      .filter(Boolean),
+  ),
+];
 
 const expandTokens = (tokens) => {
   const expanded = new Set(tokens);
 
   for (const group of synonymGroups) {
     const hasGroupWord = group.some((word) => expanded.has(word));
-    if (hasGroupWord) {
-      group.forEach((word) => expanded.add(word));
-    }
+    if (hasGroupWord) group.forEach((word) => expanded.add(word));
   }
 
   return expanded;
 };
 
-const tagWeight = (tagText) => {
-  const value = String(tagText || "").toLowerCase();
-  if (/(zero|zkp|cryptography|authentication|security|artificial|machine|deep|blockchain|contract|network|iot|cloud|web|software|usability|natural language|nlp)/.test(value)) {
-    return 1.15;
-  }
-  return 1;
-};
-
-const scorePanel = ({ titleText, abstractText, panel }) => {
-  const titleTokens = expandTokens(normalizeTokens(titleText));
-  const abstractTokens = expandTokens(normalizeTokens(abstractText));
-  const contextText = `${titleText}. ${abstractText}`.toLowerCase();
-  const contextTokens = new Set([...titleTokens, ...abstractTokens]);
-
-  const expertiseTags = Array.isArray(panel.expertiseTags)
-    ? panel.expertiseTags.filter(Boolean)
-    : [];
+const scorePanel = (contextText, panel) => {
+  const lowerContext = String(contextText || "").toLowerCase();
+  const baseContextTokens = normalizeTokens(contextText);
+  const contextTokens = expandTokens(baseContextTokens);
+  const expertiseTags = unique(panel.expertiseTags || []);
 
   if (contextTokens.size === 0 || expertiseTags.length === 0) {
-    return { score: 20, matches: [], reasons: ["No research text or panel expertise tags available."] };
+    return { score: 5, matches: [], reasons: ["No usable expertise keywords found."] };
   }
 
-  let rawScore = 0;
   const matches = [];
   const reasons = [];
+  let bestTagScore = 0;
+  let totalMatchedScore = 0;
 
   for (const tag of expertiseTags) {
-    const tagText = String(tag || "").toLowerCase().trim();
+    const tagText = String(tag || "").toLowerCase();
     const tagTokens = normalizeTokens(tagText);
-    const expandedTagTokens = expandTokens(tagTokens);
-
     if (tagTokens.length === 0) continue;
 
-    const exactPhrase = tagText.length >= 3 && contextText.includes(tagText);
-    const titleOverlap = [...expandedTagTokens].filter((token) => titleTokens.has(token));
-    const abstractOverlap = [...expandedTagTokens].filter((token) => abstractTokens.has(token));
-    const uniqueOverlap = new Set([...titleOverlap, ...abstractOverlap]);
+    const expandedTagTokens = expandTokens(tagTokens);
+    const overlappingTokens = [...expandedTagTokens].filter((token) =>
+      contextTokens.has(token),
+    );
 
-    const overlapRatio = uniqueOverlap.size / Math.max(tagTokens.length, 1);
+    const rawOverlap = [...new Set(tagTokens)].filter((token) =>
+      new Set(baseContextTokens).has(token),
+    );
+
+    const phraseMatched = lowerContext.includes(tagText);
+    const tokenCoverage = overlappingTokens.length / Math.max(expandedTagTokens.size, 1);
+    const rawCoverage = rawOverlap.length / Math.max(new Set(tagTokens).size, 1);
+
     let tagScore = 0;
-
-    if (exactPhrase) {
-      tagScore = 42;
-    } else if (overlapRatio >= 1) {
-      tagScore = 36;
-    } else if (overlapRatio >= 0.66) {
-      tagScore = 30;
-    } else if (overlapRatio >= 0.33) {
-      tagScore = 20;
-    } else if (uniqueOverlap.size > 0) {
-      tagScore = 12;
-    }
-
-    if (titleOverlap.length > 0) tagScore += 10;
-    if (abstractOverlap.length > 1) tagScore += 5;
-
-    tagScore = Math.round(tagScore * tagWeight(tagText));
+    if (phraseMatched) tagScore = 96;
+    else if (rawCoverage >= 0.75) tagScore = 88;
+    else if (rawCoverage >= 0.5) tagScore = 78;
+    else if (tokenCoverage >= 0.5) tagScore = 70;
+    else if (tokenCoverage > 0) tagScore = 42 + Math.round(tokenCoverage * 35);
 
     if (tagScore > 0) {
-      rawScore += tagScore;
       matches.push(tag);
-      reasons.push(`${tag}: ${[...uniqueOverlap].slice(0, 5).join(", ") || "phrase match"}`);
+      bestTagScore = Math.max(bestTagScore, tagScore);
+      totalMatchedScore += tagScore;
+      reasons.push(`${tag}: matched ${overlappingTokens.slice(0, 5).join(", ")}`);
     }
   }
 
   if (matches.length === 0) {
-    return { score: 25, matches: [], reasons: ["No direct expertise keyword match found."] };
+    return { score: 12, matches: [], reasons: ["No clear overlap with this panel's expertise."] };
   }
 
-  const coverageBonus = Math.min(matches.length * 6, 18);
-  const diversityBonus = Math.min(new Set(matches.map((m) => String(m).toLowerCase().split(/\s+/)[0])).size * 3, 9);
-  const finalScore = Math.max(35, Math.min(98, Math.round(rawScore + coverageBonus + diversityBonus)));
+  const avgMatchedScore = totalMatchedScore / matches.length;
+  const coverageBonus = Math.min(matches.length * 4, 18);
+  const specificContextBonus = Math.min(Math.max(baseContextTokens.length - 4, 0), 10);
+  const score = Math.min(
+    98,
+    Math.round(bestTagScore * 0.55 + avgMatchedScore * 0.3 + coverageBonus + specificContextBonus),
+  );
+
+  return { score, matches, reasons: reasons.slice(0, 4) };
+};
+
+const parseAiJson = (text = "") => {
+  const raw = String(text || "").trim();
+  try {
+    return JSON.parse(raw);
+  } catch (_) {
+    const firstObject = raw.indexOf("{");
+    const lastObject = raw.lastIndexOf("}");
+    if (firstObject !== -1 && lastObject !== -1) {
+      return JSON.parse(raw.slice(firstObject, lastObject + 1));
+    }
+
+    const firstArray = raw.indexOf("[");
+    const lastArray = raw.lastIndexOf("]");
+    if (firstArray !== -1 && lastArray !== -1) {
+      return { recommendedPanelIds: JSON.parse(raw.slice(firstArray, lastArray + 1)) };
+    }
+  }
+
+  return { recommendedPanelIds: [], aiReasons: {} };
+};
+
+const getAiRecommendation = async ({ contextText, panels }) => {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    return { ids: [], reasons: {}, model: null, used: false };
+  }
+
+  const genAI = new GoogleGenerativeAI(apiKey);
+  const model = genAI.getGenerativeModel({ model: AI_MODEL });
+
+  const prompt = `You are an academic panel matching assistant for UTHM FSKTM.
+
+Student research context:
+${contextText}
+
+Available panels:
+${JSON.stringify(
+    panels.map((panel) => ({
+      id: String(panel._id),
+      name: panel.name,
+      profession: panel.profession || "",
+      expertiseTags: panel.expertiseTags || [],
+    })),
+    null,
+    2,
+  )}
+
+Return JSON only in this exact shape:
+{
+  "recommendedPanelIds": ["panelId1", "panelId2"],
+  "aiReasons": {
+    "panelId1": "short reason based on expertise tags",
+    "panelId2": "short reason based on expertise tags"
+  }
+}
+
+Rules:
+- Recommend at most 2 panels.
+- Use the stated FIELD OF EXPERTISE / research interest tags.
+- Do not recommend a panel if their expertise is weakly related.
+- Prefer precise expertise over general ICT terms.`;
+
+  const result = await model.generateContent(prompt);
+  const responseText = result.response.text();
+  const parsed = parseAiJson(responseText);
+
+  const validPanelIds = new Set(panels.map((panel) => String(panel._id)));
+  const ids = unique(parsed.recommendedPanelIds || [])
+    .map(String)
+    .filter((id) => validPanelIds.has(id))
+    .slice(0, 2);
 
   return {
-    score: finalScore,
-    matches: [...new Set(matches)].slice(0, 8),
-    reasons: reasons.slice(0, 6),
+    ids,
+    reasons: parsed.aiReasons || {},
+    model: AI_MODEL,
+    used: true,
   };
 };
 
@@ -219,10 +317,7 @@ exports.matchExpertise = async (req, res) => {
         )
       : null;
 
-    const finalTitle = String(
-      researchTitle || student?.researchTitle || "",
-    ).trim();
-
+    const finalTitle = String(researchTitle || student?.researchTitle || "").trim();
     const finalAbstract = String(
       researchAbstract || student?.researchAbstract || "",
     ).trim();
@@ -230,14 +325,13 @@ exports.matchExpertise = async (req, res) => {
     if (!finalTitle && !finalAbstract) {
       return res.status(400).json({
         success: false,
-        message:
-          "Student must have a research title or abstract for expertise matching.",
+        message: "Student must have a research title or abstract for expertise matching.",
       });
     }
 
-    const allPanels = await User.find({
-      role: { $in: ["panel", "admin"] },
-    }).select("_id name email userId role expertiseTags");
+    const allPanels = await User.find({ role: { $in: ["panel", "admin"] } })
+      .select("_id name email userId role profession expertiseTags")
+      .lean();
 
     const availablePanels = allPanels.filter((panel) => {
       if (!student?.supervisorId) return true;
@@ -251,13 +345,35 @@ exports.matchExpertise = async (req, res) => {
       });
     }
 
-    const recommendations = availablePanels
+    const panelsWithLiveExpertise = await Promise.all(
+      availablePanels.map(async (panel) => {
+        const liveExpertise = await expertiseService.fetchUserExpertise(panel.userId);
+        return {
+          ...panel,
+          expertiseTags: unique([...(panel.expertiseTags || []), ...liveExpertise]),
+        };
+      }),
+    );
+
+    const contextText = `${finalTitle}. ${finalAbstract}`.trim();
+
+    let aiResult = { ids: [], reasons: {}, model: null, used: false };
+    try {
+      aiResult = await getAiRecommendation({
+        contextText,
+        panels: panelsWithLiveExpertise,
+      });
+    } catch (aiError) {
+      console.warn("Gemini matching fallback:", aiError.message);
+    }
+
+    const aiSelected = new Set(aiResult.ids.map(String));
+
+    const recommendations = panelsWithLiveExpertise
       .map((panel) => {
-        const match = scorePanel({
-          titleText: finalTitle,
-          abstractText: finalAbstract,
-          panel,
-        });
+        const match = scorePanel(contextText, panel);
+        const aiBoost = aiSelected.has(String(panel._id)) ? 5 : 0;
+        const score = Math.min(99, match.score + aiBoost);
 
         return {
           panelId: String(panel._id),
@@ -265,22 +381,33 @@ exports.matchExpertise = async (req, res) => {
           email: panel.email,
           userId: panel.userId,
           role: panel.role,
+          profession: panel.profession || "",
           expertiseTags: panel.expertiseTags || [],
-          score: match.score,
-          confidence: `${match.score}%`,
+          score,
+          confidence: `${score}%`,
           matches: match.matches,
-          reasons: match.reasons || [],
+          reasons: [
+            ...(aiResult.reasons?.[String(panel._id)]
+              ? [`AI: ${aiResult.reasons[String(panel._id)]}`]
+              : []),
+            ...match.reasons,
+          ].slice(0, 5),
+          aiSelected: aiSelected.has(String(panel._id)),
         };
       })
       .sort((a, b) => b.score - a.score);
 
-    const recommendedPanels = recommendations
-      .filter((item) => item.score >= 35)
-      .slice(0, 2)
-      .map((item) => item.panelId);
+    const recommendedPanels = unique([
+      ...aiResult.ids,
+      ...recommendations.filter((item) => item.score >= 35).map((item) => item.panelId),
+    ]).slice(0, 2);
 
     res.status(200).json({
       success: true,
+      aiUsed: aiResult.used,
+      aiModel: aiResult.model,
+      scoringMethod:
+        "Gemini recommendation plus deterministic expertise overlap score from UTHM Community field-of-expertise tags.",
       studentId,
       researchTitle: finalTitle,
       hasAbstract: Boolean(finalAbstract),
@@ -288,7 +415,7 @@ exports.matchExpertise = async (req, res) => {
       recommendations,
     });
   } catch (error) {
-    console.error("AI Matching Error:", error);
+    console.error("Expertise Matching Error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to match panel expertise.",
