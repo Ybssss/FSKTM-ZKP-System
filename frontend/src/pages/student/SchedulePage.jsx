@@ -1,22 +1,154 @@
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import api from "../../services/api";
 import { useNavigate } from "react-router-dom";
 import {
   Calendar,
   Clock,
   MapPin,
-  ChevronDown,
-  ChevronUp,
+  Search,
   ExternalLink,
   Users,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
-export default function SchedulePage() {
+const SESSION_TYPE_LABELS = {
+  PROPOSAL_DEFENSE: "Proposal Defense",
+  PROGRESS_ASSESSMENT: "Progress Assessment",
+  PRE_VIVA: "Pre-Viva",
+};
+
+const formatDateKey = (value) => {
+  if (!value) return "";
+
+  if (typeof value === "string") {
+    const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
+
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(
+    2,
+    "0",
+  )}-${String(date.getDate()).padStart(2, "0")}`;
+};
+
+const parseLocalDateKey = (dateKey) => {
+  const [year, month, day] = String(dateKey || "").split("-").map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+};
+
+const formatDisplayDate = (value) => {
+  const date = parseLocalDateKey(formatDateKey(value));
+  if (!date) return "Date TBA";
+  return date.toLocaleDateString("en-MY", {
+    weekday: "short",
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+};
+
+const getSessionId = (session) => session?._id || session?.id;
+
+const getSessionTitle = (session) =>
+  session?.title || SESSION_TYPE_LABELS[session?.sessionType] || "Session";
+
+const getSessionSearchText = (session) =>
+  [
+    session.title,
+    session.sessionType,
+    SESSION_TYPE_LABELS[session.sessionType],
+    session.batchName,
+    session.batchId,
+    session.venue,
+    session.googleMeetLink,
+    ...(session.panels || []).map((panel) => panel?.name || panel?.email || ""),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+const sortSessions = (items = []) =>
+  [...items].sort((a, b) => {
+    const dateDiff = formatDateKey(a.date).localeCompare(formatDateKey(b.date));
+    if (dateDiff !== 0) return dateDiff;
+    return String(a.startTime || a.time || "").localeCompare(
+      String(b.startTime || b.time || ""),
+    );
+  });
+
+function SessionCard({ session, compact = false }) {
   const navigate = useNavigate();
+  const sessionId = getSessionId(session);
+
+  return (
+    <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="font-bold text-gray-900 truncate">
+            {getSessionTitle(session)}
+          </h3>
+          <p className="text-xs text-gray-500 mt-1">
+            {SESSION_TYPE_LABELS[session.sessionType] || session.sessionType || "Session"}
+            {session.batchName ? ` · ${session.batchName}` : ""}
+          </p>
+        </div>
+        <button
+          onClick={() => navigate(`/student/sessions/${sessionId}`)}
+          className="shrink-0 inline-flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-indigo-600 text-white text-xs font-bold hover:bg-indigo-700"
+        >
+          View <ExternalLink className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      <div
+        className={`grid grid-cols-1 ${compact ? "" : "sm:grid-cols-2"} gap-2 mt-4 text-sm text-gray-700`}
+      >
+        <span className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
+          <Calendar className="w-4 h-4 text-indigo-600" />
+          {formatDisplayDate(session.date)}
+        </span>
+        <span className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2">
+          <Clock className="w-4 h-4 text-blue-600" />
+          {session.startTime || session.time || "TBA"} - {session.endTime || "TBA"}
+        </span>
+        {(session.venue || session.googleMeetLink) && (
+          <span className="flex items-center gap-2 rounded-lg bg-gray-50 px-3 py-2 sm:col-span-2 break-all">
+            <MapPin className="w-4 h-4 text-red-600 shrink-0" />
+            {session.venue || session.googleMeetLink}
+          </span>
+        )}
+      </div>
+
+      {session.panels?.length > 0 && (
+        <div className="flex flex-wrap gap-2 mt-3">
+          {session.panels.map((panel) => (
+            <span
+              key={panel?._id || panel?.id || panel?.email || panel}
+              className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100 text-xs font-semibold"
+            >
+              <Users className="w-3 h-3" /> {panel?.name || panel?.email || panel}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function SchedulePage() {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [expandedId, setExpandedId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date());
+  const [selectedDateKey, setSelectedDateKey] = useState(() =>
+    formatDateKey(new Date()),
+  );
 
   useEffect(() => {
     fetchSessions();
@@ -26,40 +158,75 @@ export default function SchedulePage() {
     try {
       setLoading(true);
       setError(null);
-      // 👈 FIXED AXIOS CALL
       const response = await api.get("/timetables/my");
       const sessionsData =
         response.data.timetables ||
         response.data.sessions ||
         response.data.data ||
         [];
-      setSessions(sessionsData);
+      setSessions(sortSessions(sessionsData));
     } catch (error) {
       console.error("❌ Error fetching sessions:", error);
-      setError(error.message);
+      setError(error.response?.data?.message || error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  const isUpcoming = (date) => {
-    if (!date) return false;
+  const todayKey = formatDateKey(new Date());
 
-    const sessionDate = new Date(date);
-    if (Number.isNaN(sessionDate.getTime())) return false;
+  const filteredSessions = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) return sessions;
+    return sessions.filter((session) => getSessionSearchText(session).includes(query));
+  }, [sessions, searchTerm]);
 
-    const today = new Date();
-    sessionDate.setHours(0, 0, 0, 0);
-    today.setHours(0, 0, 0, 0);
+  const sessionsByDate = useMemo(() => {
+    return filteredSessions.reduce((acc, session) => {
+      const key = formatDateKey(session.date);
+      if (!key) return acc;
+      if (!acc[key]) acc[key] = [];
+      acc[key].push(session);
+      return acc;
+    }, {});
+  }, [filteredSessions]);
 
-    return sessionDate >= today;
+  const selectedDateSessions = sortSessions(sessionsByDate[selectedDateKey] || []);
+
+  const upcomingSessions = useMemo(
+    () =>
+      sortSessions(
+        filteredSessions.filter((session) => formatDateKey(session.date) >= todayKey),
+      ),
+    [filteredSessions, todayKey],
+  );
+
+  const pastSessions = useMemo(
+    () =>
+      sortSessions(
+        filteredSessions.filter((session) => formatDateKey(session.date) < todayKey),
+      ).reverse(),
+    [filteredSessions, todayKey],
+  );
+
+  const monthYear = calendarMonth.getFullYear();
+  const monthIndex = calendarMonth.getMonth();
+  const firstDay = new Date(monthYear, monthIndex, 1);
+  const daysInMonth = new Date(monthYear, monthIndex + 1, 0).getDate();
+  const startOffset = firstDay.getDay();
+  const calendarCells = [
+    ...Array(startOffset).fill(null),
+    ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
+  ];
+
+  const goMonth = (offset) => {
+    setCalendarMonth((prev) => new Date(prev.getFullYear(), prev.getMonth() + offset, 1));
   };
-  const toggleExpand = (id) => setExpandedId(expandedId === id ? null : id);
 
   if (loading) {
     return (
       <div className="flex flex-col justify-center items-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500 mb-4" />
         <p className="text-gray-600">Loading schedule...</p>
       </div>
     );
@@ -67,14 +234,12 @@ export default function SchedulePage() {
 
   if (error) {
     return (
-      <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-        <h3 className="text-red-900 font-semibold mb-2">
-          Error Loading Schedule
-        </h3>
-        <p className="text-red-700">{error}</p>
+      <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+        <h3 className="text-red-900 font-bold mb-2">Error Loading Schedule</h3>
+        <p className="text-red-700 text-sm">{error}</p>
         <button
           onClick={fetchSessions}
-          className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+          className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-bold text-sm"
         >
           Retry
         </button>
@@ -82,164 +247,165 @@ export default function SchedulePage() {
     );
   }
 
-  const upcomingSessions = sessions.filter((s) => isUpcoming(s.date));
-  const pastSessions = sessions.filter((s) => !isUpcoming(s.date));
-
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">My Schedule</h1>
-        <p className="text-gray-600 mt-1">
-          View your symposium sessions, venue, time, and assigned panels.
-        </p>
-      </div>
-
-      <div>
-        <h2 className="text-lg font-semibold text-gray-900 mb-4">
-          Upcoming Sessions ({upcomingSessions.length})
-        </h2>
-        {upcomingSessions.length > 0 ? (
-          <div className="space-y-4">
-            {upcomingSessions.map((session) => (
-              <div
-                key={session._id}
-                className="bg-white rounded-lg border border-gray-200 p-6"
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1">
-                    <h3 className="text-lg font-semibold text-gray-900">
-                      {session.title}
-                    </h3>
-                    <p className="text-sm text-gray-600 mt-1">
-                      {session.sessionType}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                  <div className="flex items-center gap-2 text-gray-700">
-                    <Calendar className="w-5 h-5 text-blue-600" />
-                    <span className="text-sm">
-                      {new Date(session.date).toLocaleDateString()}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-2 text-gray-700">
-                    <Clock className="w-5 h-5 text-green-600" />
-                    <span className="text-sm">
-                      {session.startTime} - {session.endTime}
-                    </span>
-                  </div>
-                  {session.venue && (
-                    <div className="flex items-center gap-2 text-gray-700">
-                      <MapPin className="w-5 h-5 text-red-600" />
-                      <span className="text-sm">{session.venue}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div className="border-t border-gray-200 pt-4 flex justify-end">
-                  <button
-                    onClick={() => navigate(`/student/sessions/${session._id}`)}
-                    className="px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm"
-                  >
-                    View Session Details <ExternalLink className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="text-gray-500 bg-white p-6 rounded-xl border border-gray-200 text-center">
-            No upcoming sessions scheduled.
-          </p>
-        )}
-      </div>
-
-      {pastSessions.length > 0 && (
+    <div className="space-y-6 max-w-7xl mx-auto">
+      <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900 mb-4">
-            Past Sessions ({pastSessions.length})
-          </h2>
-          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-            {pastSessions.map((session) => (
-              <div
-                key={session._id}
-                className={`border-b border-gray-100 last:border-0 ${expandedId === session._id ? "bg-blue-50/50" : "bg-white"}`}
-              >
-                <div
-                  onClick={() => toggleExpand(session._id)}
-                  className="p-5 flex justify-between items-center cursor-pointer hover:bg-gray-50 transition-colors"
-                >
-                  <div>
-                    <h3 className="font-bold text-gray-900">
-                      {session.title || session.sessionType}
-                    </h3>
-                    <p className="text-sm text-gray-500 mt-1 flex items-center gap-2">
-                      <Calendar className="w-4 h-4" />{" "}
-                      {new Date(session.date).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-4 text-gray-500">
-                    <span className="hidden sm:block text-sm font-medium">
-                      {session.startTime}
-                    </span>
-                    {expandedId === session._id ? (
-                      <ChevronUp className="w-5 h-5 text-blue-600" />
-                    ) : (
-                      <ChevronDown className="w-5 h-5" />
-                    )}
-                  </div>
-                </div>
+          <h1 className="text-2xl md:text-3xl font-bold text-gray-900">My Schedule</h1>
+          <p className="text-gray-600 mt-1">
+            View your sessions in the same compact calendar style used by staff.
+          </p>
+        </div>
 
-                {expandedId === session._id && (
-                  <div className="px-5 pb-5 pt-2 animate-in slide-in-from-top-2">
-                    <div className="bg-white p-4 rounded-lg border border-blue-100 grid grid-cols-1 md:grid-cols-2 gap-4 shadow-sm">
-                      <div>
-                        <p className="text-xs font-bold text-blue-500 uppercase mb-1">
-                          Time & Location
-                        </p>
-                        <p className="text-sm text-gray-800 flex items-center gap-2">
-                          <Clock className="w-4 h-4 text-gray-400" />{" "}
-                          {session.startTime} - {session.endTime}
-                        </p>
-                        <p className="text-sm text-gray-800 flex items-center gap-2 mt-1">
-                          <MapPin className="w-4 h-4 text-gray-400" />{" "}
-                          {session.venue}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs font-bold text-blue-500 uppercase mb-1">
-                          Assigned Panels
-                        </p>
-                        <div className="flex flex-wrap gap-2">
-                          {session.panels?.map((p) => (
-                            <span
-                              key={p._id}
-                              className="text-sm font-medium bg-blue-100 text-blue-800 px-2 py-1 rounded border border-blue-200 flex items-center gap-1"
-                            >
-                              <Users className="w-3 h-3" /> {p.name}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="mt-4 flex justify-end">
-                      <button
-                        onClick={() =>
-                          navigate(`/student/sessions/${session._id}`)
-                        }
-                        className="px-5 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors flex items-center gap-2 shadow-sm"
+        <div className="relative w-full lg:max-w-sm">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search sessions, batch, panel, venue..."
+            className="w-full pl-9 pr-3 py-2 rounded-lg border border-gray-300 bg-white text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-4">
+        <section className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden h-fit max-w-sm w-full">
+          <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => goMonth(-1)}
+              className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-200"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </button>
+            <div className="text-center">
+              <h2 className="font-bold text-gray-900">
+                {calendarMonth.toLocaleDateString("en-MY", {
+                  month: "long",
+                  year: "numeric",
+                })}
+              </h2>
+              <p className="text-[11px] text-gray-500">Tap a date to view sessions</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => goMonth(1)}
+              className="p-2 rounded-lg hover:bg-white border border-transparent hover:border-gray-200"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="p-3">
+            <div className="grid grid-cols-7 gap-1 text-center text-[11px] font-bold text-gray-500 mb-2">
+              {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
+                <div key={day}>{day}</div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-7 gap-1">
+              {calendarCells.map((day, index) => {
+                const key = day
+                  ? `${monthYear}-${String(monthIndex + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
+                  : "";
+                const count = key ? sessionsByDate[key]?.length || 0 : 0;
+                const isToday = key === todayKey;
+                const isSelected = key === selectedDateKey;
+
+                return (
+                  <button
+                    key={`${key || 'empty'}-${index}`}
+                    type="button"
+                    disabled={!day}
+                    onClick={() => day && setSelectedDateKey(key)}
+                    className={`h-12 rounded-lg border text-xs font-semibold flex flex-col items-center justify-center transition-colors ${
+                      !day
+                        ? "border-transparent bg-transparent cursor-default"
+                        : isSelected
+                          ? "border-indigo-600 bg-indigo-600 text-white"
+                          : isToday
+                            ? "border-indigo-500 bg-indigo-50 text-indigo-700"
+                            : count > 0
+                              ? "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+                              : "border-gray-200 bg-white text-gray-700 hover:bg-gray-50"
+                    }`}
+                  >
+                    {day && <span>{day}</span>}
+                    {count > 0 && (
+                      <span
+                        className={`mt-1 px-1.5 py-0.5 rounded-full text-[10px] ${
+                          isSelected ? "bg-white text-indigo-700" : "bg-green-600 text-white"
+                        }`}
                       >
-                        View Full Details <ExternalLink className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
+                        {count}
+                      </span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </section>
+
+        <section className="space-y-4 min-w-0">
+          <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+            <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+              <h2 className="font-bold text-gray-900">
+                Selected Day · {formatDisplayDate(selectedDateKey)}
+              </h2>
+              <p className="text-xs text-gray-500">
+                {selectedDateSessions.length} session(s)
+              </p>
+            </div>
+            <div className="p-4 max-h-[420px] overflow-y-auto space-y-3">
+              {selectedDateSessions.length ? (
+                selectedDateSessions.map((session) => (
+                  <SessionCard key={getSessionId(session)} session={session} compact />
+                ))
+              ) : (
+                <div className="text-center py-10 text-gray-500">
+                  <Calendar className="w-10 h-10 mx-auto text-gray-300 mb-2" />
+                  No sessions on this date.
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+                <h2 className="font-bold text-gray-900">Upcoming Sessions</h2>
+                <p className="text-xs text-gray-500">{upcomingSessions.length} session(s)</p>
+              </div>
+              <div className="p-4 max-h-[520px] overflow-y-auto space-y-3">
+                {upcomingSessions.length ? (
+                  upcomingSessions.map((session) => (
+                    <SessionCard key={getSessionId(session)} session={session} compact />
+                  ))
+                ) : (
+                  <p className="text-center text-gray-500 py-8">No upcoming sessions.</p>
                 )}
               </div>
-            ))}
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+              <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+                <h2 className="font-bold text-gray-900">Past Sessions</h2>
+                <p className="text-xs text-gray-500">{pastSessions.length} session(s)</p>
+              </div>
+              <div className="p-4 max-h-[520px] overflow-y-auto space-y-3">
+                {pastSessions.length ? (
+                  pastSessions.map((session) => (
+                    <SessionCard key={getSessionId(session)} session={session} compact />
+                  ))
+                ) : (
+                  <p className="text-center text-gray-500 py-8">No past sessions.</p>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        </section>
+      </div>
     </div>
   );
 }
