@@ -221,6 +221,33 @@ export default function HistoricalFeedbackPage() {
     }
   };
 
+
+  const readMapValue = (value, key) => {
+    if (!value || !key) return "";
+    if (value instanceof Map) return value.get(key);
+    return value[key];
+  };
+
+  const scoreLabel = (score) => {
+    const numeric = Number(score);
+    if (numeric === 4) return "Exemplary";
+    if (numeric === 3) return "Proficient";
+    if (numeric === 2) return "Satisfactory";
+    if (numeric === 1) return "Foundational";
+    if (numeric === 0) return "Novice";
+    return "-";
+  };
+
+  const getReportCriteria = (evaluation) =>
+    (getRubric(evaluation)?.criteria || []).filter(
+      (criterion) => criterion.type === "quantitative",
+    );
+
+  const getReportQualitativeCriteria = (evaluation) =>
+    (getRubric(evaluation)?.criteria || []).filter(
+      (criterion) => criterion.type === "qualitative",
+    );
+
   const InfoLine = ({ label, value }) => (
     <div>
       <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">{label}</p>
@@ -362,12 +389,20 @@ export default function HistoricalFeedbackPage() {
               </>
             )}
             {mode === "approved" && (
-              <button
-                onClick={() => handleWithdrawPermission(request)}
-                className="px-3 py-2 rounded-lg bg-red-600 text-white text-sm font-bold hover:bg-red-700 flex items-center gap-2"
-              >
-                <X className="w-4 h-4" /> Withdraw
-              </button>
+              <>
+                <button
+                  onClick={() => setSelectedEvaluation(evaluation)}
+                  className="px-3 py-2 rounded-lg bg-gray-900 text-white text-sm font-bold hover:bg-gray-800 flex items-center gap-2"
+                >
+                  <Eye className="w-4 h-4" /> View Report
+                </button>
+                <button
+                  onClick={() => handleWithdrawPermission(request)}
+                  className="px-3 py-2 rounded-lg bg-red-600 text-white text-sm font-bold hover:bg-red-700 flex items-center gap-2"
+                >
+                  <X className="w-4 h-4" /> Withdraw
+                </button>
+              </>
             )}
           </div>
         </div>
@@ -489,46 +524,119 @@ export default function HistoricalFeedbackPage() {
       )}
 
       {selectedEvaluation && (
-        <div className="fixed inset-0 bg-black/60 z-[100] p-4 flex items-center justify-center">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="p-5 border-b flex items-start justify-between gap-4 sticky top-0 bg-white rounded-t-2xl">
+        <div className="fixed inset-0 bg-black/70 z-[100] p-3 sm:p-6 flex items-center justify-center backdrop-blur-sm">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[92vh] overflow-hidden flex flex-col">
+            <div className="bg-indigo-950 text-white p-5 sm:p-6 flex items-start justify-between gap-4">
               <div>
-                <h2 className="text-xl font-bold text-gray-900">Evaluation Details</h2>
-                <p className="text-sm text-gray-500">{getSession(selectedEvaluation)?.title || selectedEvaluation.sessionType}</p>
+                <p className="text-xs font-bold uppercase tracking-[0.25em] text-indigo-200">
+                  Historical Vault • View Report
+                </p>
+                <h2 className="text-xl sm:text-2xl font-black mt-1">
+                  {getRubric(selectedEvaluation)?.name || selectedEvaluation.sessionType || "Evaluation Report"}
+                </h2>
+                <p className="text-sm text-indigo-200 mt-1">
+                  {getSession(selectedEvaluation)?.title || selectedEvaluation.sessionType} • {selectedEvaluation.semester || getSession(selectedEvaluation)?.academicSession || "-"}
+                </p>
               </div>
-              <button onClick={() => setSelectedEvaluation(null)} className="p-2 rounded-lg hover:bg-gray-100">
+              <button onClick={() => setSelectedEvaluation(null)} className="p-2 rounded-xl bg-white/10 hover:bg-white/20 shrink-0">
                 <X className="w-5 h-5" />
               </button>
             </div>
-            <div className="p-5 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <InfoLine label="Student" value={getPersonName(getStudent(selectedEvaluation))} />
-                <InfoLine label="Evaluator" value={getPersonName(selectedEvaluation.evaluatorId)} />
-                <InfoLine label="Rubric" value={getRubric(selectedEvaluation)?.name || selectedEvaluation.sessionType} />
-                <InfoLine label="Marks" value={selectedEvaluation.totalMarks || selectedEvaluation.totalMarks === 0 ? `${selectedEvaluation.totalMarks}%` : "Qualitative"} />
+
+            <div className="overflow-y-auto p-4 sm:p-6 space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+                <div className="rounded-xl border bg-gray-50 p-4">
+                  <InfoLine label="Student" value={`${getPersonName(getStudent(selectedEvaluation))} ${getStudent(selectedEvaluation)?.matricNumber ? `(${getStudent(selectedEvaluation).matricNumber})` : ""}`} />
+                </div>
+                <div className="rounded-xl border bg-gray-50 p-4">
+                  <InfoLine label="Evaluator" value={getPersonName(selectedEvaluation.evaluatorId)} />
+                </div>
+                <div className="rounded-xl border bg-gray-50 p-4">
+                  <InfoLine label="Session / Batch" value={`${getSession(selectedEvaluation)?.batchName || getSession(selectedEvaluation)?.batchId || "No batch"}`} />
+                </div>
+                <div className="rounded-xl border bg-gray-50 p-4">
+                  <InfoLine label="Date / Time" value={`${formatDate(getSession(selectedEvaluation)?.date)} · ${getSession(selectedEvaluation)?.startTime || "-"} - ${getSession(selectedEvaluation)?.endTime || "-"}`} />
+                </div>
               </div>
-              {selectedEvaluation.overallComments && (
-                <div className="bg-gray-50 rounded-xl border p-4">
-                  <p className="font-bold text-gray-700 mb-1">Overall Comments</p>
-                  <p className="text-sm text-gray-800 whitespace-pre-wrap">{selectedEvaluation.overallComments}</p>
+
+              {selectedEvaluation.sessionType === "PROGRESS_ASSESSMENT" ? (
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
+                    <p className="text-xs font-black uppercase tracking-wide text-blue-800 mb-2">Summary of Research Progress</p>
+                    <p className="text-sm text-blue-950 whitespace-pre-wrap leading-relaxed">{selectedEvaluation.summaryOfProgress || "-"}</p>
+                  </div>
+                  <div className="rounded-xl border border-amber-100 bg-amber-50 p-4">
+                    <p className="text-xs font-black uppercase tracking-wide text-amber-800 mb-2">Comments for Improvement</p>
+                    <p className="text-sm text-amber-950 whitespace-pre-wrap leading-relaxed">{selectedEvaluation.commentsForImprovement || "-"}</p>
+                  </div>
+                  <div className="rounded-xl border border-green-100 bg-green-50 p-4">
+                    <p className="text-xs font-black uppercase tracking-wide text-green-800 mb-2">Overall Suggestions</p>
+                    <p className="text-sm text-green-950 whitespace-pre-wrap leading-relaxed">{selectedEvaluation.overallSuggestions || "-"}</p>
+                  </div>
                 </div>
+              ) : (
+                <>
+                  <div className="rounded-xl border overflow-hidden">
+                    <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
+                      <p className="font-black text-gray-900">Scored Criteria</p>
+                      <span className={`px-3 py-1 rounded-full text-sm font-black ${getScoreColor(selectedEvaluation.totalMarks)}`}>
+                        Final Score: {selectedEvaluation.totalMarks || selectedEvaluation.totalMarks === 0 ? `${Number(selectedEvaluation.totalMarks).toFixed(2)}%` : "-"}
+                      </span>
+                    </div>
+                    <div className="divide-y max-h-[45vh] overflow-y-auto">
+                      {getReportCriteria(selectedEvaluation).length === 0 ? (
+                        <div className="p-4 text-sm text-gray-500">No scored criteria found.</div>
+                      ) : (
+                        getReportCriteria(selectedEvaluation).map((criterion) => {
+                          const score = readMapValue(selectedEvaluation.scores, criterion.key);
+                          return (
+                            <div key={criterion.key} className="p-4 grid grid-cols-1 lg:grid-cols-[1fr_130px_120px] gap-3 items-start">
+                              <div>
+                                <p className="font-bold text-gray-900">{criterion.title}</p>
+                                <p className="text-xs text-gray-500 mt-1">Weight: {criterion.weight || 0}% • Max: {criterion.maxScore || 4}</p>
+                              </div>
+                              <div className="rounded-lg bg-indigo-50 border border-indigo-100 p-3 text-center">
+                                <p className="text-[10px] font-black text-indigo-500 uppercase">Score</p>
+                                <p className="text-lg font-black text-indigo-900">{score ?? "-"}</p>
+                              </div>
+                              <div className="rounded-lg bg-gray-50 border p-3 text-center">
+                                <p className="text-[10px] font-black text-gray-500 uppercase">Level</p>
+                                <p className="text-xs font-bold text-gray-900">{scoreLabel(score)}</p>
+                              </div>
+                            </div>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border bg-gray-50 p-4">
+                    <p className="font-black text-gray-900 mb-3">Panel Feedback</p>
+                    {getReportQualitativeCriteria(selectedEvaluation).length > 0 && (
+                      <div className="space-y-3 mb-4">
+                        {getReportQualitativeCriteria(selectedEvaluation).map((criterion) => (
+                          <div key={criterion.key} className="rounded-lg bg-white border p-3">
+                            <p className="text-xs font-black text-gray-500 uppercase">{criterion.title}</p>
+                            <p className="text-sm text-gray-800 whitespace-pre-wrap mt-1">{readMapValue(selectedEvaluation.qualitativeFeedback, criterion.key) || "-"}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    <p className="text-xs font-black text-gray-500 uppercase mb-1">Overall Comments</p>
+                    <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{selectedEvaluation.overallComments || "-"}</p>
+                  </div>
+                </>
               )}
-              {(selectedEvaluation.summaryOfProgress || selectedEvaluation.commentsForImprovement || selectedEvaluation.overallSuggestions) && (
-                <div className="grid grid-cols-1 gap-3">
-                  <InfoLine label="Summary of Progress" value={selectedEvaluation.summaryOfProgress} />
-                  <InfoLine label="Comments for Improvement" value={selectedEvaluation.commentsForImprovement} />
-                  <InfoLine label="Overall Suggestions" value={selectedEvaluation.overallSuggestions} />
-                </div>
-              )}
-              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
-                <p className="font-bold text-blue-800 flex items-center gap-2"><FileText className="w-4 h-4" /> Student Materials</p>
+
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
+                <p className="font-black text-blue-900 flex items-center gap-2"><FileText className="w-4 h-4" /> Student Submitted Materials</p>
                 {(getSession(selectedEvaluation)?.studentDocuments || []).length === 0 ? (
-                  <p className="text-sm text-blue-700 mt-2">No material attached.</p>
+                  <p className="text-sm text-blue-800 mt-2">No material attached.</p>
                 ) : (
-                  <div className="mt-3 space-y-2">
+                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {(getSession(selectedEvaluation)?.studentDocuments || []).map((doc) => (
-                      <a key={doc._id || doc.url} href={doc.url} target="_blank" rel="noreferrer" className="block p-3 bg-white rounded-lg border text-sm font-semibold text-blue-700 hover:underline">
-                        {doc.title} · {doc.type || "material"}
+                      <a key={doc._id || doc.url} href={doc.url} target="_blank" rel="noreferrer" className="block p-3 bg-white rounded-lg border text-sm font-bold text-blue-700 hover:underline">
+                        {doc.title} <span className="text-blue-400">• {doc.type || "material"}</span>
                       </a>
                     ))}
                   </div>

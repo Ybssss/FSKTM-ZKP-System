@@ -95,6 +95,8 @@ export default function TimetableManagementPage() {
     status: "active",
   });
   const [arrangedBatchSessionIds, setArrangedBatchSessionIds] = useState([]);
+  const [reviewOrder, setReviewOrder] = useState([]);
+  const [draggedReviewItem, setDraggedReviewItem] = useState(null);
 
   useEffect(() => {
     loadData();
@@ -286,38 +288,160 @@ export default function TimetableManagementPage() {
     return [...ordered, ...missing];
   }, [selectedBatchSessions, arrangedBatchSessionIds]);
 
-  const moveCurrentBatchSession = (index, direction) => {
-    setArrangedBatchSessionIds((prev) => {
+  useEffect(() => {
+    const existingTokens = arrangedBatchSessions.map(
+      (session) => `existing:${getSessionId(session)}`,
+    );
+    const draftTokens = selectedStudentIds.map((studentId) => `draft:${studentId}`);
+    const validTokens = new Set([...existingTokens, ...draftTokens]);
+
+    setReviewOrder((prev) => {
+      const kept = prev.filter((token) => validTokens.has(token));
+      const missing = [...existingTokens, ...draftTokens].filter(
+        (token) => !kept.includes(token),
+      );
+      const next = [...kept, ...missing];
+      return next.join("|") === prev.join("|") ? prev : next;
+    });
+  }, [
+    selectedBatchId,
+    arrangedBatchSessions.map((session) => getSessionId(session)).join("|"),
+    selectedStudentIds.join("|"),
+  ]);
+
+  const reviewItems = useMemo(() => {
+    const existingById = new Map(
+      selectedBatchSessions.map((session) => [String(getSessionId(session)), session]),
+    );
+    const studentById = new Map(students.map((student) => [String(student._id), student]));
+
+    return reviewOrder
+      .map((token, index) => {
+        const [type, id] = String(token).split(":");
+
+        if (type === "existing") {
+          const session = existingById.get(String(id));
+          if (!session) return null;
+          return {
+            token,
+            type,
+            id,
+            index,
+            session,
+            student: session.student || session.students?.[0],
+          };
+        }
+
+        if (type === "draft") {
+          const student = studentById.get(String(id));
+          if (!student) return null;
+          return {
+            token,
+            type,
+            id,
+            index,
+            student,
+            draft: sessionDrafts[id] || {},
+          };
+        }
+
+        return null;
+      })
+      .filter(Boolean);
+  }, [reviewOrder, selectedBatchSessions, students, sessionDrafts]);
+
+  useEffect(() => {
+    if (reviewOrder.length === 0) return;
+
+    setSessionDrafts((prev) => {
+      let changed = false;
+      const next = { ...prev };
+
+      reviewOrder.forEach((token, index) => {
+        const [type, studentId] = String(token).split(":");
+        if (type !== "draft") return;
+
+        const slot = getAutoSlot(index);
+        const current = next[studentId] || {};
+
+        if (current.startTime !== slot.startTime || current.endTime !== slot.endTime) {
+          next[studentId] = {
+            ...current,
+            startTime: slot.startTime,
+            endTime: slot.endTime,
+          };
+          changed = true;
+        }
+      });
+
+      return changed ? next : prev;
+    });
+  }, [reviewOrder.join("|"), bulkConfig.startTime, bulkConfig.breakBetweenSlotsMinutes, slotDuration]);
+
+  const syncExistingOrderFromReview = (order) => {
+    setArrangedBatchSessionIds(
+      order
+        .filter((token) => String(token).startsWith("existing:"))
+        .map((token) => String(token).split(":")[1]),
+    );
+  };
+
+  const moveReviewItem = (fromIndex, toIndex) => {
+    setReviewOrder((prev) => {
+      if (toIndex < 0 || toIndex >= prev.length || fromIndex === toIndex) return prev;
       const next = [...prev];
-      const targetIndex = index + direction;
-      if (targetIndex < 0 || targetIndex >= next.length) return prev;
-      [next[index], next[targetIndex]] = [next[targetIndex], next[index]];
+      const [moved] = next.splice(fromIndex, 1);
+      next.splice(toIndex, 0, moved);
+      syncExistingOrderFromReview(next);
       return next;
     });
   };
 
+  const handleReviewDrop = (targetIndex) => {
+    if (draggedReviewItem === null || draggedReviewItem === undefined) return;
+    moveReviewItem(draggedReviewItem, targetIndex);
+    setDraggedReviewItem(null);
+  };
+
+  const moveCurrentBatchSession = (index, direction) => {
+    moveReviewItem(index, index + direction);
+  };
+
+  const persistReviewTimeFrames = async (order = reviewOrder) => {
+    const existingSessionsById = new Map(
+      selectedBatchSessions.map((session) => [String(getSessionId(session)), session]),
+    );
+
+    for (let index = 0; index < order.length; index += 1) {
+      const token = order[index];
+      const [type, id] = String(token).split(":");
+      if (type !== "existing") continue;
+
+      const session = existingSessionsById.get(String(id));
+      if (!session) continue;
+
+      const autoSlot = getAutoSlot(index);
+      await api.put(`/timetables/${id}`, {
+        date: bulkConfig.date || getSessionDateOnly(session),
+        time: autoSlot.startTime,
+        endTime: autoSlot.endTime,
+        venue: session.venue || session.googleMeetLink || bulkConfig.venue,
+        googleMeetLink: session.googleMeetLink || session.venue || bulkConfig.venue,
+      });
+    }
+  };
+
   const saveCurrentBatchArrangement = async () => {
-    if (!selectedBatchId || arrangedBatchSessions.length === 0) return;
-    if (!window.confirm("Save the current order and recalculate the session time slots?")) return;
+    if (!selectedBatchId || reviewItems.length === 0) return;
+    if (!window.confirm("Save this Review Timings order and update session time frames?")) return;
 
     try {
       setIsSaving(true);
-      for (let index = 0; index < arrangedBatchSessions.length; index += 1) {
-        const session = arrangedBatchSessions[index];
-        const sessionId = getSessionId(session);
-        const autoSlot = getAutoSlot(index);
-        await api.put(`/timetables/${sessionId}`, {
-          date: bulkConfig.date || getSessionDateOnly(session),
-          time: autoSlot.startTime,
-          endTime: autoSlot.endTime,
-          venue: session.venue || session.googleMeetLink || bulkConfig.venue,
-          googleMeetLink: session.googleMeetLink || session.venue || bulkConfig.venue,
-        });
-      }
-      alert("Batch session order saved.");
+      await persistReviewTimeFrames(reviewOrder);
+      alert("Review timing order saved. Existing sessions now use the displayed time frames.");
       await loadData();
     } catch (error) {
-      alert(error.response?.data?.message || "Failed to save batch arrangement.");
+      alert(error.response?.data?.message || "Failed to save timing order.");
     } finally {
       setIsSaving(false);
     }
@@ -495,7 +619,7 @@ export default function TimetableManagementPage() {
           student.assignedPanels[1]?.panelId?._id ||
           student.assignedPanels[1]?.panelId ||
           student.assignedPanels[1];
-        const nextIndex = getExistingBatchSessionCount() + prev.length;
+        const nextIndex = reviewOrder.length;
         const autoSlot = getAutoSlot(nextIndex);
 
         setSessionDrafts({
@@ -540,9 +664,12 @@ export default function TimetableManagementPage() {
         ? selectedRubric.sessionType
         : "PROPOSAL_DEFENSE";
 
-      const payload = selectedStudentIds.map((studentId, index) => {
+      const draftReviewItems = reviewItems.filter((item) => item.type === "draft");
+
+      const payload = draftReviewItems.map((item) => {
+        const studentId = item.id;
         const draft = sessionDrafts[studentId] || {};
-        const autoSlot = getAutoSlot(getExistingBatchSessionCount() + index);
+        const autoSlot = getAutoSlot(item.index);
         if (!draft.panel1Id || !draft.panel2Id)
           throw new Error(`Missing panels for a student.`);
 
@@ -584,6 +711,8 @@ export default function TimetableManagementPage() {
         const batchRes = await sessionBatchAPI.list();
         setBatches(batchRes.batches || []);
       }
+
+      await persistReviewTimeFrames(reviewOrder);
 
       await api.post("/timetables/bulk", {
         useExistingBatch: batchMode === "existing",
@@ -1019,89 +1148,8 @@ export default function TimetableManagementPage() {
               )}
 
               {batchMode === "existing" && selectedBatchId && (
-                <div className="mb-4 border border-blue-100 bg-blue-50 rounded-xl p-3">
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <div>
-                      <p className="text-xs font-bold text-blue-900 uppercase">
-                        Current Scheduled Sessions
-                      </p>
-                      <p className="text-[11px] text-blue-700">
-                        Reorder with ↑ ↓, then save current order. Use Edit for individual replacement.
-                      </p>
-                    </div>
-                    <span className="text-xs font-bold text-blue-900 bg-white px-2 py-1 rounded">
-                      {arrangedBatchSessions.length}
-                    </span>
-                  </div>
-                  <div className="max-h-72 overflow-y-auto space-y-2 pr-1">
-                    {arrangedBatchSessions.length === 0 ? (
-                      <div className="text-xs text-blue-700 bg-white rounded-lg p-3 border border-blue-100">
-                        No scheduled session exists in this batch yet.
-                      </div>
-                    ) : (
-                      arrangedBatchSessions.map((session, index) => {
-                        const sessionId = getSessionId(session);
-                        const [p1Name, p2Name] = getPanelNames(session);
-                        return (
-                          <div
-                            key={sessionId}
-                            className="bg-white border border-blue-100 rounded-lg p-3 text-xs"
-                          >
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="min-w-0">
-                                <p className="font-bold text-gray-900 truncate">
-                                  {index + 1}. {getStudentName(session)}
-                                </p>
-                                <p className="font-mono text-gray-500">
-                                  {getStudentMatric(session)}
-                                </p>
-                                <p className="text-gray-700 mt-1">
-                                  {getSessionDateOnly(session)} · {getSessionStartTime(session)} - {getSessionEndTime(session)}
-                                </p>
-                                <p className="text-gray-600 mt-1 truncate">
-                                  {p1Name} / {p2Name}
-                                </p>
-                              </div>
-                              <div className="flex flex-col gap-1 shrink-0">
-                                <button
-                                  type="button"
-                                  onClick={() => moveCurrentBatchSession(index, -1)}
-                                  disabled={index === 0}
-                                  className="p-1 rounded border hover:bg-gray-50 disabled:opacity-30"
-                                >
-                                  <ChevronUp className="w-4 h-4" />
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => moveCurrentBatchSession(index, 1)}
-                                  disabled={index === arrangedBatchSessions.length - 1}
-                                  className="p-1 rounded border hover:bg-gray-50 disabled:opacity-30"
-                                >
-                                  <ChevronDown className="w-4 h-4" />
-                                </button>
-                              </div>
-                            </div>
-                            <div className="mt-2 flex flex-wrap gap-2">
-                              <button
-                                type="button"
-                                onClick={() => handleEditClick(session)}
-                                className="px-2 py-1 rounded bg-indigo-50 text-indigo-700 font-bold border border-indigo-100"
-                              >
-                                Edit Session
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleDelete(sessionId)}
-                                className="px-2 py-1 rounded bg-red-50 text-red-700 font-bold border border-red-100"
-                              >
-                                Drop Session
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
-                  </div>
+                <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800 font-semibold">
+                  Existing sessions in this batch are now listed together in <span className="font-black">Review Timings</span>. Drag or move them there to interchange their time frames.
                 </div>
               )}
               <div>
@@ -1301,191 +1349,176 @@ export default function TimetableManagementPage() {
             </div>
           </div>
 
-          <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col">
-            <div className="p-5 border-b border-gray-200 flex justify-between items-center bg-gray-50 rounded-t-xl">
+          <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[620px]">
+            <div className="p-5 border-b border-gray-200 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 bg-gray-50 rounded-t-xl">
               <div>
                 <h2 className="font-bold text-lg text-gray-900">
                   3. Review Timings
                 </h2>
                 <p className="text-xs text-gray-500">
-                  Panels are pulled automatically from assignments.
+                  Existing batch sessions and newly selected students are shown together. Drag items to interchange their time frames.
                 </p>
               </div>
-              <button
-                onClick={handleBulkSubmit}
-                disabled={isSaving || selectedStudentIds.length === 0}
-                className="px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 disabled:bg-gray-400"
-              >
-                {isSaving
-                  ? "Saving..."
-                  : `Publish ${selectedStudentIds.length} Sessions`}
-              </button>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <button
+                  type="button"
+                  onClick={saveCurrentBatchArrangement}
+                  disabled={isSaving || reviewItems.length === 0}
+                  className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 flex items-center justify-center gap-2 text-sm"
+                >
+                  <Save className="w-4 h-4" /> Save Time Frames
+                </button>
+                <button
+                  onClick={handleBulkSubmit}
+                  disabled={isSaving || selectedStudentIds.length === 0}
+                  className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 disabled:bg-gray-400 text-sm"
+                >
+                  {isSaving
+                    ? "Saving..."
+                    : selectedStudentIds.length > 0
+                      ? `Publish ${selectedStudentIds.length} New Session(s)`
+                      : "Publish"}
+                </button>
+              </div>
             </div>
 
-            <div className="flex-1 p-5 overflow-y-auto">
-              {selectedStudentIds.length === 0 ? (
+            <div className="flex-1 p-4 sm:p-5 overflow-y-auto max-h-[72vh]">
+              {reviewItems.length === 0 ? (
                 <div className="text-center text-gray-400 mt-12">
                   <Users className="w-12 h-12 mx-auto mb-3" />
-                  <p>Select students to generate schedule drafts.</p>
+                  <p>Select an existing batch or choose students to generate schedule drafts.</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {selectedStudentIds.map((id) => {
-                    const student = students.find((s) => s._id === id);
-                    const p1Id =
-                      sessionDrafts[id]?.panel1Id?._id ||
-                      sessionDrafts[id]?.panel1Id;
-                    const p2Id =
-                      sessionDrafts[id]?.panel2Id?._id ||
-                      sessionDrafts[id]?.panel2Id;
-                    const p1Name =
-                      panels.find((p) => p._id === p1Id)?.name || "Panel 1";
-                    const p2Name =
-                      panels.find((p) => p._id === p2Id)?.name || "Panel 2";
+                <div className="space-y-3">
+                  {reviewItems.map((item, index) => {
+                    const slot = getAutoSlot(index);
+                    const isExisting = item.type === "existing";
+                    const student = item.student;
+                    const session = item.session;
+                    const p1Id = isExisting
+                      ? session?.panel1Id?._id || session?.panel1Id || session?.panels?.[0]?._id || session?.panels?.[0]
+                      : sessionDrafts[item.id]?.panel1Id?._id || sessionDrafts[item.id]?.panel1Id;
+                    const p2Id = isExisting
+                      ? session?.panel2Id?._id || session?.panel2Id || session?.panels?.[1]?._id || session?.panels?.[1]
+                      : sessionDrafts[item.id]?.panel2Id?._id || sessionDrafts[item.id]?.panel2Id;
+                    const p1Name = panels.find((p) => p._id === p1Id)?.name || p1Id?.name || "Panel 1";
+                    const p2Name = panels.find((p) => p._id === p2Id)?.name || p2Id?.name || "Panel 2";
 
                     return (
                       <div
-                        key={id}
-                        className="flex flex-col gap-4 p-4 border border-gray-200 rounded-xl bg-white shadow-sm"
+                        key={item.token}
+                        draggable
+                        onDragStart={() => setDraggedReviewItem(index)}
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={() => handleReviewDrop(index)}
+                        className={`rounded-xl border shadow-sm transition-all ${isExisting ? "bg-blue-50 border-blue-200" : "bg-white border-gray-200"}`}
                       >
-                        <div className="flex justify-between items-center border-b pb-2">
-                          <div>
-                            <p className="font-bold text-gray-900">
-                              {student.name}
-                            </p>
-                            <p className="text-xs font-mono font-bold text-gray-500 mb-1">
-                              {student.matricNumber}
-                            </p>
+                        <div className="p-4 flex flex-col gap-4">
+                          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                            <div className="flex items-start gap-3 min-w-0">
+                              <div className="cursor-grab select-none rounded-lg border bg-white px-3 py-2 text-gray-400 font-black">
+                                ⋮⋮
+                              </div>
+                              <div className="min-w-0">
+                                <div className="flex flex-wrap items-center gap-2 mb-1">
+                                  <span className="px-2 py-1 rounded-full text-[10px] font-black uppercase bg-gray-900 text-white">
+                                    Slot {index + 1}
+                                  </span>
+                                  <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase ${isExisting ? "bg-blue-600 text-white" : "bg-green-600 text-white"}`}>
+                                    {isExisting ? "Existing Session" : "New Draft"}
+                                  </span>
+                                  {isExisting && (
+                                    <span className="px-2 py-1 rounded-full text-[10px] font-black uppercase bg-white text-blue-700 border border-blue-200">
+                                      Saved after Save Time Frames
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="font-black text-gray-900 truncate">
+                                  {student?.name || getStudentName(session)}
+                                </p>
+                                <p className="text-xs font-mono font-bold text-gray-500">
+                                  {student?.matricNumber || getStudentMatric(session)}
+                                </p>
+                                {isExisting && (
+                                  <p className="text-xs text-gray-600 mt-1 truncate">
+                                    {session?.title || session?.sessionType}
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => moveReviewItem(index, index - 1)}
+                                disabled={index === 0}
+                                className="p-2 border rounded-lg hover:bg-white disabled:opacity-30"
+                              >
+                                <ChevronUp className="w-4 h-4" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => moveReviewItem(index, index + 1)}
+                                disabled={index === reviewItems.length - 1}
+                                className="p-2 border rounded-lg hover:bg-white disabled:opacity-30"
+                              >
+                                <ChevronDown className="w-4 h-4" />
+                              </button>
+                              {isExisting ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleEditClick(session)}
+                                    className="px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold text-sm hover:bg-indigo-100"
+                                  >
+                                    Edit Session
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleDelete(getSessionId(session))}
+                                    className="px-3 py-2 rounded-lg bg-red-50 text-red-700 border border-red-200 font-bold text-sm hover:bg-red-100"
+                                  >
+                                    Drop
+                                  </button>
+                                </>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => toggleStudentForBulk(student)}
+                                  className="px-3 py-2 rounded-lg bg-red-50 text-red-700 border border-red-200 font-bold text-sm hover:bg-red-100"
+                                >
+                                  Remove Draft
+                                </button>
+                              )}
+                            </div>
                           </div>
-                          <div className="flex flex-wrap items-center justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const currentIndex = selectedStudentIds.indexOf(id);
-                                if (currentIndex <= 0) return;
-                                const nextIds = [...selectedStudentIds];
-                                [nextIds[currentIndex - 1], nextIds[currentIndex]] = [
-                                  nextIds[currentIndex],
-                                  nextIds[currentIndex - 1],
-                                ];
-                                setSelectedStudentIds(nextIds);
-                                setSessionDrafts((prev) => {
-                                  const next = { ...prev };
-                                  nextIds.forEach((studentId, idx) => {
-                                    const slot = getAutoSlot(getExistingBatchSessionCount() + idx);
-                                    next[studentId] = {
-                                      ...next[studentId],
-                                      startTime: slot.startTime,
-                                      endTime: slot.endTime,
-                                    };
-                                  });
-                                  return next;
-                                });
-                              }}
-                              className="p-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30"
-                              disabled={selectedStudentIds.indexOf(id) === 0}
-                            >
-                              <ChevronUp className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const currentIndex = selectedStudentIds.indexOf(id);
-                                if (currentIndex < 0 || currentIndex >= selectedStudentIds.length - 1) return;
-                                const nextIds = [...selectedStudentIds];
-                                [nextIds[currentIndex], nextIds[currentIndex + 1]] = [
-                                  nextIds[currentIndex + 1],
-                                  nextIds[currentIndex],
-                                ];
-                                setSelectedStudentIds(nextIds);
-                                setSessionDrafts((prev) => {
-                                  const next = { ...prev };
-                                  nextIds.forEach((studentId, idx) => {
-                                    const slot = getAutoSlot(getExistingBatchSessionCount() + idx);
-                                    next[studentId] = {
-                                      ...next[studentId],
-                                      startTime: slot.startTime,
-                                      endTime: slot.endTime,
-                                    };
-                                  });
-                                  return next;
-                                });
-                              }}
-                              className="p-2 border rounded-lg hover:bg-gray-50 disabled:opacity-30"
-                              disabled={selectedStudentIds.indexOf(id) === selectedStudentIds.length - 1}
-                            >
-                              <ChevronDown className="w-4 h-4" />
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => toggleStudentForBulk(student)}
-                              className="p-2 border rounded-lg text-red-600 hover:bg-red-50"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                            <input
-                              type="time"
-                              value={
-                                sessionDrafts[id]?.startTime ||
-                                getAutoSlot(
-                                  getExistingBatchSessionCount() +
-                                    selectedStudentIds.indexOf(id),
-                                ).startTime
-                              }
-                              onChange={(e) =>
-                                setSessionDrafts((prev) => ({
-                                  ...prev,
-                                  [id]: {
-                                    ...prev[id],
-                                    startTime: e.target.value,
-                                  },
-                                }))
-                              }
-                              className="p-2 border rounded-lg text-sm font-bold bg-indigo-50 border-indigo-200 focus:ring-2 focus:ring-indigo-500"
-                              required
-                            />
-                            <span className="text-xs font-bold text-gray-400">
-                              to
-                            </span>
-                            <input
-                              type="time"
-                              value={
-                                sessionDrafts[id]?.endTime ||
-                                getAutoSlot(
-                                  getExistingBatchSessionCount() +
-                                    selectedStudentIds.indexOf(id),
-                                ).endTime
-                              }
-                              onChange={(e) =>
-                                setSessionDrafts((prev) => ({
-                                  ...prev,
-                                  [id]: {
-                                    ...prev[id],
-                                    endTime: e.target.value,
-                                  },
-                                }))
-                              }
-                              className="p-2 border rounded-lg text-sm font-bold bg-indigo-50 border-indigo-200 focus:ring-2 focus:ring-indigo-500"
-                              required
-                            />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-4">
-                          <div className="bg-gray-50 p-2 rounded border border-gray-200">
-                            <p className="text-[10px] font-bold text-gray-500 uppercase">
-                              Panel 1
-                            </p>
-                            <p className="text-sm font-bold text-gray-900">
-                              {p1Name}
-                            </p>
-                          </div>
-                          <div className="bg-gray-50 p-2 rounded border border-gray-200">
-                            <p className="text-[10px] font-bold text-gray-500 uppercase">
-                              Panel 2
-                            </p>
-                            <p className="text-sm font-bold text-gray-900">
-                              {p2Name}
-                            </p>
+
+                          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                            <div className="bg-white p-3 rounded-lg border">
+                              <p className="text-[10px] font-black text-gray-500 uppercase">Time Frame</p>
+                              <p className="text-sm font-black text-gray-900 mt-1">
+                                {slot.startTime} - {slot.endTime}
+                              </p>
+                              {isExisting && (
+                                <p className="text-[10px] text-blue-700 font-semibold mt-1">
+                                  Current: {getSessionStartTime(session)} - {getSessionEndTime(session)}
+                                </p>
+                              )}
+                            </div>
+                            <div className="bg-white p-3 rounded-lg border">
+                              <p className="text-[10px] font-black text-gray-500 uppercase">Date</p>
+                              <p className="text-sm font-bold text-gray-900 mt-1">
+                                {bulkConfig.date || getSessionDateOnly(session)}
+                              </p>
+                            </div>
+                            <div className="bg-white p-3 rounded-lg border">
+                              <p className="text-[10px] font-black text-gray-500 uppercase">Panel 1</p>
+                              <p className="text-sm font-bold text-gray-900 mt-1 truncate">{p1Name}</p>
+                            </div>
+                            <div className="bg-white p-3 rounded-lg border">
+                              <p className="text-[10px] font-black text-gray-500 uppercase">Panel 2</p>
+                              <p className="text-sm font-bold text-gray-900 mt-1 truncate">{p2Name}</p>
+                            </div>
                           </div>
                         </div>
                       </div>

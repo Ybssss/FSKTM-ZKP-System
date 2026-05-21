@@ -29,11 +29,11 @@ const detailedPermissionPopulate = (query) =>
     .populate({
       path: "targetEvaluationId",
       select:
-        "sessionType semester status totalMarks createdAt updatedAt rubricId evaluatorId studentId sessionId overallComments summaryOfProgress commentsForImprovement overallSuggestions",
+        "sessionType semester status totalMarks createdAt updatedAt rubricId evaluatorId studentId sessionId scores qualitativeFeedback overallComments summaryOfProgress commentsForImprovement overallSuggestions formFiller isUnlocked",
       populate: [
         { path: "studentId", select: "name matricNumber userId program email" },
         { path: "evaluatorId", select: "name email userId role" },
-        { path: "rubricId", select: "name sessionType" },
+        { path: "rubricId", select: "name sessionType criteria" },
         {
           path: "sessionId",
           select:
@@ -788,6 +788,80 @@ exports.respondToRequest = async (req, res) => {
     res.status(500).json({
       success: false,
       message: "Server error.",
+      error: error.message,
+    });
+  }
+};
+
+
+exports.unlockOwnEvaluation = async (req, res) => {
+  try {
+    const actorId = getAuthUserId(req);
+    const { id } = req.params;
+
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        message: "Evaluation ID is required.",
+      });
+    }
+
+    const evaluation = await Evaluation.findById(id);
+
+    if (!evaluation) {
+      return res.status(404).json({
+        success: false,
+        message: "Evaluation not found.",
+      });
+    }
+
+    if (evaluation.status !== "COMPLETED") {
+      return res.status(400).json({
+        success: false,
+        message: "Only completed evaluations need to be unlocked for editing.",
+      });
+    }
+
+    const isAdmin = req.user.role === "admin";
+    const isOriginalEvaluator = isSameId(evaluation.evaluatorId, actorId);
+
+    if (!isAdmin && !isOriginalEvaluator) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Only admin or the original evaluator can unlock this evaluation.",
+      });
+    }
+
+    if (isAdmin && !isOriginalEvaluator) {
+      return res.status(403).json({
+        success: false,
+        message:
+          "Admin can directly unlock only evaluations authored by themselves. Other evaluators must request unlock approval.",
+      });
+    }
+
+    const updatedEvaluation = await Evaluation.findByIdAndUpdate(
+      id,
+      {
+        $set: {
+          isUnlocked: true,
+          unlockedBy: actorId,
+          unlockedAt: new Date(),
+        },
+      },
+      { new: true, runValidators: true },
+    );
+
+    res.json({
+      success: true,
+      message: "Evaluation unlocked. You can now edit and resubmit it.",
+      evaluation: updatedEvaluation,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to unlock evaluation.",
       error: error.message,
     });
   }

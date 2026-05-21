@@ -124,6 +124,30 @@ export default function EvaluationPage() {
     }
   };
 
+  const handleUnlockOwnEvaluation = async () => {
+    if (!selectedEval) return;
+
+    if (!window.confirm("Unlock this completed evaluation for editing? You will need to resubmit it after changes.")) {
+      return;
+    }
+
+    try {
+      const res = await api.post(`/feedback/evaluations/${selectedEval._id}/unlock-self`);
+
+      if (res.data.success) {
+        alert("✅ Evaluation unlocked. You can now edit and resubmit it.");
+        setSelectedEval((prev) => ({ ...prev, isUnlocked: true }));
+        loadEvaluations();
+      }
+    } catch (err) {
+      alert(
+        err.response?.data?.message ||
+          "Failed to unlock this evaluation.",
+      );
+    }
+  };
+
+
   useEffect(() => {
     if (urlId && evaluations.length > 0 && !selectedEval) {
       const targetEval = evaluations.find((ev) => ev._id === urlId);
@@ -287,9 +311,10 @@ export default function EvaluationPage() {
 
   // LOCK LOGIC: If it's completed, NO ONE can edit it.
   // Determine if the logged-in user is the actual author/evaluator of this document
-  const isAuthor =
-    selectedEval?.evaluatorId?._id === user?.id ||
-    selectedEval?.evaluatorId === user?.id;
+  const currentUserId = user?.id || user?._id || user?.userId;
+  const selectedEvaluatorId =
+    selectedEval?.evaluatorId?._id || selectedEval?.evaluatorId;
+  const isAuthor = String(selectedEvaluatorId || "") === String(currentUserId || "");
 
   // LOCK LOGIC:
   // 1. If it's completed, it's locked for EVERYONE.
@@ -301,6 +326,8 @@ export default function EvaluationPage() {
   const canEdit =
     isAuthor &&
     (selectedEval?.status === "PENDING" || (isCompleted && isUnlocked));
+
+  const canDirectUnlock = isAdmin && isAuthor && isLocked;
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -476,9 +503,19 @@ export default function EvaluationPage() {
 
                     <p className="text-sm text-red-800 mt-1">
                       {isAdmin
-                        ? "This evaluation has been submitted and is currently read-only. Admin may review the document and manage unlock requests."
+                        ? "This evaluation has been submitted and is currently read-only. If you authored this evaluation, you can unlock it directly, edit, and resubmit."
                         : "This evaluation has been officially submitted and secured. To revise the scores or remarks, please submit an Unlock Request to the administration."}
                     </p>
+
+                    {canDirectUnlock && (
+                      <button
+                        onClick={handleUnlockOwnEvaluation}
+                        className="mt-3 bg-indigo-600 text-white px-4 py-2 rounded text-xs font-bold hover:bg-indigo-700 transition-colors shadow-sm"
+                      >
+                        <Lock className="w-3 h-3 inline mr-1" />
+                        Unlock My Evaluation to Edit
+                      </button>
+                    )}
 
                     {isAuthor && !isAdmin && (
                       <button

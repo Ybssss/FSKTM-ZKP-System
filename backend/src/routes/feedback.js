@@ -29,6 +29,11 @@ router.post(
   feedbackController.requestUnlockEvaluation,
 );
 
+router.post(
+  "/evaluations/:id/unlock-self",
+  feedbackController.unlockOwnEvaluation,
+);
+
 // Search feedback
 router.get("/search", feedbackController.searchFeedback);
 
