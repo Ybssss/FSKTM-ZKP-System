@@ -14,6 +14,27 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import api from "../../services/api";
 
+const pad2 = (value) => String(value).padStart(2, "0");
+
+const formatDateKey = (value) => {
+  if (!value) return "";
+
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    const dateOnlyMatch = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (dateOnlyMatch) {
+      return `${dateOnlyMatch[1]}-${dateOnlyMatch[2]}-${dateOnlyMatch[3]}`;
+    }
+  }
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
+
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(
+    date.getDate(),
+  )}`;
+};
+
 export default function PanelDashboard() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -27,19 +48,14 @@ export default function PanelDashboard() {
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const [selectedDate, setSelectedDate] = useState(() =>
-    new Date().toISOString().slice(0, 10),
+    formatDateKey(new Date()),
   );
 
   useEffect(() => {
     loadData();
   }, []);
 
-  const normalizeDateKey = (value) => {
-    if (!value) return "";
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
-    return date.toISOString().slice(0, 10);
-  };
+  const normalizeDateKey = (value) => formatDateKey(value);
 
   const getSessionDate = (session) =>
     session.schedule?.date || session.date || session.startDate || "";
@@ -286,10 +302,10 @@ export default function PanelDashboard() {
             {monthDays.map((date, index) => {
               if (!date) return <div key={`blank-${index}`} className="h-11" />;
 
-              const dateKey = date.toISOString().slice(0, 10);
+              const dateKey = formatDateKey(date);
               const count = sessionsByDate[dateKey]?.length || 0;
               const isSelected = dateKey === selectedDate;
-              const isToday = dateKey === new Date().toISOString().slice(0, 10);
+              const isToday = dateKey === formatDateKey(new Date());
 
               return (
                 <button
