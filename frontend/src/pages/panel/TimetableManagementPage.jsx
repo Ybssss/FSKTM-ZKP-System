@@ -1,73 +1,94 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
+  AlertTriangle,
   Calendar as CalendarIcon,
   Clock,
-  MapPin,
-  Users,
-  Trash2,
-  Search,
+  GripVertical,
   Layers,
-  Video,
-  FileText,
-  BookOpen,
   Pencil,
-  X,
-  Link as LinkIcon,
-  AlertTriangle,
-  ChevronUp,
-  ChevronDown,
   Save,
+  Search,
+  Trash2,
+  UserPlus,
+  Video,
+  X,
 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import api, { sessionBatchAPI } from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
-import { useNavigate } from "react-router-dom";
+
+const normalizeDateKey = (value) => {
+  if (!value) return "";
+  if (typeof value === "string") {
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+  }
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
+    date.getDate(),
+  ).padStart(2, "0")}`;
+};
+
+const timeToMinutes = (value) => {
+  const match = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+};
+
+const minutesToTime = (minutes) => {
+  const normalized = ((Number(minutes) || 0) % 1440 + 1440) % 1440;
+  return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${String(normalized % 60).padStart(2, "0")}`;
+};
+
+const addMinutes = (time, minutes) => {
+  const base = timeToMinutes(time);
+  if (base === null) return "";
+  return minutesToTime(base + Number(minutes || 0));
+};
+
+const getStudent = (session) => session.student || session.students?.[0] || null;
+const getPanel = (session, index) => session.panels?.[index] || session[`panel${index + 1}Id`] || null;
+const idOf = (value) => String(value?._id || value || "");
+const nameOf = (value) => value?.name || value?.userId || "-";
+
+const rangesOverlap = (aStart, aEnd, bStart, bEnd) => aStart < bEnd && bStart < aEnd;
 
 export default function TimetableManagementPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const navigate = useNavigate();
 
+  const [activeTab, setActiveTab] = useState("list");
+  const [loading, setLoading] = useState(true);
   const [sessions, setSessions] = useState([]);
   const [students, setStudents] = useState([]);
   const [panels, setPanels] = useState([]);
   const [rubrics, setRubrics] = useState([]);
-  const [allEvaluations, setAllEvaluations] = useState([]);
-
-  const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("list");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [isSaving, setIsSaving] = useState(false);
-  const [slotDuration, setSlotDuration] = useState(() => {
-    const saved = localStorage.getItem("admin_slot_duration");
-    return saved ? parseInt(saved, 10) : 60;
-  });
+  const [evaluations, setEvaluations] = useState([]);
   const [batches, setBatches] = useState([]);
-  const [batchMode, setBatchMode] = useState("existing"); // existing | new
+  const [searchTerm, setSearchTerm] = useState("");
+  const [batchSearch, setBatchSearch] = useState("");
+
+  const [batchMode, setBatchMode] = useState("existing");
   const [selectedBatchId, setSelectedBatchId] = useState("");
+  const [selectedStudentIds, setSelectedStudentIds] = useState([]);
+  const [reviewRows, setReviewRows] = useState([]);
+  const [dragIndex, setDragIndex] = useState(null);
+  const [saving, setSaving] = useState(false);
 
-  const isExistingBatchMode = batchMode === "existing";
-
-  const batchFieldClass = `w-full p-2 border rounded-lg font-semibold ${
-    isExistingBatchMode
-      ? "bg-gray-100 text-gray-500 cursor-not-allowed"
-      : "bg-gray-50"
-  }`;
-
+  const [slotDuration, setSlotDuration] = useState(() => Number(localStorage.getItem("admin_slot_duration") || 30));
   const [bulkConfig, setBulkConfig] = useState({
     rubricId: "",
     academicSession: "2025/2026, Semester 1",
     batchName: "",
     batchId: "",
-    date: new Date().toISOString().split("T")[0],
+    date: normalizeDateKey(new Date()),
     startTime: "09:00",
     venue: "",
     breakBetweenSlotsMinutes: 5,
   });
 
-  const [selectedStudentIds, setSelectedStudentIds] = useState([]);
-  const [sessionDrafts, setSessionDrafts] = useState({});
-
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editingSession, setEditingSession] = useState(null);
   const [editForm, setEditForm] = useState({
     rubricId: "",
@@ -79,618 +100,316 @@ export default function TimetableManagementPage() {
     panel2Id: "",
   });
 
-  const [isBatchEditOpen, setIsBatchEditOpen] = useState(false);
-  const [batchEditForm, setBatchEditForm] = useState({
-    batchName: "",
-    batchId: "",
-    academicSession: "",
-    scheduleTitle: "Postgraduate Progress Presentation Schedule",
-    sessionType: "PROPOSAL_DEFENSE",
-    rubricId: "",
-    date: "",
-    startTime: "09:00",
-    slotDurationMinutes: 60,
-    breakBetweenSlotsMinutes: 5,
-    googleMeetLink: "",
-    status: "active",
-  });
-  const [arrangedBatchSessionIds, setArrangedBatchSessionIds] = useState([]);
-  const [reviewOrder, setReviewOrder] = useState([]);
-  const [draggedReviewItem, setDraggedReviewItem] = useState(null);
+  const [editingBatch, setEditingBatch] = useState(false);
+  const [batchForm, setBatchForm] = useState({});
+
+  const isExistingBatchMode = batchMode === "existing";
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const sessionRes = isAdmin ? await api.get("/timetables") : await api.get("/timetables/my");
+      const fetchedSessions = sessionRes.data.timetables || sessionRes.data.sessions || sessionRes.data.data || [];
+      setSessions(
+        [...fetchedSessions].sort((a, b) => {
+          const da = `${normalizeDateKey(a.date)} ${a.startTime || a.time || ""}`;
+          const db = `${normalizeDateKey(b.date)} ${b.startTime || b.time || ""}`;
+          return db.localeCompare(da);
+        }),
+      );
+
+      const evRes = await api.get("/evaluations");
+      setEvaluations(evRes.data.data || evRes.data.evaluations || []);
+
+      if (isAdmin) {
+        const [usersRes, rubRes, batchRes] = await Promise.all([
+          api.get("/users"),
+          api.get("/rubrics"),
+          sessionBatchAPI.list(),
+        ]);
+        const users = usersRes.data.users || [];
+        const fetchedRubrics = rubRes.data.data || rubRes.data.rubrics || [];
+        setStudents(users.filter((u) => u.role === "student"));
+        setPanels(users.filter((u) => ["panel", "admin"].includes(u.role)));
+        setRubrics(fetchedRubrics);
+        setBatches(batchRes.batches || []);
+        setBulkConfig((prev) => ({ ...prev, rubricId: prev.rubricId || fetchedRubrics[0]?._id || "" }));
+      }
+    } catch (error) {
+      console.error("Failed to load session data", error);
+      alert(error.response?.data?.message || "Failed to load session data.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     loadData();
   }, []);
 
-  const handleDurationChange = (e) => {
-    const val = parseInt(e.target.value, 10);
-    setSlotDuration(val);
-    if (!isNaN(val) && val > 0) {
-      localStorage.setItem("admin_slot_duration", val);
-    }
-  };
-
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const res = await api.get("/timetables/my");
-      let fetchedSessions =
-        res.data.data || res.data.sessions || res.data.timetables || [];
-      fetchedSessions = fetchedSessions.sort(
-        (a, b) =>
-          new Date(b.schedule?.date || b.date) -
-          new Date(a.schedule?.date || a.date),
-      );
-      setSessions(fetchedSessions);
-
-      const evRes = await api.get("/evaluations");
-      setAllEvaluations(evRes.data.data || evRes.data.evaluations || []);
-    } catch (error) {
-      console.error("Error loading timetables", error);
-    }
-
-    if (isAdmin) {
-      try {
-        const usersRes = await api.get("/users");
-        const allUsers = usersRes.data.users || [];
-        setStudents(allUsers.filter((u) => u.role === "student"));
-        setPanels(allUsers.filter((u) => ["panel", "admin"].includes(u.role)));
-        const rubRes = await api.get("/rubrics");
-        const fetchedRubrics = rubRes.data.data || rubRes.data.rubrics || [];
-        setRubrics(fetchedRubrics);
-
-        if (fetchedRubrics.length > 0)
-          setBulkConfig((prev) => ({
-            ...prev,
-            rubricId: fetchedRubrics[0]._id,
-          }));
-
-        const batchRes = await sessionBatchAPI.list();
-        setBatches(batchRes.batches || []);
-      } catch (error) {
-        console.error("Error loading assignment data", error);
-      }
-    }
-    setLoading(false);
-  };
-
-  const handleDelete = async (id) => {
-    if (!window.confirm("Delete this session permanently?")) return;
-    try {
-      await api.delete(`/timetables/${id}`);
-      loadData();
-    } catch (error) {
-      alert("Failed to delete session");
-    }
-  };
-
-  const addMinutes = (timeStr, mins) => {
-    if (!timeStr) return "";
-    const [h, m] = timeStr.split(":").map(Number);
-    const date = new Date();
-    date.setHours(h, m + parseInt(mins), 0, 0);
-    return date.toTimeString().slice(0, 5);
-  };
-
-  const addMinutesToTime = (timeStr, mins) => {
-    if (!timeStr) return "";
-    const [h, m] = timeStr.split(":").map(Number);
-    const date = new Date();
-    date.setHours(h, m + Number(mins || 0), 0, 0);
-    return date.toTimeString().slice(0, 5);
-  };
-
-  const getSessionId = (session) => session?._id || session?.id;
-
-  const getSessionDateOnly = (session) => {
-    const raw = session?.schedule?.date || session?.date || "";
-    if (!raw) return "";
-    const parsed = new Date(raw);
-    if (!Number.isNaN(parsed.getTime())) return parsed.toISOString().split("T")[0];
-    return String(raw).split("T")[0];
-  };
-
-  const getSessionStartTime = (session) =>
-    session?.schedule?.time || session?.time || session?.startTime || "";
-
-  const getSessionEndTime = (session) => session?.endTime || "";
-
-  const getStudentName = (session) => {
-    const student = session?.student || session?.students?.[0];
-    return student?.name || student?.userId || "Student not loaded";
-  };
-
-  const getStudentMatric = (session) => {
-    const student = session?.student || session?.students?.[0];
-    return student?.matricNumber || student?.userId || "";
-  };
-
-  const getPanelNames = (session) => {
-    const sessionPanels = session?.panels || [];
-    const p1 = session?.panel1Id || sessionPanels[0];
-    const p2 = session?.panel2Id || sessionPanels[1];
-    const resolveName = (value, fallback) => {
-      const id = value?._id || value;
-      return value?.name || panels.find((p) => p._id === id)?.name || fallback;
-    };
-    return [resolveName(p1, "Panel 1"), resolveName(p2, "Panel 2")];
-  };
-
-  const isPanelReplacementLocked = (dateValue) => {
-    const dateOnly = dateValue || "";
-    if (!dateOnly) return false;
-    const sessionDate = new Date(`${dateOnly}T00:00:00`);
-    if (Number.isNaN(sessionDate.getTime())) return false;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const diffDays = Math.ceil((sessionDate - today) / (1000 * 60 * 60 * 24));
-    return diffDays < 7;
-  };
-
-  const getExistingBatchSessionCount = () => {
-    if (batchMode !== "existing" || !selectedBatchId) return 0;
-
-    return sessions.filter(
-      (session) =>
-        session.batchId === selectedBatchId &&
-        !["completed", "cancelled"].includes(String(session.status || "").toLowerCase()),
-    ).length;
-  };
-
-  const getAutoSlot = (index) => {
-    const duration = Number(slotDuration || 60);
-    const breakMinutes = Number(bulkConfig.breakBetweenSlotsMinutes || 0);
-    const start = addMinutesToTime(
-      bulkConfig.startTime || "09:00",
-      index * (duration + breakMinutes),
-    );
-
-    return {
-      startTime: start,
-      endTime: addMinutesToTime(start, duration),
-    };
-  };
-
   const selectedBatch = useMemo(
-    () => batches.find((batch) => batch.batchId === selectedBatchId) || null,
+    () => batches.find((batch) => String(batch.batchId) === String(selectedBatchId)),
     [batches, selectedBatchId],
   );
 
-  const selectedBatchSessions = useMemo(() => {
-    if (!selectedBatchId) return [];
-    return sessions
-      .filter(
-        (session) =>
-          session.batchId === selectedBatchId &&
-          !["completed", "cancelled"].includes(
-            String(session.status || "").toLowerCase(),
-          ),
-      )
-      .sort((a, b) => {
-        const dateDiff = new Date(getSessionDateOnly(a)) - new Date(getSessionDateOnly(b));
-        if (dateDiff !== 0) return dateDiff;
-        return String(getSessionStartTime(a)).localeCompare(String(getSessionStartTime(b)));
-      });
-  }, [sessions, selectedBatchId]);
+  const selectedBatchSessions = useMemo(
+    () =>
+      sessions
+        .filter((session) => String(session.batchId || "") === String(selectedBatchId || ""))
+        .sort((a, b) => String(a.startTime || a.time || "").localeCompare(String(b.startTime || b.time || ""))),
+    [sessions, selectedBatchId],
+  );
 
-  useEffect(() => {
-    setArrangedBatchSessionIds(selectedBatchSessions.map((session) => getSessionId(session)));
-  }, [selectedBatchId, selectedBatchSessions.length]);
-
-  const arrangedBatchSessions = useMemo(() => {
-    const byId = new Map(selectedBatchSessions.map((session) => [String(getSessionId(session)), session]));
-    const ordered = arrangedBatchSessionIds
-      .map((id) => byId.get(String(id)))
-      .filter(Boolean);
-    const missing = selectedBatchSessions.filter(
-      (session) => !arrangedBatchSessionIds.includes(getSessionId(session)),
+  const filteredBatches = useMemo(() => {
+    const term = batchSearch.toLowerCase().trim();
+    if (!term) return batches;
+    return batches.filter((batch) =>
+      [
+        batch.batchName,
+        batch.batchId,
+        batch.sessionType,
+        batch.academicSession,
+        normalizeDateKey(batch.date || batch.earliestDate),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(term),
     );
-    return [...ordered, ...missing];
-  }, [selectedBatchSessions, arrangedBatchSessionIds]);
+  }, [batches, batchSearch]);
 
-  useEffect(() => {
-    const existingTokens = arrangedBatchSessions.map(
-      (session) => `existing:${getSessionId(session)}`,
+  const getAutoSlot = (index) => {
+    const startTime = addMinutes(
+      bulkConfig.startTime || "09:00",
+      index * (Number(slotDuration || 30) + Number(bulkConfig.breakBetweenSlotsMinutes || 0)),
     );
-    const draftTokens = selectedStudentIds.map((studentId) => `draft:${studentId}`);
-    const validTokens = new Set([...existingTokens, ...draftTokens]);
-
-    setReviewOrder((prev) => {
-      const kept = prev.filter((token) => validTokens.has(token));
-      const missing = [...existingTokens, ...draftTokens].filter(
-        (token) => !kept.includes(token),
-      );
-      const next = [...kept, ...missing];
-      return next.join("|") === prev.join("|") ? prev : next;
-    });
-  }, [
-    selectedBatchId,
-    arrangedBatchSessions.map((session) => getSessionId(session)).join("|"),
-    selectedStudentIds.join("|"),
-  ]);
-
-  const reviewItems = useMemo(() => {
-    const existingById = new Map(
-      selectedBatchSessions.map((session) => [String(getSessionId(session)), session]),
-    );
-    const studentById = new Map(students.map((student) => [String(student._id), student]));
-
-    return reviewOrder
-      .map((token, index) => {
-        const [type, id] = String(token).split(":");
-
-        if (type === "existing") {
-          const session = existingById.get(String(id));
-          if (!session) return null;
-          return {
-            token,
-            type,
-            id,
-            index,
-            session,
-            student: session.student || session.students?.[0],
-          };
-        }
-
-        if (type === "draft") {
-          const student = studentById.get(String(id));
-          if (!student) return null;
-          return {
-            token,
-            type,
-            id,
-            index,
-            student,
-            draft: sessionDrafts[id] || {},
-          };
-        }
-
-        return null;
-      })
-      .filter(Boolean);
-  }, [reviewOrder, selectedBatchSessions, students, sessionDrafts]);
-
-  useEffect(() => {
-    if (reviewOrder.length === 0) return;
-
-    setSessionDrafts((prev) => {
-      let changed = false;
-      const next = { ...prev };
-
-      reviewOrder.forEach((token, index) => {
-        const [type, studentId] = String(token).split(":");
-        if (type !== "draft") return;
-
-        const slot = getAutoSlot(index);
-        const current = next[studentId] || {};
-
-        if (current.startTime !== slot.startTime || current.endTime !== slot.endTime) {
-          next[studentId] = {
-            ...current,
-            startTime: slot.startTime,
-            endTime: slot.endTime,
-          };
-          changed = true;
-        }
-      });
-
-      return changed ? next : prev;
-    });
-  }, [reviewOrder.join("|"), bulkConfig.startTime, bulkConfig.breakBetweenSlotsMinutes, slotDuration]);
-
-  const syncExistingOrderFromReview = (order) => {
-    setArrangedBatchSessionIds(
-      order
-        .filter((token) => String(token).startsWith("existing:"))
-        .map((token) => String(token).split(":")[1]),
-    );
+    return { startTime, endTime: addMinutes(startTime, Number(slotDuration || 30)) };
   };
 
-  const moveReviewItem = (fromIndex, toIndex) => {
-    setReviewOrder((prev) => {
-      if (toIndex < 0 || toIndex >= prev.length || fromIndex === toIndex) return prev;
-      const next = [...prev];
-      const [moved] = next.splice(fromIndex, 1);
-      next.splice(toIndex, 0, moved);
-      syncExistingOrderFromReview(next);
+  const recalcRows = (rows) =>
+    rows.map((row, index) => {
+      const slot = getAutoSlot(index);
+      return {
+        ...row,
+        slotNo: index + 1,
+        date: bulkConfig.date,
+        startTime: slot.startTime,
+        endTime: slot.endTime,
+      };
+    });
+
+  const makeExistingRows = (batchSessions = selectedBatchSessions) =>
+    batchSessions.map((session, index) => {
+      const student = getStudent(session);
+      const p1 = getPanel(session, 0);
+      const p2 = getPanel(session, 1);
+      return {
+        key: `existing-${session._id || session.id}`,
+        type: "existing",
+        sessionId: session._id || session.id,
+        slotNo: index + 1,
+        studentId: idOf(student),
+        studentName: student?.name || "Unknown Student",
+        matricNumber: student?.matricNumber || student?.userId || "-",
+        title: session.title || session.sessionType?.replaceAll("_", " ") || "Session",
+        date: normalizeDateKey(session.date),
+        startTime: session.startTime || session.time || "",
+        endTime: session.endTime || "",
+        panel1Id: idOf(p1),
+        panel2Id: idOf(p2),
+        panel1Name: nameOf(p1),
+        panel2Name: nameOf(p2),
+        status: session.status || "scheduled",
+      };
+    });
+
+  const resetRowsFromBatch = (batch) => {
+    const batchDate = normalizeDateKey(batch?.date || batch?.earliestDate || new Date());
+    const config = {
+      rubricId: batch?.rubricId?._id || batch?.rubricId || bulkConfig.rubricId,
+      academicSession: batch?.academicSession || "2025/2026, Semester 1",
+      batchName: batch?.batchName || "",
+      batchId: batch?.batchId || "",
+      date: batchDate,
+      startTime: batch?.startTime || "09:00",
+      venue: batch?.googleMeetLink || "",
+      breakBetweenSlotsMinutes: batch?.breakBetweenSlotsMinutes ?? 5,
+    };
+    setBulkConfig(config);
+    setSlotDuration(Number(batch?.slotDurationMinutes || 30));
+    setSelectedStudentIds([]);
+    setReviewRows(makeExistingRows(sessions.filter((s) => String(s.batchId) === String(batch?.batchId))));
+  };
+
+  const handleSelectBatch = (batchId) => {
+    setSelectedBatchId(batchId);
+    const batch = batches.find((b) => String(b.batchId) === String(batchId));
+    if (batch) resetRowsFromBatch(batch);
+  };
+
+  useEffect(() => {
+    if (isExistingBatchMode && selectedBatchId) {
+      setReviewRows((rows) => {
+        const existingKeys = new Set(rows.filter((row) => row.type !== "existing").map((row) => row.key));
+        const existingRows = makeExistingRows();
+        const draftRows = rows.filter((row) => existingKeys.has(row.key));
+        return recalcRows([...existingRows, ...draftRows]);
+      });
+    }
+  }, [selectedBatchSessions.length]);
+
+  const updateBulkConfig = (patch) => {
+    setBulkConfig((prev) => {
+      const next = { ...prev, ...patch };
+      if (patch.startTime || patch.date || patch.breakBetweenSlotsMinutes) {
+        setTimeout(() => setReviewRows((rows) => recalcRows(rows)), 0);
+      }
       return next;
     });
   };
 
-  const handleReviewDrop = (targetIndex) => {
-    if (draggedReviewItem === null || draggedReviewItem === undefined) return;
-    moveReviewItem(draggedReviewItem, targetIndex);
-    setDraggedReviewItem(null);
-  };
-
-  const moveCurrentBatchSession = (index, direction) => {
-    moveReviewItem(index, index + direction);
-  };
-
-  const persistReviewTimeFrames = async (order = reviewOrder) => {
-    const existingSessionsById = new Map(
-      selectedBatchSessions.map((session) => [String(getSessionId(session)), session]),
-    );
-
-    for (let index = 0; index < order.length; index += 1) {
-      const token = order[index];
-      const [type, id] = String(token).split(":");
-      if (type !== "existing") continue;
-
-      const session = existingSessionsById.get(String(id));
-      if (!session) continue;
-
-      const autoSlot = getAutoSlot(index);
-      await api.put(`/timetables/${id}`, {
-        date: bulkConfig.date || getSessionDateOnly(session),
-        time: autoSlot.startTime,
-        endTime: autoSlot.endTime,
-        venue: session.venue || session.googleMeetLink || bulkConfig.venue,
-        googleMeetLink: session.googleMeetLink || session.venue || bulkConfig.venue,
-      });
+  const toggleStudentForBulk = (student) => {
+    if (isExistingBatchMode && !selectedBatchId) return alert("Please select an existing batch first.");
+    const studentId = student._id;
+    const assigned = student.assignedPanels || [];
+    if (assigned.length < 2) {
+      return alert("This student does not have exactly 2 default panels. Assign panels first.");
     }
-  };
+    const p1 = assigned[0]?.panelId?._id || assigned[0]?.panelId || assigned[0];
+    const p2 = assigned[1]?.panelId?._id || assigned[1]?.panelId || assigned[1];
 
-  const saveCurrentBatchArrangement = async () => {
-    if (!selectedBatchId || reviewItems.length === 0) return;
-    if (!window.confirm("Save this Review Timings order and update session time frames?")) return;
-
-    try {
-      setIsSaving(true);
-      await persistReviewTimeFrames(reviewOrder);
-      alert("Review timing order saved. Existing sessions now use the displayed time frames.");
-      await loadData();
-    } catch (error) {
-      alert(error.response?.data?.message || "Failed to save timing order.");
-    } finally {
-      setIsSaving(false);
+    if (selectedStudentIds.includes(studentId)) {
+      setSelectedStudentIds((prev) => prev.filter((id) => id !== studentId));
+      setReviewRows((prev) => recalcRows(prev.filter((row) => row.key !== `draft-${studentId}`)));
+      return;
     }
+
+    const draft = {
+      key: `draft-${studentId}`,
+      type: "draft",
+      studentId,
+      studentName: student.name,
+      matricNumber: student.matricNumber || student.userId || "-",
+      title: `Proposal Defense - ${student.name}`,
+      panel1Id: idOf(p1),
+      panel2Id: idOf(p2),
+      panel1Name: nameOf(assigned[0]?.panelId || assigned[0]),
+      panel2Name: nameOf(assigned[1]?.panelId || assigned[1]),
+      status: "draft",
+    };
+    setSelectedStudentIds((prev) => [...prev, studentId]);
+    setReviewRows((prev) => recalcRows([...prev, draft]));
   };
 
-  const openBatchEditModal = (batch = selectedBatch) => {
-    if (!batch) return alert("Please select a batch first.");
-    setBatchEditForm({
-      batchName: batch.batchName || "",
-      batchId: batch.batchId || "",
-      academicSession: batch.academicSession || "",
-      scheduleTitle: batch.scheduleTitle || "Postgraduate Progress Presentation Schedule",
-      sessionType: batch.sessionType || "PROPOSAL_DEFENSE",
-      rubricId: batch.rubricId?._id || batch.rubricId || "",
-      date: batch.date ? new Date(batch.date).toISOString().split("T")[0] : "",
-      startTime: batch.startTime || "09:00",
-      slotDurationMinutes: batch.slotDurationMinutes || 60,
-      breakBetweenSlotsMinutes: batch.breakBetweenSlotsMinutes ?? 5,
-      googleMeetLink: batch.googleMeetLink || "",
-      status: batch.status || "active",
+  const moveRow = (fromIndex, toIndex) => {
+    if (toIndex < 0 || toIndex >= reviewRows.length) return;
+    const next = [...reviewRows];
+    const [item] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, item);
+    setReviewRows(recalcRows(next));
+  };
+
+  const removeReviewRow = async (row) => {
+    if (row.type === "draft") {
+      setSelectedStudentIds((prev) => prev.filter((id) => id !== row.studentId));
+      setReviewRows((prev) => recalcRows(prev.filter((r) => r.key !== row.key)));
+      return;
+    }
+    if (!window.confirm("Drop this scheduled session? Pending evaluations will also be removed.")) return;
+    await api.delete(`/timetables/${row.sessionId}`);
+    await loadData();
+    setReviewRows((prev) => recalcRows(prev.filter((r) => r.key !== row.key)));
+  };
+
+  const conflictMap = useMemo(() => {
+    const conflicts = new Map();
+    const add = (key, message) => conflicts.set(key, [...(conflicts.get(key) || []), message]);
+
+    const rows = reviewRows.map((row) => ({
+      ...row,
+      start: timeToMinutes(row.startTime),
+      end: timeToMinutes(row.endTime),
+      panels: [row.panel1Id, row.panel2Id].filter(Boolean),
+    }));
+
+    rows.forEach((row) => {
+      if (!row.studentId) add(row.key, "Missing student.");
+      if (!row.date) add(row.key, "Missing date.");
+      if (row.start === null || row.end === null) add(row.key, "Invalid time frame.");
+      if (row.panels.length !== 2) add(row.key, "Exactly 2 panels required.");
+      if (new Set(row.panels).size !== row.panels.length) add(row.key, "Panel 1 and Panel 2 are duplicated.");
     });
-    setIsBatchEditOpen(true);
-  };
 
-  const submitBatchEdit = async (e) => {
-    e.preventDefault();
+    for (let i = 0; i < rows.length; i += 1) {
+      for (let j = i + 1; j < rows.length; j += 1) {
+        const a = rows[i];
+        const b = rows[j];
+        if (a.date !== b.date) continue;
+        if (a.studentId && a.studentId === b.studentId) {
+          add(a.key, "Student already has another session on this date.");
+          add(b.key, "Student already has another session on this date.");
+        }
+        if (a.start === null || a.end === null || b.start === null || b.end === null) continue;
+        if (!rangesOverlap(a.start, a.end, b.start, b.end)) continue;
+        const sharedPanel = a.panels.find((panelId) => b.panels.includes(panelId));
+        if (sharedPanel) {
+          add(a.key, "Panel time conflict with another row.");
+          add(b.key, "Panel time conflict with another row.");
+        }
+      }
+    }
+
+    return conflicts;
+  }, [reviewRows]);
+
+  const hasConflicts = conflictMap.size > 0;
+
+  const handleSaveTimeFrames = async () => {
+    if (!selectedBatchId) return alert("Please select a batch first.");
+    if (!reviewRows.length) return alert("There are no review timing rows to save.");
+    if (hasConflicts) return alert("Please fix highlighted conflicts before saving time frames.");
+    setSaving(true);
     try {
-      setIsSaving(true);
-      await sessionBatchAPI.update(batchEditForm.batchId, {
-        batchName: batchEditForm.batchName,
-        academicSession: batchEditForm.academicSession,
-        scheduleTitle: batchEditForm.scheduleTitle,
-        sessionType: batchEditForm.sessionType,
-        rubricId: batchEditForm.rubricId,
-        date: batchEditForm.date,
-        startTime: batchEditForm.startTime,
-        slotDurationMinutes: Number(batchEditForm.slotDurationMinutes || 60),
-        breakBetweenSlotsMinutes: Number(batchEditForm.breakBetweenSlotsMinutes || 0),
-        googleMeetLink: batchEditForm.googleMeetLink,
-        status: batchEditForm.status,
-      });
-
+      const existingItems = reviewRows
+        .filter((row) => row.type === "existing")
+        .map((row) => ({
+          sessionId: row.sessionId,
+          date: bulkConfig.date,
+          startTime: row.startTime,
+          endTime: row.endTime,
+        }));
+      if (existingItems.length) {
+        await api.post(`/timetables/batches/${encodeURIComponent(selectedBatchId)}/time-frames`, {
+          date: bulkConfig.date,
+          items: existingItems,
+        });
+      }
+      alert("Time frames saved successfully.");
+      await loadData();
       const batchRes = await sessionBatchAPI.list();
       setBatches(batchRes.batches || []);
-      if (selectedBatchId === batchEditForm.batchId) {
-        setBulkConfig((prev) => ({
-          ...prev,
-          rubricId: batchEditForm.rubricId,
-          academicSession: batchEditForm.academicSession,
-          batchName: batchEditForm.batchName,
-          batchId: batchEditForm.batchId,
-          date: batchEditForm.date,
-          startTime: batchEditForm.startTime,
-          venue: batchEditForm.googleMeetLink,
-          breakBetweenSlotsMinutes: Number(batchEditForm.breakBetweenSlotsMinutes || 0),
-        }));
-        setSlotDuration(Number(batchEditForm.slotDurationMinutes || 60));
-      }
-      setIsBatchEditOpen(false);
-      alert("Batch updated.");
     } catch (error) {
-      alert(error.response?.data?.message || "Failed to update batch.");
+      alert(error.response?.data?.message || "Failed to save time frames.");
     } finally {
-      setIsSaving(false);
+      setSaving(false);
     }
-  };
-
-  const handleEditClick = (session) => {
-    setEditingSession(session);
-
-    // 🔴 FRONTEND SELF-HEALING: Safely grab arrays or singular objects
-    const p1 =
-      session.panel1Id?._id ||
-      session.panel1Id ||
-      session.panels?.[0]?._id ||
-      session.panels?.[0] ||
-      "";
-    const p2 =
-      session.panel2Id?._id ||
-      session.panel2Id ||
-      session.panels?.[1]?._id ||
-      session.panels?.[1] ||
-      "";
-
-    // 🔴 FIX: Try to get the Exact Rubric ID.
-    let rubric = session.rubricId?._id || session.rubricId;
-
-    // If rubricId is missing but we know the sessionType, auto-select the correct rubric!
-    if (!rubric && session.sessionType) {
-      const fallbackRubric = rubrics.find(
-        (r) => r.sessionType === session.sessionType,
-      );
-      if (fallbackRubric) rubric = fallbackRubric._id;
-    }
-
-    setEditForm({
-      rubricId: rubric || "",
-      date: session.schedule?.date
-        ? new Date(session.schedule.date).toISOString().split("T")[0]
-        : session.date
-          ? new Date(session.date).toISOString().split("T")[0]
-          : "",
-      time: session.schedule?.time || session.time || session.startTime || "",
-      endTime: session.endTime || "",
-      venue: session.schedule?.venue || session.venue || "",
-      panel1Id: p1,
-      panel2Id: p2,
-    });
-    setIsEditModalOpen(true);
-  };
-
-  const submitEditSession = async (e) => {
-    e.preventDefault();
-    try {
-      const sessionId = editingSession._id || editingSession.id;
-      const selectedRubric = rubrics.find((r) => r._id === editForm.rubricId);
-      const sessionType = selectedRubric
-        ? selectedRubric.sessionType
-        : editingSession.sessionType;
-
-      const oldPanel1 =
-        editingSession.panel1Id?._id ||
-        editingSession.panel1Id ||
-        editingSession.panels?.[0]?._id ||
-        editingSession.panels?.[0] ||
-        "";
-      const oldPanel2 =
-        editingSession.panel2Id?._id ||
-        editingSession.panel2Id ||
-        editingSession.panels?.[1]?._id ||
-        editingSession.panels?.[1] ||
-        "";
-      const panelChanged =
-        String(oldPanel1) !== String(editForm.panel1Id || "") ||
-        String(oldPanel2) !== String(editForm.panel2Id || "");
-
-      if (panelChanged && isPanelReplacementLocked(editForm.date)) {
-        return alert(
-          "Panel replacement is only allowed at least 1 week before the session date.",
-        );
-      }
-
-      await api.put(`/timetables/${sessionId}`, { ...editForm, sessionType });
-      alert("Session updated successfully!");
-      setIsEditModalOpen(false);
-      loadData();
-    } catch (err) {
-      alert("Failed to update session");
-    }
-  };
-
-  const toggleStudentForBulk = (student) => {
-    if (batchMode === "existing" && !selectedBatchId) {
-      return alert("Please select an existing batch first.");
-    }
-    const studentId = student._id;
-    if (!student.assignedPanels || student.assignedPanels.length < 2) {
-      return alert(
-        "This student does not have 2 panels assigned yet. Please assign them in the Panel Assignment tab first.",
-      );
-    }
-
-    setSelectedStudentIds((prev) => {
-      if (prev.includes(studentId)) {
-        const newDrafts = { ...sessionDrafts };
-        delete newDrafts[studentId];
-        setSessionDrafts(newDrafts);
-        return prev.filter((id) => id !== studentId);
-      } else {
-        const p1 =
-          student.assignedPanels[0]?.panelId?._id ||
-          student.assignedPanels[0]?.panelId ||
-          student.assignedPanels[0];
-        const p2 =
-          student.assignedPanels[1]?.panelId?._id ||
-          student.assignedPanels[1]?.panelId ||
-          student.assignedPanels[1];
-        const nextIndex = reviewOrder.length;
-        const autoSlot = getAutoSlot(nextIndex);
-
-        setSessionDrafts({
-          ...sessionDrafts,
-          [studentId]: {
-            startTime: autoSlot.startTime,
-            endTime: autoSlot.endTime,
-            panel1Id: p1,
-            panel2Id: p2,
-          },
-        });
-        return [...prev, studentId];
-      }
-    });
   };
 
   const handleBulkSubmit = async () => {
-    if (batchMode === "existing" && !selectedBatchId) {
-      return alert("Please select an existing batch first.");
-    }
+    if (hasConflicts) return alert("Please fix highlighted conflicts before publishing.");
+    const drafts = reviewRows.filter((row) => row.type === "draft");
+    if (!drafts.length) return alert("Select at least one new student to publish.");
+    if (!bulkConfig.batchName.trim()) return alert("Please enter/select a batch name.");
+    if (!bulkConfig.venue) return alert("Please set an online meeting link.");
+    if (!bulkConfig.rubricId) return alert("Please select a rubric.");
 
-    if (!bulkConfig.batchName.trim()) {
-      return alert("Please enter a Batch / Session Name, e.g., PIXEL.");
-    }
-
-    if (!bulkConfig.venue) {
-      return alert("Please set an Online Meeting Link.");
-    }
-
-    if (!bulkConfig.rubricId) {
-      return alert("Please select an Evaluation Rubric.");
-    }
-
-    if (selectedStudentIds.length === 0) {
-      return alert("Select at least one student.");
-    }
-
+    setSaving(true);
     try {
-      setIsSaving(true);
       const selectedRubric = rubrics.find((r) => r._id === bulkConfig.rubricId);
-      const sessionType = selectedRubric
-        ? selectedRubric.sessionType
-        : "PROPOSAL_DEFENSE";
-
-      const draftReviewItems = reviewItems.filter((item) => item.type === "draft");
-
-      const payload = draftReviewItems.map((item) => {
-        const studentId = item.id;
-        const draft = sessionDrafts[studentId] || {};
-        const autoSlot = getAutoSlot(item.index);
-        if (!draft.panel1Id || !draft.panel2Id)
-          throw new Error(`Missing panels for a student.`);
-
-        return {
-          studentId: studentId,
-          sessionType,
-          rubricId: bulkConfig.rubricId,
-          date: bulkConfig.date,
-          time: draft.startTime || autoSlot.startTime,
-          endTime: draft.endTime || autoSlot.endTime,
-          venue: bulkConfig.venue,
-          panel1Id: draft.panel1Id,
-          panel2Id: draft.panel2Id,
-        };
-      });
-
-      const finalBatchId =
-        batchMode === "existing"
-          ? selectedBatchId
-          : bulkConfig.batchId.trim() ||
-            `${bulkConfig.batchName.trim()}-${bulkConfig.date}`;
+      const sessionType = selectedRubric?.sessionType || "PROPOSAL_DEFENSE";
+      const finalBatchId = isExistingBatchMode
+        ? selectedBatchId
+        : bulkConfig.batchId.trim() || `${bulkConfig.batchName.trim()}-${bulkConfig.date}`;
 
       if (batchMode === "new") {
         await sessionBatchAPI.create({
@@ -707,12 +426,7 @@ export default function TimetableManagementPage() {
           googleMeetLink: bulkConfig.venue,
           status: "active",
         });
-
-        const batchRes = await sessionBatchAPI.list();
-        setBatches(batchRes.batches || []);
       }
-
-      await persistReviewTimeFrames(reviewOrder);
 
       await api.post("/timetables/bulk", {
         useExistingBatch: batchMode === "existing",
@@ -727,286 +441,177 @@ export default function TimetableManagementPage() {
         slotDurationMinutes: slotDuration,
         breakBetweenSlotsMinutes: bulkConfig.breakBetweenSlotsMinutes,
         semester: bulkConfig.academicSession,
-        sessions: payload,
+        sessions: drafts.map((row) => ({
+          title: row.title,
+          studentName: row.studentName,
+          studentId: row.studentId,
+          sessionType,
+          rubricId: bulkConfig.rubricId,
+          date: row.date,
+          time: row.startTime,
+          startTime: row.startTime,
+          endTime: row.endTime,
+          venue: bulkConfig.venue,
+          panel1Id: row.panel1Id,
+          panel2Id: row.panel2Id,
+        })),
       });
 
-      alert("✅ Bulk Sessions Created Successfully!");
-      navigate(
-        `/panel/sessions/batch/${encodeURIComponent(finalBatchId)}/print`,
-      );
+      alert("Sessions published successfully.");
       setSelectedStudentIds([]);
-      setSessionDrafts({});
-      setActiveTab("list");
-      loadData();
+      await loadData();
+      const batchRes = await sessionBatchAPI.list();
+      setBatches(batchRes.batches || []);
+      navigate(`/panel/sessions/batch/${encodeURIComponent(finalBatchId)}/print`);
     } catch (error) {
-      alert("Failed to create bulk sessions");
+      alert(error.response?.data?.message || "Failed to publish sessions.");
     } finally {
-      setIsSaving(false);
+      setSaving(false);
     }
   };
 
-  const formatMeetingLink = (url) => {
-    if (!url) return "#";
-    if (!url.startsWith("http://") && !url.startsWith("https://"))
-      return `https://${url}`;
-    return url;
+  const openEditSession = (session) => {
+    const p1 = getPanel(session, 0);
+    const p2 = getPanel(session, 1);
+    setEditingSession(session);
+    setEditForm({
+      rubricId: session.rubricId?._id || session.rubricId || "",
+      date: normalizeDateKey(session.date),
+      time: session.startTime || session.time || "",
+      endTime: session.endTime || "",
+      venue: session.venue || session.googleMeetLink || "",
+      panel1Id: idOf(p1),
+      panel2Id: idOf(p2),
+    });
   };
 
-  const filteredSessions = sessions.filter((session) => {
-    if (!searchTerm) return true;
+  const submitEditSession = async (e) => {
+    e.preventDefault();
+    const selectedRubric = rubrics.find((r) => r._id === editForm.rubricId);
+    try {
+      await api.put(`/timetables/${editingSession._id || editingSession.id}`, {
+        ...editForm,
+        date: editForm.date,
+        startTime: editForm.time,
+        sessionType: selectedRubric?.sessionType || editingSession.sessionType,
+      });
+      setEditingSession(null);
+      alert("Session updated successfully.");
+      await loadData();
+    } catch (error) {
+      alert(error.response?.data?.message || "Failed to update session.");
+    }
+  };
 
-    const studentObj =
-      session.student || (session.students && session.students[0]) || null;
+  const openEditBatch = () => {
+    if (!selectedBatch) return alert("Please select a batch first.");
+    setBatchForm({
+      batchName: selectedBatch.batchName || "",
+      academicSession: selectedBatch.academicSession || "",
+      scheduleTitle: selectedBatch.scheduleTitle || "Postgraduate Progress Presentation Schedule",
+      sessionType: selectedBatch.sessionType || "PROPOSAL_DEFENSE",
+      date: normalizeDateKey(selectedBatch.date || selectedBatch.earliestDate),
+      startTime: selectedBatch.startTime || "09:00",
+      slotDurationMinutes: selectedBatch.slotDurationMinutes || slotDuration,
+      breakBetweenSlotsMinutes: selectedBatch.breakBetweenSlotsMinutes ?? 5,
+      googleMeetLink: selectedBatch.googleMeetLink || "",
+      status: selectedBatch.status || "active",
+    });
+    setEditingBatch(true);
+  };
 
-    if (!studentObj) return false; // Ignore broken records when searching
+  const submitEditBatch = async (e) => {
+    e.preventDefault();
+    try {
+      await sessionBatchAPI.update(selectedBatchId, batchForm);
+      const batchRes = await sessionBatchAPI.list();
+      setBatches(batchRes.batches || []);
+      setEditingBatch(false);
+      handleSelectBatch(selectedBatchId);
+      alert("Batch updated successfully.");
+    } catch (error) {
+      alert(error.response?.data?.message || "Failed to update batch.");
+    }
+  };
 
-    const term = searchTerm.toLowerCase();
-    const matchName = studentObj.name?.toLowerCase().includes(term);
-    const matchMatric = studentObj.matricNumber?.toLowerCase().includes(term);
-    const matchTitle = studentObj.researchTitle?.toLowerCase().includes(term);
+  const filteredSessions = useMemo(() => {
+    const term = searchTerm.toLowerCase().trim();
+    return sessions.filter((session) => {
+      if (!term) return true;
+      const student = getStudent(session);
+      return [
+        session.title,
+        session.batchName,
+        session.sessionType,
+        student?.name,
+        student?.matricNumber,
+        student?.researchTitle,
+        session.startTime,
+        normalizeDateKey(session.date),
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(term);
+    });
+  }, [sessions, searchTerm]);
 
-    return matchName || matchMatric || matchTitle;
-  });
+  const formatLink = (url) => {
+    if (!url) return "#";
+    return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+  };
+
+  if (loading) {
+    return <div className="p-10 text-center text-gray-500 font-semibold">Loading Session Management...</div>;
+  }
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
-      <div className="flex justify-between items-end mb-6">
+      <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-            <CalendarIcon className="w-8 h-8 text-indigo-600" /> Session
-            Management
+            <CalendarIcon className="w-8 h-8 text-indigo-600" /> Session Management
           </h1>
-          <p className="text-gray-600 mt-2">
-            Manage and schedule online symposium presentation slots.
-          </p>
+          <p className="text-gray-600 mt-2">Schedule sessions with student/day and panel/time conflict protection.</p>
         </div>
         {isAdmin && (
-          <div className="flex bg-gray-200 p-1 rounded-lg">
-            <button
-              onClick={() => setActiveTab("list")}
-              className={`px-4 py-2 rounded-md font-bold text-sm ${activeTab === "list" ? "bg-white text-indigo-700 shadow-sm" : "text-gray-600"}`}
-            >
-              All Sessions
-            </button>
-            <button
-              onClick={() => setActiveTab("bulk")}
-              className={`px-4 py-2 rounded-md font-bold text-sm flex items-center gap-2 ${activeTab === "bulk" ? "bg-indigo-600 text-white shadow-sm" : "text-gray-600"}`}
-            >
-              <Layers className="w-4 h-4" /> Smart Schedule
-            </button>
-            <button
-              onClick={() => navigate("/panel/sessions/batches/print")}
-              className="px-4 py-2 rounded-md font-bold text-sm bg-green-600 text-white hover:bg-green-700"
-            >
-              Export Batches
-            </button>
+          <div className="flex flex-wrap bg-gray-200 p-1 rounded-lg gap-1">
+            <button onClick={() => setActiveTab("list")} className={`px-4 py-2 rounded-md font-bold text-sm ${activeTab === "list" ? "bg-white text-indigo-700 shadow-sm" : "text-gray-600"}`}>All Sessions</button>
+            <button onClick={() => setActiveTab("bulk")} className={`px-4 py-2 rounded-md font-bold text-sm flex items-center gap-2 ${activeTab === "bulk" ? "bg-indigo-600 text-white shadow-sm" : "text-gray-600"}`}><Layers className="w-4 h-4" /> Smart Schedule</button>
+            <button onClick={() => navigate("/panel/sessions/batches/print")} className="px-4 py-2 rounded-md font-bold text-sm bg-green-600 text-white hover:bg-green-700">Export Batches</button>
           </div>
         )}
       </div>
 
       {activeTab === "list" && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="p-4 bg-gray-50 border-b flex items-center relative">
             <Search className="w-5 h-5 text-gray-400 absolute ml-3" />
-            <input
-              type="text"
-              placeholder="Search by Student Name..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 border rounded-lg"
-            />
+            <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-lg" placeholder="Search student, batch, session, date, panel..." />
           </div>
-
           <div className="overflow-x-auto">
-            <table className="w-full text-left">
-              <thead className="bg-gray-50 border-b text-xs text-gray-600 uppercase tracking-wider">
-                <tr>
-                  <th className="p-4">Session & Rubric</th>
-                  <th className="p-4">Schedule & Link</th>
-                  <th className="p-4">Student & Project</th>
-                  <th className="p-4">Panels</th>
-                  <th className="p-4 text-right">Actions</th>
-                </tr>
+            <table className="w-full text-left min-w-[900px]">
+              <thead className="bg-gray-50 border-b text-xs text-gray-600 uppercase">
+                <tr><th className="p-4">Session</th><th className="p-4">Schedule</th><th className="p-4">Student</th><th className="p-4">Panels</th><th className="p-4 text-right">Actions</th></tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredSessions.map((session) => {
                   const sessionId = session._id || session.id;
-
-                  // 🔴 FRONTEND SELF-HEALING: Safely pull data from arrays or singular objects
-                  const studentObj =
-                    session.student ||
-                    (session.students && session.students[0]) ||
-                    null;
-                  const p1 =
-                    session.panel1Id ||
-                    (session.panels && session.panels[0]) ||
-                    null;
-                  const p2 =
-                    session.panel2Id ||
-                    (session.panels && session.panels[1]) ||
-                    null;
-                  const panelsList = [p1, p2].filter(Boolean);
-
-                  const linkedEvals = allEvaluations.filter(
-                    (ev) =>
-                      ev.sessionId?._id === sessionId ||
-                      ev.sessionId === sessionId,
-                  );
-                  const myPendingEval = linkedEvals.find(
-                    (e) =>
-                      (e.evaluatorId?._id === user.id ||
-                        e.evaluatorId === user.id) &&
-                      e.status === "PENDING",
-                  );
-
-                  // If studentObj is null, this record is orphaned/broken!
-                  const isBroken = !studentObj;
-
+                  const student = getStudent(session);
+                  const pendingEval = evaluations.find((ev) => {
+                    const evSessionId = ev.sessionId?._id || ev.sessionId;
+                    const evEvaluator = ev.evaluatorId?._id || ev.evaluatorId;
+                    return String(evSessionId) === String(sessionId) && String(evEvaluator) === String(user.id) && ev.status === "PENDING";
+                  });
                   return (
-                    <tr
-                      key={sessionId}
-                      className={`hover:bg-gray-50 cursor-pointer ${isBroken ? "bg-red-50" : ""}`}
-                      onClick={(e) => {
-                        if (
-                          !e.target.closest("button") &&
-                          !e.target.closest("a") &&
-                          !isBroken
-                        )
-                          navigate(`/panel/sessions/${sessionId}`);
-                      }}
-                    >
-                      <td className="p-4">
-                        <p className="font-bold text-gray-900">
-                          {session.rubricId?.name ||
-                            session.sessionType?.replace("_", " ")}
-                        </p>
-                        <span className="inline-block mt-1 px-2 py-0.5 rounded text-[10px] font-bold tracking-widest uppercase bg-green-100 text-green-800 border border-green-200">
-                          SCHEDULED
-                        </span>
-                      </td>
-                      <td className="p-4 whitespace-nowrap text-sm text-gray-600">
-                        <div className="flex items-center gap-2 mb-1 font-semibold">
-                          <CalendarIcon className="w-4 h-4 text-indigo-500" />{" "}
-                          {new Date(
-                            session.schedule?.date || session.date,
-                          ).toLocaleDateString()}
-                        </div>
-                        <div className="flex items-center gap-2 mb-2 font-semibold">
-                          <Clock className="w-4 h-4 text-blue-500" />{" "}
-                          {session.startTime || session.time}{" "}
-                          {session.endTime ? ` - ${session.endTime}` : ""}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <a
-                            href={formatMeetingLink(session.venue)}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-1.5 text-blue-700 hover:text-blue-900 font-bold bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200"
-                          >
-                            <Video className="w-4 h-4" /> Join
-                          </a>
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        {isBroken ? (
-                          <div className="text-red-600 font-bold flex items-center gap-2 border border-red-200 bg-red-100 p-2 rounded">
-                            <AlertTriangle className="w-5 h-5" />
-                            <div>
-                              <p>Deleted Student</p>
-                              <p className="text-xs font-medium">
-                                Please delete this session.
-                              </p>
-                            </div>
-                          </div>
-                        ) : (
-                          <>
-                            <p className="font-bold text-gray-800 text-sm">
-                              {studentObj?.name}
-                            </p>
-                            <p className="text-xs font-mono font-bold text-gray-500 mb-1">
-                              {studentObj?.matricNumber}
-                            </p>
-                            <p className="text-xs text-indigo-600 font-semibold mb-2">
-                              SV: {studentObj?.supervisorId?.name || "None"}
-                            </p>
-                            <div className="bg-gray-100 p-2 rounded border border-gray-200">
-                              <p className="text-[10px] font-bold text-gray-500 uppercase flex items-center gap-1">
-                                <BookOpen className="w-3 h-3" /> Project Title
-                              </p>
-                              <p className="text-xs text-gray-700 italic font-medium line-clamp-2 mt-0.5">
-                                "{studentObj?.researchTitle || "Not provided"}"
-                              </p>
-                            </div>
-                          </>
-                        )}
-                      </td>
-                      <td className="p-4">
-                        <div className="flex flex-col gap-1">
-                          {panelsList.length === 0 && (
-                            <span className="text-xs text-gray-400 italic">
-                              No Panels
-                            </span>
-                          )}
-                          {panelsList.map((p, idx) => (
-                            <span
-                              key={idx}
-                              className={`px-2 py-1 rounded text-xs font-bold border shadow-sm ${p._id === user.id ? "bg-indigo-600 text-white border-indigo-700" : "bg-white text-indigo-700 border-indigo-200"}`}
-                            >
-                              {p.name || p} {p._id === user.id && "(You)"}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
+                    <tr key={sessionId} className="hover:bg-gray-50">
+                      <td className="p-4"><p className="font-bold text-gray-900">{session.title || session.sessionType}</p><p className="text-xs text-gray-500">{session.batchName || session.batchId || "No batch"}</p></td>
+                      <td className="p-4 text-sm text-gray-700"><div>{normalizeDateKey(session.date)}</div><div className="font-semibold">{session.startTime || session.time} - {session.endTime}</div><a href={formatLink(session.venue || session.googleMeetLink)} target="_blank" rel="noreferrer" className="text-blue-700 font-semibold flex items-center gap-1"><Video className="w-4 h-4" /> Link</a></td>
+                      <td className="p-4"><p className="font-bold">{student?.name || "-"}</p><p className="text-xs text-gray-500">{student?.matricNumber || student?.userId || "-"}</p></td>
+                      <td className="p-4 text-sm"><p>{nameOf(getPanel(session, 0))}</p><p>{nameOf(getPanel(session, 1))}</p></td>
                       <td className="p-4 text-right space-x-2">
-                        {myPendingEval && !isBroken && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              navigate(
-                                `/panel/evaluation/${myPendingEval._id}`,
-                              );
-                            }}
-                            className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 text-sm shadow-sm w-full mb-2"
-                          >
-                            Evaluate Now
-                          </button>
-                        )}
-
-                        {isAdmin && (
-                          <div className="flex justify-end gap-2">
-                            {session.batchId && (
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  navigate(
-                                    `/panel/sessions/batch/${encodeURIComponent(session.batchId)}/print`,
-                                  );
-                                }}
-                                className="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg font-bold hover:bg-blue-100 text-sm shadow-sm"
-                              >
-                                Print Batch
-                              </button>
-                            )}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleEditClick(session);
-                              }}
-                              className="px-3 py-1.5 bg-yellow-50 text-yellow-700 border border-yellow-200 rounded-lg font-bold hover:bg-yellow-100 text-sm shadow-sm"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDelete(sessionId);
-                              }}
-                              className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg border hover:border-red-200 transition-colors"
-                            >
-                              <Trash2 className="w-5 h-5" />
-                            </button>
-                          </div>
-                        )}
+                        {isAdmin ? <button onClick={() => openEditSession(session)} className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold">Edit</button> : pendingEval ? <button onClick={() => navigate(`/panel/evaluation/${pendingEval._id}`)} className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold">Evaluate</button> : <button onClick={() => navigate(`/panel/sessions/${sessionId}`)} className="px-3 py-2 bg-gray-700 text-white rounded-lg text-sm font-bold">View</button>}
+                        {isAdmin && <button onClick={() => removeReviewRow({ type: "existing", sessionId })} className="px-3 py-2 bg-red-50 text-red-700 rounded-lg text-sm font-bold border border-red-200">Delete</button>}
                       </td>
                     </tr>
                   );
@@ -1017,808 +622,121 @@ export default function TimetableManagementPage() {
         </div>
       )}
 
-      {/* SMART BULK SCHEDULING UI */}
       {activeTab === "bulk" && isAdmin && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <div className="lg:col-span-1 space-y-6">
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200">
-              <h2 className="font-bold text-lg mb-4 text-gray-900 border-b pb-2">
-                1. Base Settings
-              </h2>
-              <div className="mb-4">
-                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
-                  Batch Mode
-                </label>
-
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBatchMode("existing");
-                      setSelectedStudentIds([]);
-                      setSessionDrafts({});
-                    }}
-                    className={`px-3 py-2 rounded-lg font-bold text-sm ${
-                      batchMode === "existing"
-                        ? "bg-indigo-600 text-white"
-                        : "bg-gray-100 text-gray-700"
-                    }`}
-                  >
-                    Use Existing Batch
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setBatchMode("new");
-                      setSelectedBatchId("");
-                      setBulkConfig((prev) => ({
-                        ...prev,
-                        batchName: "",
-                        batchId: "",
-                        venue: "",
-                        date: new Date().toISOString().split("T")[0],
-                        startTime: "09:00",
-                        breakBetweenSlotsMinutes: 5,
-                      }));
-                      setSelectedStudentIds([]);
-                      setSessionDrafts({});
-                    }}
-                    className={`px-3 py-2 rounded-lg font-bold text-sm ${
-                      batchMode === "new"
-                        ? "bg-indigo-600 text-white"
-                        : "bg-gray-100 text-gray-700"
-                    }`}
-                  >
-                    Create New Batch
-                  </button>
-                </div>
+        <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-6">
+          <div className="space-y-4">
+            <div className="bg-white rounded-xl border shadow-sm p-5">
+              <h2 className="text-lg font-bold mb-4">Batch Mode</h2>
+              <div className="grid grid-cols-2 gap-2 mb-4">
+                <button onClick={() => { setBatchMode("existing"); setSelectedStudentIds([]); setReviewRows([]); }} className={`px-3 py-2 rounded-lg font-bold text-sm ${batchMode === "existing" ? "bg-indigo-600 text-white" : "bg-gray-100"}`}>Use Existing</button>
+                <button onClick={() => { setBatchMode("new"); setSelectedBatchId(""); setSelectedStudentIds([]); setReviewRows([]); setBulkConfig((prev) => ({ ...prev, batchName: "", batchId: "", venue: "", date: normalizeDateKey(new Date()), startTime: "09:00" })); }} className={`px-3 py-2 rounded-lg font-bold text-sm ${batchMode === "new" ? "bg-indigo-600 text-white" : "bg-gray-100"}`}>Create New</button>
               </div>
 
-              {batchMode === "existing" && (
-                <div className="mb-4">
-                  <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
-                    Select Batch
-                  </label>
-
-                  <select
-                    value={selectedBatchId}
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      setSelectedBatchId(value);
-
-                      const batch = batches.find((b) => b.batchId === value);
-                      if (!batch) return;
-
-                      setBulkConfig({
-                        rubricId: batch.rubricId?._id || batch.rubricId || "",
-                        academicSession: batch.academicSession || "",
-                        batchName: batch.batchName || "",
-                        batchId: batch.batchId || "",
-                        date: batch.date
-                          ? new Date(batch.date).toISOString().split("T")[0]
-                          : "",
-                        startTime: batch.startTime || "09:00",
-                        venue: batch.googleMeetLink || "",
-                        breakBetweenSlotsMinutes:
-                          batch.breakBetweenSlotsMinutes ?? 5,
-                      });
-
-                      setSlotDuration(batch.slotDurationMinutes || 60);
-                      setSelectedStudentIds([]);
-                      setSessionDrafts({});
-                    }}
-                    className="w-full p-2 border rounded-lg bg-gray-50 font-semibold"
-                  >
+              {isExistingBatchMode && (
+                <>
+                  <input value={batchSearch} onChange={(e) => setBatchSearch(e.target.value)} placeholder="Search available batches..." className="w-full p-2 border rounded-lg mb-2" />
+                  <select value={selectedBatchId} onChange={(e) => handleSelectBatch(e.target.value)} className="w-full p-2 border rounded-lg font-semibold bg-gray-50">
                     <option value="">Select existing batch...</option>
-                    {batches.map((batch) => (
-                      <option key={batch.batchId} value={batch.batchId}>
-                        {batch.batchName} —{" "}
-                        {batch.date
-                          ? new Date(batch.date).toLocaleDateString("en-MY")
-                          : "No date"}
-                      </option>
-                    ))}
+                    {filteredBatches.map((batch) => <option key={batch.batchId} value={batch.batchId}>{batch.batchName || batch.batchId} — {normalizeDateKey(batch.date || batch.earliestDate)}</option>)}
                   </select>
+                  <button onClick={openEditBatch} disabled={!selectedBatchId} className="mt-2 w-full px-3 py-2 rounded-lg font-bold text-sm bg-amber-50 text-amber-700 border border-amber-200 disabled:opacity-50">Edit Selected Batch</button>
+                </>
+              )}
+            </div>
 
-                  <div className="mt-2 flex flex-col sm:flex-row gap-2">
-                    <button
-                      type="button"
-                      onClick={() => openBatchEditModal()}
-                      disabled={!selectedBatchId}
-                      className="px-3 py-2 rounded-lg border border-indigo-200 bg-indigo-50 text-indigo-700 font-bold text-xs hover:bg-indigo-100 disabled:opacity-50"
-                    >
-                      Edit Selected Batch
-                    </button>
-                    <button
-                      type="button"
-                      onClick={saveCurrentBatchArrangement}
-                      disabled={!selectedBatchId || arrangedBatchSessions.length === 0 || isSaving}
-                      className="px-3 py-2 rounded-lg border border-green-200 bg-green-50 text-green-700 font-bold text-xs hover:bg-green-100 disabled:opacity-50 flex items-center justify-center gap-1"
-                    >
-                      <Save className="w-3 h-3" /> Save Current Order
-                    </button>
+            <div className="bg-white rounded-xl border shadow-sm p-5 space-y-3">
+              <h2 className="text-lg font-bold">Batch Details</h2>
+              <input value={bulkConfig.batchName} disabled={isExistingBatchMode} onChange={(e) => updateBulkConfig({ batchName: e.target.value })} placeholder="Batch Name, e.g. PIXEL" className="w-full p-2 border rounded-lg disabled:bg-gray-100" />
+              <input value={bulkConfig.batchId} disabled={isExistingBatchMode} onChange={(e) => updateBulkConfig({ batchId: e.target.value })} placeholder="Batch ID" className="w-full p-2 border rounded-lg disabled:bg-gray-100" />
+              <input type="date" value={bulkConfig.date} disabled={isExistingBatchMode} onChange={(e) => updateBulkConfig({ date: e.target.value })} className="w-full p-2 border rounded-lg disabled:bg-gray-100" />
+              <input type="time" value={bulkConfig.startTime} disabled={isExistingBatchMode} onChange={(e) => updateBulkConfig({ startTime: e.target.value })} className="w-full p-2 border rounded-lg disabled:bg-gray-100" />
+              <div className="grid grid-cols-2 gap-2">
+                <input type="number" min="5" value={slotDuration} disabled={isExistingBatchMode} onChange={(e) => { setSlotDuration(Number(e.target.value)); localStorage.setItem("admin_slot_duration", e.target.value); setTimeout(() => setReviewRows((rows) => recalcRows(rows)), 0); }} className="w-full p-2 border rounded-lg disabled:bg-gray-100" placeholder="Duration" />
+                <input type="number" min="0" value={bulkConfig.breakBetweenSlotsMinutes} disabled={isExistingBatchMode} onChange={(e) => updateBulkConfig({ breakBetweenSlotsMinutes: Number(e.target.value) })} className="w-full p-2 border rounded-lg disabled:bg-gray-100" placeholder="Break" />
+              </div>
+              <select value={bulkConfig.rubricId} disabled={isExistingBatchMode} onChange={(e) => updateBulkConfig({ rubricId: e.target.value })} className="w-full p-2 border rounded-lg disabled:bg-gray-100">
+                {rubrics.map((rubric) => <option key={rubric._id} value={rubric._id}>{rubric.name}</option>)}
+              </select>
+              <input value={bulkConfig.venue} disabled={isExistingBatchMode} onChange={(e) => updateBulkConfig({ venue: e.target.value })} placeholder="Online Meeting Link" className="w-full p-2 border rounded-lg disabled:bg-gray-100" />
+            </div>
+
+            <div className="bg-white rounded-xl border shadow-sm p-5">
+              <h2 className="text-lg font-bold mb-3 flex items-center gap-2"><UserPlus className="w-5 h-5" /> Add Students</h2>
+              <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
+                {students.map((student) => (
+                  <button key={student._id} onClick={() => toggleStudentForBulk(student)} className={`w-full text-left p-3 rounded-lg border ${selectedStudentIds.includes(student._id) ? "bg-indigo-50 border-indigo-300" : "bg-white border-gray-200 hover:bg-gray-50"}`}>
+                    <p className="font-bold text-gray-900">{student.name}</p>
+                    <p className="text-xs text-gray-500">{student.matricNumber || student.userId}</p>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl border shadow-sm overflow-hidden">
+            <div className="p-5 bg-gray-50 border-b flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Review Timings</h2>
+                <p className="text-sm text-gray-500">Drag or use arrows to interchange time frames. Red rows mean student/day or panel/time crash.</p>
+              </div>
+              <button onClick={handleSaveTimeFrames} disabled={saving || !reviewRows.some((row) => row.type === "existing") || hasConflicts} className="px-4 py-2 rounded-lg bg-green-600 text-white font-bold disabled:opacity-50 flex items-center gap-2 justify-center"><Save className="w-4 h-4" /> Save Time Frames</button>
+            </div>
+
+            <div className="max-h-[620px] overflow-y-auto divide-y divide-gray-100">
+              {reviewRows.length === 0 && <div className="p-10 text-center text-gray-500">Select an existing batch or add students to review timings.</div>}
+              {reviewRows.map((row, index) => {
+                const errors = conflictMap.get(row.key) || [];
+                return (
+                  <div key={row.key} draggable onDragStart={() => setDragIndex(index)} onDragOver={(e) => e.preventDefault()} onDrop={() => { if (dragIndex !== null) moveRow(dragIndex, index); setDragIndex(null); }} className={`p-4 grid grid-cols-1 lg:grid-cols-[44px_90px_1fr_140px_180px_120px] gap-3 items-center ${errors.length ? "bg-red-50 border-l-4 border-red-500" : row.type === "existing" ? "bg-blue-50/30" : "bg-white"}`}>
+                    <div className="flex items-center gap-2 text-gray-500"><GripVertical className="w-5 h-5" /><span className="font-bold">#{row.slotNo}</span></div>
+                    <div><p className="font-bold text-gray-900">{row.startTime}</p><p className="text-xs text-gray-500">to {row.endTime}</p></div>
+                    <div><p className="font-bold text-gray-900">{row.studentName}</p><p className="text-xs text-gray-500">{row.matricNumber} · {row.type === "existing" ? "Scheduled" : "New Draft"}</p>{errors.map((err) => <p key={err} className="text-xs text-red-700 font-semibold mt-1 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> {err}</p>)}</div>
+                    <div><p className="text-xs text-gray-500 uppercase font-bold">Date</p><p className="font-semibold">{row.date}</p></div>
+                    <div className="text-sm"><p>{row.panel1Name}</p><p>{row.panel2Name}</p></div>
+                    <div className="flex gap-1 justify-end">
+                      <button onClick={() => moveRow(index, index - 1)} className="px-2 py-1 border rounded">↑</button>
+                      <button onClick={() => moveRow(index, index + 1)} className="px-2 py-1 border rounded">↓</button>
+                      {row.type === "existing" && <button onClick={() => openEditSession(sessions.find((s) => String(s._id || s.id) === String(row.sessionId)))} className="px-2 py-1 bg-indigo-600 text-white rounded"><Pencil className="w-4 h-4" /></button>}
+                      <button onClick={() => removeReviewRow(row)} className="px-2 py-1 bg-red-50 text-red-700 border border-red-200 rounded"><Trash2 className="w-4 h-4" /></button>
+                    </div>
                   </div>
-
-                  <p className="text-[11px] text-gray-500 mt-1">
-                    Latest created batch appears first. Selecting a batch
-                    auto-fills the schedule settings and displays existing scheduled sessions below.
-                  </p>
-                </div>
-              )}
-
-              {batchMode === "existing" && selectedBatchId && (
-                <div className="mb-4 rounded-xl border border-blue-100 bg-blue-50 p-3 text-xs text-blue-800 font-semibold">
-                  Existing sessions in this batch are now listed together in <span className="font-black">Review Timings</span>. Drag or move them there to interchange their time frames.
-                </div>
-              )}
-              <div>
-                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
-                  Academic Session
-                </label>
-                <input
-                  type="text"
-                  value={bulkConfig.academicSession}
-                  disabled={isExistingBatchMode}
-                  className={batchFieldClass}
-                  onChange={(e) =>
-                    setBulkConfig({
-                      ...bulkConfig,
-                      academicSession: e.target.value,
-                    })
-                  }
-                  placeholder="2025/2026, Semester 1"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
-                  Batch / Session Name
-                </label>
-                <input
-                  type="text"
-                  value={bulkConfig.batchName}
-                  disabled={isExistingBatchMode}
-                  className={batchFieldClass}
-                  onChange={(e) =>
-                    setBulkConfig({ ...bulkConfig, batchName: e.target.value })
-                  }
-                  placeholder="e.g., PIXEL"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
-                  Batch ID
-                </label>
-                <input
-                  type="text"
-                  value={bulkConfig.batchId}
-                  disabled={isExistingBatchMode}
-                  className={batchFieldClass}
-                  onChange={(e) =>
-                    setBulkConfig({ ...bulkConfig, batchId: e.target.value })
-                  }
-                  placeholder="Auto if empty"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
-                  Start Time
-                </label>
-                <input
-                  type="time"
-                  value={bulkConfig.startTime}
-                  disabled={isExistingBatchMode}
-                  className={batchFieldClass}
-                  onChange={(e) =>
-                    setBulkConfig({ ...bulkConfig, startTime: e.target.value })
-                  }
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
-                  Break Between Slots
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  max="60"
-                  step="5"
-                  value={bulkConfig.breakBetweenSlotsMinutes}
-                  disabled={isExistingBatchMode}
-                  className={batchFieldClass}
-                  onChange={(e) =>
-                    setBulkConfig({
-                      ...bulkConfig,
-                      breakBetweenSlotsMinutes: Number(e.target.value),
-                    })
-                  }
-                />
-              </div>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
-                    Evaluation Rubric
-                  </label>
-                  <select
-                    value={bulkConfig.rubricId}
-                    disabled={isExistingBatchMode}
-                    className={batchFieldClass}
-                    onChange={(e) =>
-                      setBulkConfig({ ...bulkConfig, rubricId: e.target.value })
-                    }
-                  >
-                    {rubrics.map((r) => (
-                      <option key={r._id} value={r._id}>
-                        {r.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
-                    Slot Duration (Minutes)
-                  </label>
-                  <input
-                    type="number"
-                    min="5"
-                    max="240"
-                    step="5"
-                    value={slotDuration}
-                    disabled={isExistingBatchMode}
-                    onChange={handleDurationChange}
-                    className={batchFieldClass}
-                    placeholder="e.g., 60"
-                  />
-                  <p className="text-[10px] text-gray-500 mt-1 font-semibold uppercase">
-                    Your preference is automatically saved.
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 uppercase mb-1">
-                    Date
-                  </label>
-                  <input
-                    type="date"
-                    value={bulkConfig.date}
-                    disabled={isExistingBatchMode}
-                    className={batchFieldClass}
-                    onChange={(e) =>
-                      setBulkConfig({ ...bulkConfig, date: e.target.value })
-                    }
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-gray-600 uppercase mb-1 flex items-center gap-1">
-                    <LinkIcon className="w-3 h-3" /> Online Meeting Link
-                  </label>
-                  <input
-                    type="url"
-                    value={bulkConfig.venue}
-                    disabled={isExistingBatchMode}
-                    onChange={(e) =>
-                      setBulkConfig({ ...bulkConfig, venue: e.target.value })
-                    }
-                    className={batchFieldClass}
-                  />
-                </div>
-              </div>
+                );
+              })}
             </div>
 
-            <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex flex-col h-[500px]">
-              <h2 className="font-bold text-lg mb-4 text-gray-900 border-b pb-2">
-                2. Select Students
-              </h2>
-              <div className="flex-1 overflow-y-auto space-y-1 pr-2">
-                {students.map((student) => {
-                  const hasPanels =
-                    student.assignedPanels &&
-                    student.assignedPanels.length >= 2;
-                  return (
-                    <label
-                      key={student._id}
-                      className={`flex items-center gap-3 p-3 rounded-lg border transition-colors ${selectedStudentIds.includes(student._id) ? "bg-indigo-50 border-indigo-200" : "hover:bg-gray-50 border-transparent"} ${!hasPanels ? "opacity-50 cursor-not-allowed" : "cursor-pointer"}`}
-                    >
-                      <input
-                        type="checkbox"
-                        disabled={!hasPanels}
-                        checked={selectedStudentIds.includes(student._id)}
-                        onChange={() => toggleStudentForBulk(student)}
-                        className="w-4 h-4 text-indigo-600"
-                      />
-                      <div>
-                        <p className="font-semibold text-sm text-gray-900">
-                          {student.name}
-                        </p>
-                        <p className="text-xs font-mono font-bold text-gray-500">
-                          {student.matricNumber}
-                        </p>
-                        {!hasPanels && (
-                          <p className="text-[10px] text-red-500 font-bold uppercase mt-1">
-                            Requires Panel Assignment First
-                          </p>
-                        )}
-                      </div>
-                    </label>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-
-          <div className="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-200 flex flex-col min-h-[620px]">
-            <div className="p-5 border-b border-gray-200 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 bg-gray-50 rounded-t-xl">
-              <div>
-                <h2 className="font-bold text-lg text-gray-900">
-                  3. Review Timings
-                </h2>
-                <p className="text-xs text-gray-500">
-                  Existing batch sessions and newly selected students are shown together. Drag items to interchange their time frames.
-                </p>
-              </div>
-              <div className="flex flex-col sm:flex-row gap-2">
-                <button
-                  type="button"
-                  onClick={saveCurrentBatchArrangement}
-                  disabled={isSaving || reviewItems.length === 0}
-                  className="px-4 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 disabled:bg-gray-400 flex items-center justify-center gap-2 text-sm"
-                >
-                  <Save className="w-4 h-4" /> Save Time Frames
-                </button>
-                <button
-                  onClick={handleBulkSubmit}
-                  disabled={isSaving || selectedStudentIds.length === 0}
-                  className="px-4 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 disabled:bg-gray-400 text-sm"
-                >
-                  {isSaving
-                    ? "Saving..."
-                    : selectedStudentIds.length > 0
-                      ? `Publish ${selectedStudentIds.length} New Session(s)`
-                      : "Publish"}
-                </button>
-              </div>
-            </div>
-
-            <div className="flex-1 p-4 sm:p-5 overflow-y-auto max-h-[72vh]">
-              {reviewItems.length === 0 ? (
-                <div className="text-center text-gray-400 mt-12">
-                  <Users className="w-12 h-12 mx-auto mb-3" />
-                  <p>Select an existing batch or choose students to generate schedule drafts.</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {reviewItems.map((item, index) => {
-                    const slot = getAutoSlot(index);
-                    const isExisting = item.type === "existing";
-                    const student = item.student;
-                    const session = item.session;
-                    const p1Id = isExisting
-                      ? session?.panel1Id?._id || session?.panel1Id || session?.panels?.[0]?._id || session?.panels?.[0]
-                      : sessionDrafts[item.id]?.panel1Id?._id || sessionDrafts[item.id]?.panel1Id;
-                    const p2Id = isExisting
-                      ? session?.panel2Id?._id || session?.panel2Id || session?.panels?.[1]?._id || session?.panels?.[1]
-                      : sessionDrafts[item.id]?.panel2Id?._id || sessionDrafts[item.id]?.panel2Id;
-                    const p1Name = panels.find((p) => p._id === p1Id)?.name || p1Id?.name || "Panel 1";
-                    const p2Name = panels.find((p) => p._id === p2Id)?.name || p2Id?.name || "Panel 2";
-
-                    return (
-                      <div
-                        key={item.token}
-                        draggable
-                        onDragStart={() => setDraggedReviewItem(index)}
-                        onDragOver={(event) => event.preventDefault()}
-                        onDrop={() => handleReviewDrop(index)}
-                        className={`rounded-xl border shadow-sm transition-all ${isExisting ? "bg-blue-50 border-blue-200" : "bg-white border-gray-200"}`}
-                      >
-                        <div className="p-4 flex flex-col gap-4">
-                          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
-                            <div className="flex items-start gap-3 min-w-0">
-                              <div className="cursor-grab select-none rounded-lg border bg-white px-3 py-2 text-gray-400 font-black">
-                                ⋮⋮
-                              </div>
-                              <div className="min-w-0">
-                                <div className="flex flex-wrap items-center gap-2 mb-1">
-                                  <span className="px-2 py-1 rounded-full text-[10px] font-black uppercase bg-gray-900 text-white">
-                                    Slot {index + 1}
-                                  </span>
-                                  <span className={`px-2 py-1 rounded-full text-[10px] font-black uppercase ${isExisting ? "bg-blue-600 text-white" : "bg-green-600 text-white"}`}>
-                                    {isExisting ? "Existing Session" : "New Draft"}
-                                  </span>
-                                  {isExisting && (
-                                    <span className="px-2 py-1 rounded-full text-[10px] font-black uppercase bg-white text-blue-700 border border-blue-200">
-                                      Saved after Save Time Frames
-                                    </span>
-                                  )}
-                                </div>
-                                <p className="font-black text-gray-900 truncate">
-                                  {student?.name || getStudentName(session)}
-                                </p>
-                                <p className="text-xs font-mono font-bold text-gray-500">
-                                  {student?.matricNumber || getStudentMatric(session)}
-                                </p>
-                                {isExisting && (
-                                  <p className="text-xs text-gray-600 mt-1 truncate">
-                                    {session?.title || session?.sessionType}
-                                  </p>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="flex flex-wrap items-center gap-2">
-                              <button
-                                type="button"
-                                onClick={() => moveReviewItem(index, index - 1)}
-                                disabled={index === 0}
-                                className="p-2 border rounded-lg hover:bg-white disabled:opacity-30"
-                              >
-                                <ChevronUp className="w-4 h-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => moveReviewItem(index, index + 1)}
-                                disabled={index === reviewItems.length - 1}
-                                className="p-2 border rounded-lg hover:bg-white disabled:opacity-30"
-                              >
-                                <ChevronDown className="w-4 h-4" />
-                              </button>
-                              {isExisting ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleEditClick(session)}
-                                    className="px-3 py-2 rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-200 font-bold text-sm hover:bg-indigo-100"
-                                  >
-                                    Edit Session
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => handleDelete(getSessionId(session))}
-                                    className="px-3 py-2 rounded-lg bg-red-50 text-red-700 border border-red-200 font-bold text-sm hover:bg-red-100"
-                                  >
-                                    Drop
-                                  </button>
-                                </>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => toggleStudentForBulk(student)}
-                                  className="px-3 py-2 rounded-lg bg-red-50 text-red-700 border border-red-200 font-bold text-sm hover:bg-red-100"
-                                >
-                                  Remove Draft
-                                </button>
-                              )}
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                            <div className="bg-white p-3 rounded-lg border">
-                              <p className="text-[10px] font-black text-gray-500 uppercase">Time Frame</p>
-                              <p className="text-sm font-black text-gray-900 mt-1">
-                                {slot.startTime} - {slot.endTime}
-                              </p>
-                              {isExisting && (
-                                <p className="text-[10px] text-blue-700 font-semibold mt-1">
-                                  Current: {getSessionStartTime(session)} - {getSessionEndTime(session)}
-                                </p>
-                              )}
-                            </div>
-                            <div className="bg-white p-3 rounded-lg border">
-                              <p className="text-[10px] font-black text-gray-500 uppercase">Date</p>
-                              <p className="text-sm font-bold text-gray-900 mt-1">
-                                {bulkConfig.date || getSessionDateOnly(session)}
-                              </p>
-                            </div>
-                            <div className="bg-white p-3 rounded-lg border">
-                              <p className="text-[10px] font-black text-gray-500 uppercase">Panel 1</p>
-                              <p className="text-sm font-bold text-gray-900 mt-1 truncate">{p1Name}</p>
-                            </div>
-                            <div className="bg-white p-3 rounded-lg border">
-                              <p className="text-[10px] font-black text-gray-500 uppercase">Panel 2</p>
-                              <p className="text-sm font-bold text-gray-900 mt-1 truncate">{p2Name}</p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
+            <div className="p-5 border-t bg-gray-50 flex flex-col md:flex-row justify-between gap-3">
+              <p className="text-sm text-gray-600">{reviewRows.filter((r) => r.type === "existing").length} existing, {reviewRows.filter((r) => r.type === "draft").length} new draft(s).</p>
+              <button onClick={handleBulkSubmit} disabled={saving || hasConflicts || !reviewRows.some((row) => row.type === "draft")} className="px-5 py-3 rounded-lg bg-indigo-600 text-white font-bold disabled:opacity-50">Publish New Sessions</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* BATCH EDIT MODAL */}
-      {isBatchEditOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 relative max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setIsBatchEditOpen(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-700"
-            >
-              <X className="w-6 h-6" />
-            </button>
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-2 border-b pb-2">
-              <Layers className="w-5 h-5 text-indigo-600" /> Edit Batch
-            </h2>
-            <form onSubmit={submitBatchEdit} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Batch Name</label>
-                  <input
-                    required
-                    value={batchEditForm.batchName}
-                    onChange={(e) => setBatchEditForm({ ...batchEditForm, batchName: e.target.value })}
-                    className="w-full border rounded p-2 font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Batch ID</label>
-                  <input
-                    value={batchEditForm.batchId}
-                    disabled
-                    className="w-full border rounded p-2 font-semibold bg-gray-100 text-gray-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Academic Session</label>
-                  <input
-                    value={batchEditForm.academicSession}
-                    onChange={(e) => setBatchEditForm({ ...batchEditForm, academicSession: e.target.value })}
-                    className="w-full border rounded p-2 font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Session Type</label>
-                  <select
-                    value={batchEditForm.sessionType}
-                    onChange={(e) => setBatchEditForm({ ...batchEditForm, sessionType: e.target.value })}
-                    className="w-full border rounded p-2 font-semibold bg-white"
-                  >
-                    <option value="PROPOSAL_DEFENSE">Proposal Defense</option>
-                    <option value="PROGRESS_ASSESSMENT">Progress Assessment</option>
-                    <option value="PRE_VIVA">Pre-Viva</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Date</label>
-                  <input
-                    type="date"
-                    value={batchEditForm.date}
-                    onChange={(e) => setBatchEditForm({ ...batchEditForm, date: e.target.value })}
-                    className="w-full border rounded p-2 font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Start Time</label>
-                  <input
-                    type="time"
-                    value={batchEditForm.startTime}
-                    onChange={(e) => setBatchEditForm({ ...batchEditForm, startTime: e.target.value })}
-                    className="w-full border rounded p-2 font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Slot Duration</label>
-                  <input
-                    type="number"
-                    min="5"
-                    step="5"
-                    value={batchEditForm.slotDurationMinutes}
-                    onChange={(e) => setBatchEditForm({ ...batchEditForm, slotDurationMinutes: e.target.value })}
-                    className="w-full border rounded p-2 font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">Break Between Slots</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="5"
-                    value={batchEditForm.breakBetweenSlotsMinutes}
-                    onChange={(e) => setBatchEditForm({ ...batchEditForm, breakBetweenSlotsMinutes: e.target.value })}
-                    className="w-full border rounded p-2 font-semibold"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">Schedule Title</label>
-                <input
-                  value={batchEditForm.scheduleTitle}
-                  onChange={(e) => setBatchEditForm({ ...batchEditForm, scheduleTitle: e.target.value })}
-                  className="w-full border rounded p-2 font-semibold"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-bold text-indigo-700 mb-1 flex items-center gap-1">
-                  <LinkIcon className="w-4 h-4" /> Google Meet / Online Link
-                </label>
-                <input
-                  type="url"
-                  value={batchEditForm.googleMeetLink}
-                  onChange={(e) => setBatchEditForm({ ...batchEditForm, googleMeetLink: e.target.value })}
-                  className="w-full border-2 border-indigo-200 rounded p-2 bg-indigo-50 font-semibold text-blue-700"
-                />
-              </div>
-              <div className="pt-4 flex justify-end gap-3 border-t">
-                <button
-                  type="button"
-                  onClick={() => setIsBatchEditOpen(false)}
-                  className="px-5 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-bold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSaving}
-                  className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 disabled:bg-gray-400"
-                >
-                  Save Batch
-                </button>
-              </div>
-            </form>
-          </div>
+      {editingSession && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <form onSubmit={submitEditSession} className="bg-white rounded-xl max-w-xl w-full p-6 space-y-4 shadow-xl">
+            <div className="flex justify-between items-center"><h2 className="text-xl font-bold">Edit Session</h2><button type="button" onClick={() => setEditingSession(null)}><X className="w-5 h-5" /></button></div>
+            <select value={editForm.rubricId} onChange={(e) => setEditForm({ ...editForm, rubricId: e.target.value })} className="w-full p-2 border rounded-lg">{rubrics.map((r) => <option key={r._id} value={r._id}>{r.name}</option>)}</select>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3"><input type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} className="p-2 border rounded-lg" /><input type="time" value={editForm.time} onChange={(e) => setEditForm({ ...editForm, time: e.target.value })} className="p-2 border rounded-lg" /><input type="time" value={editForm.endTime} onChange={(e) => setEditForm({ ...editForm, endTime: e.target.value })} className="p-2 border rounded-lg" /></div>
+            <input value={editForm.venue} onChange={(e) => setEditForm({ ...editForm, venue: e.target.value })} className="w-full p-2 border rounded-lg" placeholder="Meeting link" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><select value={editForm.panel1Id} onChange={(e) => setEditForm({ ...editForm, panel1Id: e.target.value })} className="p-2 border rounded-lg"><option value="">Panel 1</option>{panels.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}</select><select value={editForm.panel2Id} onChange={(e) => setEditForm({ ...editForm, panel2Id: e.target.value })} className="p-2 border rounded-lg"><option value="">Panel 2</option>{panels.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}</select></div>
+            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 p-3 rounded-lg">Panel replacement is only allowed at least 1 week before the session date. Completed evaluations are not changed.</p>
+            <button className="w-full py-3 bg-indigo-600 text-white rounded-lg font-bold">Save Session</button>
+          </form>
         </div>
       )}
 
-      {/* FULL EDIT MODAL WITH PANEL SWAPPING */}
-      {isEditModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-[100] p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl max-w-lg w-full p-6 relative">
-            <button
-              onClick={() => setIsEditModalOpen(false)}
-              className="absolute top-4 right-4 text-gray-400 hover:text-gray-700"
-            >
-              <X className="w-6 h-6" />
-            </button>
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-2 border-b pb-2">
-              <Pencil className="w-5 h-5 text-indigo-600" /> Edit Session
-              Details
-            </h2>
-
-            <form onSubmit={submitEditSession} className="space-y-4">
-              <div>
-                <label className="block text-sm font-bold text-gray-700 mb-1">
-                  Evaluation Rubric
-                </label>
-                <select
-                  required
-                  value={editForm.rubricId}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, rubricId: e.target.value })
-                  }
-                  className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500 bg-white font-semibold text-gray-800"
-                >
-                  <option value="">Select Rubric...</option>
-                  {rubrics.map((r) => (
-                    <option key={r._id} value={r._id}>
-                      {r.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">
-                    Panel 1 (Swap if absent)
-                  </label>
-                  <select
-                    value={editForm.panel1Id}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, panel1Id: e.target.value })
-                    }
-                    className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500 bg-white font-semibold"
-                  >
-                    <option value="">Select Panel 1</option>
-                    {panels.map((p) => (
-                      <option key={p._id} value={p._id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">
-                    Panel 2 (Swap if absent)
-                  </label>
-                  <select
-                    value={editForm.panel2Id}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, panel2Id: e.target.value })
-                    }
-                    className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500 bg-white font-semibold"
-                  >
-                    <option value="">Select Panel 2</option>
-                    {panels.map((p) => (
-                      <option key={p._id} value={p._id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">
-                    Date *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={editForm.date}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, date: e.target.value })
-                    }
-                    className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500 font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">
-                    Start Time *
-                  </label>
-                  <input
-                    type="time"
-                    required
-                    value={editForm.time}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, time: e.target.value })
-                    }
-                    className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500 font-semibold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">
-                    End Time
-                  </label>
-                  <input
-                    type="time"
-                    value={editForm.endTime}
-                    onChange={(e) =>
-                      setEditForm({ ...editForm, endTime: e.target.value })
-                    }
-                    className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500 font-semibold"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-bold text-indigo-700 mb-1 flex items-center gap-1">
-                  <LinkIcon className="w-4 h-4" /> Online Meeting Link
-                </label>
-                <input
-                  type="url"
-                  required
-                  value={editForm.venue}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, venue: e.target.value })
-                  }
-                  placeholder="https://meet.google.com/xyz"
-                  className="w-full border-2 border-indigo-200 rounded p-2 focus:ring-2 focus:ring-indigo-500 bg-indigo-50 font-semibold text-blue-700"
-                />
-              </div>
-
-              <div className="pt-4 flex justify-end gap-3 border-t mt-6">
-                <button
-                  type="button"
-                  onClick={() => setIsEditModalOpen(false)}
-                  className="px-5 py-2 text-gray-600 bg-gray-100 hover:bg-gray-200 rounded-lg font-bold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 shadow-sm"
-                >
-                  Save Changes
-                </button>
-              </div>
-            </form>
-          </div>
+      {editingBatch && (
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+          <form onSubmit={submitEditBatch} className="bg-white rounded-xl max-w-xl w-full p-6 space-y-4 shadow-xl">
+            <div className="flex justify-between items-center"><h2 className="text-xl font-bold">Edit Batch</h2><button type="button" onClick={() => setEditingBatch(false)}><X className="w-5 h-5" /></button></div>
+            <input value={batchForm.batchName || ""} onChange={(e) => setBatchForm({ ...batchForm, batchName: e.target.value })} className="w-full p-2 border rounded-lg" placeholder="Batch name" />
+            <input value={batchForm.academicSession || ""} onChange={(e) => setBatchForm({ ...batchForm, academicSession: e.target.value })} className="w-full p-2 border rounded-lg" placeholder="Academic session" />
+            <input value={batchForm.scheduleTitle || ""} onChange={(e) => setBatchForm({ ...batchForm, scheduleTitle: e.target.value })} className="w-full p-2 border rounded-lg" placeholder="Schedule title" />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><input type="date" value={batchForm.date || ""} onChange={(e) => setBatchForm({ ...batchForm, date: e.target.value })} className="p-2 border rounded-lg" /><input type="time" value={batchForm.startTime || ""} onChange={(e) => setBatchForm({ ...batchForm, startTime: e.target.value })} className="p-2 border rounded-lg" /></div>
+            <input value={batchForm.googleMeetLink || ""} onChange={(e) => setBatchForm({ ...batchForm, googleMeetLink: e.target.value })} className="w-full p-2 border rounded-lg" placeholder="Meeting link" />
+            <button className="w-full py-3 bg-amber-600 text-white rounded-lg font-bold">Save Batch</button>
+          </form>
         </div>
       )}
     </div>
