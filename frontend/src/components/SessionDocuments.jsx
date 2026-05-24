@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Upload, FileText, Download, Trash2, Eye, Plus, X, Paperclip } from 'lucide-react';
 import { timetableAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
-import { openAuthenticatedFile } from '../utils/authenticatedFile';
+import { getDocumentFileName, openAuthenticatedFile } from '../utils/authenticatedFile';
 
 export default function SessionDocuments({ session, onUpdate }) {
   const { user } = useAuth();
@@ -102,6 +102,10 @@ export default function SessionDocuments({ session, onUpdate }) {
   };
 
   const documents = session.studentDocuments || [];
+  const getOriginalFileLabel = (document) => {
+    const fileName = getDocumentFileName(document);
+    return fileName && fileName !== document?.title ? fileName : "";
+  };
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6">
@@ -159,6 +163,11 @@ export default function SessionDocuments({ session, onUpdate }) {
                   
                   <div className="flex-1">
                     <h4 className="font-semibold text-gray-900">{document.title}</h4>
+                    {getOriginalFileLabel(document) && (
+                      <p className="text-xs text-gray-500 mt-1 break-all">
+                        File: {getOriginalFileLabel(document)}
+                      </p>
+                    )}
                     
                     <div className="flex items-center gap-3 mt-1 text-xs text-gray-600">
                       <span className="px-2 py-1 bg-gray-100 rounded">

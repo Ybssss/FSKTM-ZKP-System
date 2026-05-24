@@ -949,6 +949,10 @@ exports.uploadDocument = async (req, res) => {
       url,
       fileStorageId: uploaded.id,
       driveFileId: uploaded.id,
+      originalFileName: cleanText(
+        uploaded.originalName || req.file.originalname || uploaded.name || "",
+        180,
+      ),
       mimeType: uploaded.mimeType || req.file.mimetype,
       source: uploaded.source || "gridfs",
       type: cleanText(req.body.type || "other", 50),

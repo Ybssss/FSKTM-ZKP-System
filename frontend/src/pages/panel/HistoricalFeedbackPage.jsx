@@ -12,7 +12,10 @@ import {
 } from "lucide-react";
 import api from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
-import { openAuthenticatedFile } from "../../utils/authenticatedFile";
+import {
+  getDocumentFileName,
+  openAuthenticatedFile,
+} from "../../utils/authenticatedFile";
 
 export default function HistoricalFeedbackPage() {
   const { user } = useAuth();
@@ -83,6 +86,11 @@ export default function HistoricalFeedbackPage() {
           "Failed to open material.",
       );
     }
+  };
+
+  const getOriginalFileLabel = (document) => {
+    const fileName = getDocumentFileName(document);
+    return fileName && fileName !== document?.title ? fileName : "";
   };
 
   const getPersonName = (value, fallback = "-") => {
@@ -675,6 +683,11 @@ export default function HistoricalFeedbackPage() {
                         className="block w-full text-left p-3 bg-white rounded-lg border text-sm font-bold text-blue-700 hover:underline"
                       >
                         {doc.title} <span className="text-blue-400">• {doc.type || "material"}</span>
+                        {getOriginalFileLabel(doc) && (
+                          <span className="block text-xs text-blue-500 mt-1 break-all">
+                            {getOriginalFileLabel(doc)}
+                          </span>
+                        )}
                       </button>
                     ))}
                   </div>

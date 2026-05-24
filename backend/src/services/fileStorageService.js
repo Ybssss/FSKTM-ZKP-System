@@ -31,19 +31,27 @@ const sanitizeFilename = (value = "document") =>
     .replace(/\s+/g, "_")
     .slice(0, 160) || "document";
 
+const contentDispositionName = (value = "document") =>
+  String(value || "document")
+    .normalize("NFKC")
+    .replace(/[\r\n"]/g, "_")
+    .replace(/[^\x20-\x7E]/g, "_")
+    .slice(0, 180) || "document";
+
 const uploadStoredFile = async (file) => {
   if (!file) {
     throw new Error("No file provided for upload.");
   }
 
   const bucket = getBucket();
-  const filename = `${Date.now()}-${sanitizeFilename(file.originalname)}`;
+  const originalName = file.originalname || "document";
+  const filename = `${Date.now()}-${sanitizeFilename(originalName)}`;
 
   return new Promise((resolve, reject) => {
     const uploadStream = bucket.openUploadStream(filename, {
       contentType: file.mimetype || "application/octet-stream",
       metadata: {
-        originalName: file.originalname || filename,
+        originalName,
         mimeType: file.mimetype || "application/octet-stream",
         size: file.size || 0,
         uploadedAt: new Date(),
@@ -72,6 +80,7 @@ const uploadStoredFile = async (file) => {
       resolve({
         id: fileId,
         name: filename,
+        originalName,
         mimeType: file.mimetype || "application/octet-stream",
         size: String(file.size || ""),
         webViewLink: fileUrl,
@@ -119,13 +128,15 @@ const streamStoredFile = async (fileId, res) => {
 
   const file = files[0];
   const originalName = file.metadata?.originalName || file.filename || "document";
+  const fallbackName = contentDispositionName(originalName);
+  const encodedName = encodeURIComponent(originalName);
   const mimeType =
     file.contentType || file.metadata?.mimeType || "application/octet-stream";
 
   res.setHeader("Content-Type", mimeType);
   res.setHeader(
     "Content-Disposition",
-    `inline; filename="${encodeURIComponent(originalName)}"`,
+    `inline; filename="${fallbackName}"; filename*=UTF-8''${encodedName}`,
   );
 
   bucket.openDownloadStream(objectId).pipe(res);

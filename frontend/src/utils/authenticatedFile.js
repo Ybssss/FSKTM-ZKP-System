@@ -18,7 +18,10 @@ const apiPathFromUrl = (url) => {
 };
 
 const filenameFromDisposition = (value) => {
-  const match = String(value || "").match(/filename\*?=(?:UTF-8'')?"?([^";]+)"?/i);
+  const header = String(value || "");
+  const encodedMatch = header.match(/filename\*=UTF-8''([^;]+)/i);
+  const plainMatch = header.match(/filename="?([^";]+)"?/i);
+  const match = encodedMatch || plainMatch;
   if (!match) return "";
   try {
     return decodeURIComponent(match[1]);
@@ -27,15 +30,23 @@ const filenameFromDisposition = (value) => {
   }
 };
 
+export const getDocumentFileName = (document) =>
+  document?.originalFileName ||
+  document?.fileName ||
+  document?.name ||
+  document?.title ||
+  "";
+
 export const openAuthenticatedFile = async (document, { download = false } = {}) => {
   const url = document?.url;
   const apiPath = apiPathFromUrl(url);
+  const preferredName = getDocumentFileName(document);
 
   if (!apiPath) {
     if (download) {
       const link = window.document.createElement("a");
       link.href = url;
-      link.download = document?.title || "";
+      link.download = preferredName;
       link.rel = "noopener noreferrer";
       window.document.body.appendChild(link);
       link.click();
@@ -62,7 +73,7 @@ export const openAuthenticatedFile = async (document, { download = false } = {})
     link.href = objectUrl;
     link.download =
       filenameFromDisposition(response.headers?.["content-disposition"]) ||
-      document?.title ||
+      preferredName ||
       "document";
     window.document.body.appendChild(link);
     link.click();

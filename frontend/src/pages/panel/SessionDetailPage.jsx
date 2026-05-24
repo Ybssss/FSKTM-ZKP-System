@@ -20,7 +20,10 @@ import {
 } from "lucide-react";
 import api from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
-import { openAuthenticatedFile } from "../../utils/authenticatedFile";
+import {
+  getDocumentFileName,
+  openAuthenticatedFile,
+} from "../../utils/authenticatedFile";
 
 export default function SessionDetailPage() {
   const { id } = useParams();
@@ -347,6 +350,11 @@ export default function SessionDetailPage() {
           "Failed to open material.",
       );
     }
+  };
+
+  const getOriginalFileLabel = (doc) => {
+    const fileName = getDocumentFileName(doc);
+    return fileName && fileName !== doc?.title ? fileName : "";
   };
 
   const canUploadMaterial =
@@ -743,6 +751,12 @@ export default function SessionDetailPage() {
                     </p>
                   )}
 
+                  {getOriginalFileLabel(doc) && (
+                    <p className="text-xs text-gray-600 mt-2 break-all">
+                      File: {getOriginalFileLabel(doc)}
+                    </p>
+                  )}
+
                   <p className="text-xs text-gray-500 mt-2">
                     Uploaded by{" "}
                     {doc.uploadedBy?.name ||
@@ -1032,6 +1046,11 @@ export default function SessionDetailPage() {
                                 className="block text-left text-sm text-indigo-300 hover:text-indigo-200 hover:underline"
                               >
                                 {doc.title || "Student material"}
+                                {getOriginalFileLabel(doc) && (
+                                  <span className="block text-xs text-gray-400">
+                                    {getOriginalFileLabel(doc)}
+                                  </span>
+                                )}
                               </button>
                             ))}
                           </div>

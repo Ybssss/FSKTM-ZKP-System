@@ -99,6 +99,10 @@ const timetableSchema = new mongoose.Schema(
         driveFileId: {
           type: String,
         },
+        originalFileName: {
+          type: String,
+          default: "",
+        },
         mimeType: {
           type: String,
         },
