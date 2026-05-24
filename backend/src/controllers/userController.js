@@ -36,6 +36,7 @@ const queueRegistrationEmail = ({
   status.queued = true;
   console.log(`${isReset ? "Reset" : "Registration"} email queued:`, {
     receiver,
+    provider: emailConfig.provider,
     host: emailConfig.host,
     port: emailConfig.port,
     secure: emailConfig.secure,

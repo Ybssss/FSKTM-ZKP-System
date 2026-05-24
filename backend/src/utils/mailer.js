@@ -1,9 +1,19 @@
 const nodemailer = require("nodemailer");
 
-const requiredEmailEnv = ["EMAIL_USER", "EMAIL_PASS"];
+const smtpEmailEnv = ["EMAIL_USER", "EMAIL_PASS"];
+const resendEmailEnv = ["RESEND_API_KEY", "EMAIL_FROM"];
 
-const getMissingEmailEnv = () =>
-  requiredEmailEnv.filter((key) => !process.env[key]);
+const getEmailProvider = () =>
+  String(process.env.EMAIL_PROVIDER || (process.env.RESEND_API_KEY ? "resend" : "smtp"))
+    .trim()
+    .toLowerCase();
+
+const getMissingEmailEnv = () => {
+  const requiredEmailEnv =
+    getEmailProvider() === "resend" ? resendEmailEnv : smtpEmailEnv;
+
+  return requiredEmailEnv.filter((key) => !process.env[key]);
+};
 
 const getEmailSettings = () => {
   const host = process.env.EMAIL_HOST || "smtp.gmail.com";
@@ -20,16 +30,19 @@ const getEmailSettings = () => {
 };
 
 exports.getEmailConfigStatus = () => {
+  const provider = getEmailProvider();
   const missing = getMissingEmailEnv();
   const settings = getEmailSettings();
 
   return {
     ready: missing.length === 0,
+    provider,
     missing,
-    host: settings.host,
-    port: settings.port,
-    secure: settings.secure,
+    host: provider === "resend" ? "api.resend.com" : settings.host,
+    port: provider === "resend" ? 443 : settings.port,
+    secure: provider === "resend" ? true : settings.secure,
     userConfigured: Boolean(process.env.EMAIL_USER),
+    fromConfigured: Boolean(process.env.EMAIL_FROM),
   };
 };
 
@@ -61,12 +74,72 @@ const createTransporter = () => {
 };
 
 exports.verifyEmailConfig = async () => {
+  const provider = getEmailProvider();
+  const missing = getMissingEmailEnv();
+
+  if (missing.length > 0) {
+    throw new Error(`Email configuration missing: ${missing.join(", ")}`);
+  }
+
+  if (provider === "resend") {
+    return {
+      success: true,
+      message:
+        "Resend email configuration is present. Send a test email to verify delivery.",
+    };
+  }
+
   const transporter = createTransporter();
   await transporter.verify();
 
   return {
     success: true,
     message: "Email transporter verified successfully.",
+  };
+};
+
+const sendResendEmail = async ({ receiver, subject, text, html }) => {
+  const missing = getMissingEmailEnv();
+
+  if (missing.length > 0) {
+    throw new Error(`Email configuration missing: ${missing.join(", ")}`);
+  }
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: process.env.EMAIL_FROM,
+      to: [receiver],
+      subject,
+      text,
+      html,
+    }),
+  });
+
+  const payload = await response
+    .json()
+    .catch(async () => ({ message: await response.text() }));
+
+  if (!response.ok) {
+    const error = new Error(
+      payload?.message || `Resend email failed with status ${response.status}`,
+    );
+    error.code = payload?.name || "RESEND_ERROR";
+    error.responseCode = response.status;
+    error.response = payload;
+    error.command = "HTTPS";
+    throw error;
+  }
+
+  return {
+    success: true,
+    receiver,
+    messageId: payload.id,
+    provider: "resend",
   };
 };
 
@@ -84,8 +157,6 @@ exports.sendRegistrationEmail = async (
   if (!receiver) {
     throw new Error("Receiver email is required.");
   }
-
-  const transporter = createTransporter();
 
   const subject = isReset
     ? "FSKTM ZKP System - Keys Reset & New Code"
@@ -125,6 +196,20 @@ exports.sendRegistrationEmail = async (
     "FSKTM Admin Team",
   ].join("\n");
 
+  if (getEmailProvider() === "resend") {
+    const result = await sendResendEmail({
+      receiver,
+      subject,
+      text,
+      html,
+    });
+
+    console.log(`✉️ Email sent to ${receiver}: ${result.messageId}`);
+    return result;
+  }
+
+  const transporter = createTransporter();
+
   const info = await transporter.sendMail({
     from: `"FSKTM ZKP System" <${process.env.EMAIL_USER}>`,
     to: receiver,
@@ -139,5 +224,6 @@ exports.sendRegistrationEmail = async (
     success: true,
     receiver,
     messageId: info.messageId,
+    provider: "smtp",
   };
 };
