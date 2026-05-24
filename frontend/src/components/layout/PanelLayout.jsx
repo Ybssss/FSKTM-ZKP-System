@@ -80,6 +80,12 @@ export default function PanelLayout() {
       label: "Devices",
       allowedRoles: ["admin", "panel", "coordinator"],
     },
+    {
+      to: "/panel/profile",
+      icon: UserCircle,
+      label: "Profile",
+      allowedRoles: ["admin", "panel", "coordinator"],
+    },
   ];
 
   // Safely check if allowedRoles exists before calling .includes()
