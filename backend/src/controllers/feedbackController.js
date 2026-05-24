@@ -923,7 +923,12 @@ exports.getIncomingPermissions = async (req, res) => {
       req.user.role === "admin"
         ? { status }
         : req.user.role === "panel"
-          ? { owningPanelId: viewerId, status }
+          ? {
+              owningPanelId: viewerId,
+              status,
+              requestingPanelId: { $ne: viewerId },
+              scope: { $ne: "UNLOCK_EVALUATION" },
+            }
           : null;
 
     if (!filter) {

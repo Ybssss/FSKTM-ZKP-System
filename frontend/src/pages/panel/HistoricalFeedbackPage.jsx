@@ -56,15 +56,24 @@ export default function HistoricalFeedbackPage() {
       setLockedEvals(lockedHistorical);
 
       if (canManagePermissions) {
+        const historicalAccessRequestsOnly = (request) =>
+          request?.scope !== "UNLOCK_EVALUATION";
+
         const [pendingRes, approvedRes, myRes] = await Promise.all([
           api.get("/feedback/permissions/incoming?status=PENDING"),
           api.get("/feedback/permissions/incoming?status=APPROVED"),
           api.get("/feedback/permissions/my"),
         ]);
 
-        setIncomingRequests(pendingRes.data.requests || []);
-        setApprovedRequests(approvedRes.data.requests || []);
-        setMyRequests(myRes.data.requests || []);
+        setIncomingRequests(
+          (pendingRes.data.requests || []).filter(historicalAccessRequestsOnly),
+        );
+        setApprovedRequests(
+          (approvedRes.data.requests || []).filter(historicalAccessRequestsOnly),
+        );
+        setMyRequests(
+          (myRes.data.requests || []).filter(historicalAccessRequestsOnly),
+        );
       }
     } catch (error) {
       console.error("Error loading historical data:", error);
