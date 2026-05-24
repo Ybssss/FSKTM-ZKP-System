@@ -64,6 +64,44 @@ exports.getMyPanels = async (req, res) => {
 };
 
 const AI_MODEL = process.env.GEMINI_MODEL || "gemini-3.5-flash";
+const AI_PANEL_LIMIT = Number(process.env.MATCHING_AI_PANEL_LIMIT || 8);
+const AI_TIMEOUT_MS = Number(process.env.MATCHING_AI_TIMEOUT_MS || 12000);
+
+const isFalseLike = (value) =>
+  value === false ||
+  String(value || "")
+    .trim()
+    .toLowerCase() === "false";
+
+const isAiMatchingEnabled = (value) => {
+  if (value !== undefined) return !isFalseLike(value);
+  if (process.env.MATCHING_USE_AI !== undefined) {
+    return !isFalseLike(process.env.MATCHING_USE_AI);
+  }
+
+  return true;
+};
+
+const withTimeout = (promise, timeoutMs, label) => {
+  if (!timeoutMs || timeoutMs <= 0) return promise;
+
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error(`${label} timed out after ${timeoutMs}ms`)),
+      timeoutMs,
+    );
+
+    promise
+      .then((value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      })
+      .catch((error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+  });
+};
 
 const EXACT_SHORT_TERMS = new Set([
   "ai",
@@ -151,6 +189,14 @@ const unique = (items = []) => [
       .filter(Boolean),
   ),
 ];
+
+const limitText = (value = "", maxLength = 1200) => {
+  const text = String(value || "")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return text.length > maxLength ? `${text.slice(0, maxLength)}...` : text;
+};
 
 const expandTokens = (tokens) => {
   const expanded = new Set(tokens);
@@ -259,7 +305,7 @@ const getAiRecommendation = async ({ contextText, panels }) => {
   const prompt = `You are an academic panel matching assistant for UTHM FSKTM.
 
 Student research context:
-${contextText}
+${limitText(contextText)}
 
 Available panels:
 ${JSON.stringify(
@@ -267,7 +313,7 @@ ${JSON.stringify(
       id: String(panel._id),
       name: panel.name,
       profession: panel.profession || "",
-      expertiseTags: panel.expertiseTags || [],
+      expertiseTags: (panel.expertiseTags || []).slice(0, 12),
     })),
     null,
     2,
@@ -308,7 +354,8 @@ Rules:
 
 exports.matchExpertise = async (req, res) => {
   try {
-    const { researchTitle, researchAbstract, studentId } = req.body;
+    const startedAt = Date.now();
+    const { researchTitle, researchAbstract, studentId, useAi } = req.body;
 
     const student = studentId
       ? await User.findById(studentId).select(
@@ -350,24 +397,54 @@ exports.matchExpertise = async (req, res) => {
     }));
 
     const contextText = `${finalTitle}. ${finalAbstract}`.trim();
+    const deterministicStartedAt = Date.now();
+
+    const baseRecommendations = panelsWithStoredExpertise
+      .map((panel) => {
+        const match = scorePanel(contextText, panel);
+
+        return {
+          panel,
+          match,
+          baseScore: match.score,
+        };
+      })
+      .sort((a, b) => b.baseScore - a.baseScore);
+
+    const deterministicMs = Date.now() - deterministicStartedAt;
 
     let aiResult = { ids: [], reasons: {}, model: null, used: false };
-    try {
-      aiResult = await getAiRecommendation({
-        contextText,
-        panels: panelsWithStoredExpertise,
-      });
-    } catch (aiError) {
-      console.warn("Gemini matching fallback:", aiError.message);
+    let aiMs = 0;
+    let aiAttempted = false;
+    if (isAiMatchingEnabled(useAi)) {
+      aiAttempted = true;
+      const aiStartedAt = Date.now();
+      try {
+        const aiCandidatePanels = baseRecommendations
+          .slice(0, Math.max(AI_PANEL_LIMIT, 2))
+          .map((item) => item.panel);
+
+        aiResult = await withTimeout(
+          getAiRecommendation({
+            contextText,
+            panels: aiCandidatePanels,
+          }),
+          AI_TIMEOUT_MS,
+          "Gemini matching",
+        );
+      } catch (aiError) {
+        console.warn("Gemini matching fallback:", aiError.message);
+      } finally {
+        aiMs = Date.now() - aiStartedAt;
+      }
     }
 
     const aiSelected = new Set(aiResult.ids.map(String));
 
-    const recommendations = panelsWithStoredExpertise
-      .map((panel) => {
-        const match = scorePanel(contextText, panel);
+    const recommendations = baseRecommendations
+      .map(({ panel, match, baseScore }) => {
         const aiBoost = aiSelected.has(String(panel._id)) ? 5 : 0;
-        const score = Math.min(99, match.score + aiBoost);
+        const score = Math.min(99, baseScore + aiBoost);
 
         return {
           panelId: String(panel._id),
@@ -400,11 +477,20 @@ exports.matchExpertise = async (req, res) => {
       success: true,
       aiUsed: aiResult.used,
       aiModel: aiResult.model,
-      scoringMethod:
-        "Gemini recommendation plus deterministic expertise overlap score from stored database expertise tags.",
+      scoringMethod: aiResult.used
+        ? "Gemini recommendation plus deterministic expertise overlap score from stored database expertise tags."
+        : "Deterministic expertise overlap score from stored database expertise tags.",
       studentId,
       researchTitle: finalTitle,
       hasAbstract: Boolean(finalAbstract),
+      matchingMeta: {
+        aiAttempted,
+        deterministicMs,
+        aiMs,
+        totalMs: Date.now() - startedAt,
+        panelsScored: baseRecommendations.length,
+        aiPanelLimit: Math.max(AI_PANEL_LIMIT, 2),
+      },
       recommendedPanels,
       recommendations,
     });

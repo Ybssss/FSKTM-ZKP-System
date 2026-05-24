@@ -132,7 +132,7 @@ export default function AdminManagementPage() {
   const handleAIMatch = async (student) => {
     if (!student.researchTitle)
       return alert(
-        "This student has not set their Research Title yet. Cannot use AI.",
+        "This student has not set their Research Title yet. Cannot match expertise.",
       );
     setIsMatching(true);
     setAiSuggestions([]);
@@ -158,10 +158,10 @@ export default function AdminManagementPage() {
             })),
         );
       } else {
-        alert("AI could not find any relevant panels.");
+        alert("No relevant panels were found.");
       }
     } catch (err) {
-      alert("AI Matching failed.");
+      alert("Expertise matching failed.");
     } finally {
       setIsMatching(false);
     }
@@ -355,7 +355,7 @@ export default function AdminManagementPage() {
                         disabled={isMatching || !student.researchTitle}
                         className="ml-2 px-3 py-1.5 bg-gradient-to-r from-purple-600 to-indigo-600 text-white text-xs font-bold rounded shadow disabled:opacity-50 transition-all whitespace-nowrap"
                       >
-                        {isMatching ? "..." : "✨ AI Match"}
+                        {isMatching ? "..." : "Find Match"}
                       </button>
                     </>
                   ) : (
@@ -390,7 +390,7 @@ export default function AdminManagementPage() {
             {aiSuggestions.length > 0 && (
               <div className="bg-indigo-50 p-4 rounded-xl border border-indigo-200 mb-4 shadow-sm">
                 <h3 className="text-sm font-black text-indigo-900 mb-3">
-                  ✨ AI Recommended Panels
+                  Recommended Panels
                 </h3>
                 <div className="space-y-2 mb-3">
                   {aiSuggestions.map((p) => (

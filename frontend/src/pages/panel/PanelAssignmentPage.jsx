@@ -159,7 +159,7 @@ export default function PanelAssignmentPage() {
       alert(
         error.response?.data?.message ||
           error.response?.data?.error ||
-          "AI matching failed.",
+          "Expertise matching failed.",
       );
     } finally {
       setMatchingExpertise(false);
@@ -224,8 +224,8 @@ export default function PanelAssignmentPage() {
             submitted/pending evaluations.
           </div>
           <p className="text-gray-600 mt-2">
-            Analyze research titles against UTHM directory tags to find the best
-            examiners.
+            Analyze research titles against stored panel expertise tags to find
+            the best examiners.
           </p>
         </div>
 
@@ -338,7 +338,7 @@ export default function PanelAssignmentPage() {
           </div>
         </div>
 
-        {/* RIGHT COLUMN: AI Matcher */}
+        {/* RIGHT COLUMN: Expertise Matcher */}
         <div className="lg:col-span-7 bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-6 border border-blue-200 shadow-sm flex flex-col h-[750px] relative">
           <div className="flex items-center gap-3 mb-6">
             <Lightbulb className="w-8 h-8 text-blue-600" />
@@ -398,7 +398,7 @@ export default function PanelAssignmentPage() {
               {matchingExpertise ? (
                 <>
                   <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white"></div>{" "}
-                  Searching Directory...
+                  AI Matching Stored Expertise...
                 </>
               ) : (
                 <>
