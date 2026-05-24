@@ -1312,8 +1312,6 @@ const seedDatabase = async () => {
       })),
     );
 
-    await SessionBatch.create(stageBatchRecords);
-
     const sessionsData = stageConfigs.flatMap((stage) =>
       (lifecycleBatchGroups[stage.stageKey] || []).flatMap((group) =>
         group.studentEmails.map((studentEmail) => {
@@ -1502,6 +1500,8 @@ const seedDatabase = async () => {
 
     validateSeedSchedule(sessionsData);
     console.log("✅ Seed schedule validation passed before inserting timetables.");
+
+    await SessionBatch.create(stageBatchRecords);
 
     const enrichedSessionsData = await Promise.all(
       sessionsData.map(async (session) => {
