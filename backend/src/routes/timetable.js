@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const multer = require("multer");
+const mongoose = require("mongoose");
 const os = require("os");
 const { authenticateToken, requireRole } = require("../middleware/auth");
 
@@ -23,7 +24,7 @@ const {
 } = require("../controllers/timetableController");
 
 const matchingController = require("../controllers/matchingController");
-const expertiseService = require("../services/expertiseService");
+const User = require("../models/User");
 
 const allowedMimeTypes = [
   "application/pdf",
@@ -73,10 +74,39 @@ router.post("/:id/notes", requireRole(["panel", "admin"]), addPanelNotes);
 
 router.get("/expertise/:userId", requireRole(["admin"]), async (req, res) => {
   try {
-    const expertise = await expertiseService.fetchUserExpertise(req.params.userId);
-    res.json({ success: true, userId: req.params.userId, expertise, count: expertise.length });
+    const panelQuery = {
+      role: { $in: ["panel", "admin"] },
+      $or: [{ userId: req.params.userId }],
+    };
+
+    if (mongoose.Types.ObjectId.isValid(req.params.userId)) {
+      panelQuery.$or.push({ _id: req.params.userId });
+    }
+
+    const panel = await User.findOne(panelQuery)
+      .select("userId expertiseTags")
+      .lean();
+
+    if (!panel) {
+      return res.status(404).json({
+        success: false,
+        message: "Panel not found.",
+      });
+    }
+
+    const expertise = Array.isArray(panel.expertiseTags)
+      ? panel.expertiseTags.filter(Boolean)
+      : [];
+
+    res.json({
+      success: true,
+      userId: panel.userId,
+      expertise,
+      count: expertise.length,
+      source: "database",
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Error fetching expertise", error: error.message });
+    res.status(500).json({ success: false, message: "Error reading expertise", error: error.message });
   }
 });
 

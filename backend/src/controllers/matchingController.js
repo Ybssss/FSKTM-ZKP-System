@@ -1,6 +1,5 @@
 const User = require("../models/User");
 const { GoogleGenerativeAI } = require("@google/generative-ai");
-const expertiseService = require("../services/expertiseService");
 
 exports.assignPanelToStudent = async (req, res) => {
   try {
@@ -345,15 +344,10 @@ exports.matchExpertise = async (req, res) => {
       });
     }
 
-    const panelsWithLiveExpertise = await Promise.all(
-      availablePanels.map(async (panel) => {
-        const liveExpertise = await expertiseService.fetchUserExpertise(panel.userId);
-        return {
-          ...panel,
-          expertiseTags: unique([...(panel.expertiseTags || []), ...liveExpertise]),
-        };
-      }),
-    );
+    const panelsWithStoredExpertise = availablePanels.map((panel) => ({
+      ...panel,
+      expertiseTags: unique(panel.expertiseTags || []),
+    }));
 
     const contextText = `${finalTitle}. ${finalAbstract}`.trim();
 
@@ -361,7 +355,7 @@ exports.matchExpertise = async (req, res) => {
     try {
       aiResult = await getAiRecommendation({
         contextText,
-        panels: panelsWithLiveExpertise,
+        panels: panelsWithStoredExpertise,
       });
     } catch (aiError) {
       console.warn("Gemini matching fallback:", aiError.message);
@@ -369,7 +363,7 @@ exports.matchExpertise = async (req, res) => {
 
     const aiSelected = new Set(aiResult.ids.map(String));
 
-    const recommendations = panelsWithLiveExpertise
+    const recommendations = panelsWithStoredExpertise
       .map((panel) => {
         const match = scorePanel(contextText, panel);
         const aiBoost = aiSelected.has(String(panel._id)) ? 5 : 0;
@@ -407,7 +401,7 @@ exports.matchExpertise = async (req, res) => {
       aiUsed: aiResult.used,
       aiModel: aiResult.model,
       scoringMethod:
-        "Gemini recommendation plus deterministic expertise overlap score from UTHM Community field-of-expertise tags.",
+        "Gemini recommendation plus deterministic expertise overlap score from stored database expertise tags.",
       studentId,
       researchTitle: finalTitle,
       hasAbstract: Boolean(finalAbstract),

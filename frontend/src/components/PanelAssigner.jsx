@@ -1,6 +1,5 @@
 // src/components/PanelAssigner.jsx
 import React, { useState, useEffect } from "react";
-import axios from "axios";
 
 const PanelAssigner = ({ studentTitle, panelCandidates, onAssign }) => {
   const [selectedPanel, setSelectedPanel] = useState("");
@@ -32,28 +31,31 @@ const PanelAssigner = ({ studentTitle, panelCandidates, onAssign }) => {
     setMatchScore(percentage);
   };
 
-  const fetchExpertise = async (panelName) => {
-    if (!panelName) return;
-    setLoading(true);
-    try {
-      const res = await axios.get(
-        `http://localhost:5000/api/expertise?panelName=${panelName}`,
-      );
-      const fetchedTags = res.data.expertiseTags;
-
-      setExpertise(fetchedTags);
-      calculateMatch(fetchedTags, studentTitle);
-    } catch (error) {
-      console.error("Failed to fetch expertise", error);
-    } finally {
+  const loadStoredExpertise = (panelName) => {
+    if (!panelName) {
+      setExpertise([]);
+      setMatchScore(0);
       setLoading(false);
+      return;
     }
+
+    setLoading(true);
+    const selectedCandidate = panelCandidates.find(
+      (panel) => panel.name === panelName,
+    );
+    const storedTags = Array.isArray(selectedCandidate?.expertiseTags)
+      ? selectedCandidate.expertiseTags
+      : [];
+
+    setExpertise(storedTags);
+    calculateMatch(storedTags, studentTitle);
+    setLoading(false);
   };
 
-  // Run fetch whenever a new panel is selected from the dropdown
+  // Load stored database expertise whenever a new panel is selected.
   useEffect(() => {
-    fetchExpertise(selectedPanel);
-  }, [selectedPanel]);
+    loadStoredExpertise(selectedPanel);
+  }, [selectedPanel, panelCandidates, studentTitle]);
 
   const handleConfirm = () => {
     if (onAssign && selectedPanel) {
@@ -96,7 +98,7 @@ const PanelAssigner = ({ studentTitle, panelCandidates, onAssign }) => {
 
       {loading && (
         <div className="mt-4 p-4 text-center text-blue-600 animate-pulse bg-blue-50 rounded-md">
-          Fetching expertise from UTHM Community...
+          Loading stored panel expertise...
         </div>
       )}
 

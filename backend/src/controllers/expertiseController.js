@@ -1,41 +1,47 @@
-// controllers/expertiseController.js
-const axios = require("axios");
-const cheerio = require("cheerio");
+const User = require("../models/User");
 
 exports.getPanelExpertise = async (req, res) => {
   try {
-    const { panelName } = req.query;
-    if (!panelName)
-      return res.status(400).json({ error: "Panel name is required" });
+    const { panelName, userId } = req.query;
+    const searchValue = String(userId || panelName || "").trim();
 
-    // Fetch the HTML from UTHM Community directory
-    const targetUrl = `https://community.uthm.edu.my/search?q=${encodeURIComponent(panelName)}`;
-    const response = await axios.get(targetUrl);
-    const $ = cheerio.load(response.data);
+    if (!searchValue) {
+      return res.status(400).json({
+        success: false,
+        message: "Panel name or user ID is required.",
+      });
+    }
 
-    let expertiseTags = [];
+    const panel = await User.findOne({
+      role: { $in: ["panel", "admin"] },
+      $or: [
+        { userId: searchValue },
+        { name: { $regex: searchValue.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), $options: "i" } },
+      ],
+    })
+      .select("name userId expertiseTags")
+      .lean();
 
-    // FIX: Using the exact HTML structure you provided
-    // We look for the table row (tr), then extract the text inside the table data (td)
-    $("table.table-striped tbody tr").each((index, element) => {
-      // The <td> contains the actual expertise string (e.g., "Software Engineering")
-      const expertiseText = $(element).find("td").text().trim();
-
-      if (expertiseText) {
-        // Split by comma in case they have multiple tags in one row, and clean up whitespace
-        const tags = expertiseText.split(",").map((tag) => tag.trim());
-        expertiseTags.push(...tags);
-      }
-    });
+    if (!panel) {
+      return res.status(404).json({
+        success: false,
+        message: "Panel not found.",
+      });
+    }
 
     res.status(200).json({
-      panelName,
-      expertiseTags, // Returns: ["INFORMATION, COMPUTER...", "Software", "Software Engineering"]
+      success: true,
+      panelName: panel.name,
+      userId: panel.userId,
+      expertiseTags: Array.isArray(panel.expertiseTags)
+        ? panel.expertiseTags.filter(Boolean)
+        : [],
+      source: "database",
     });
   } catch (error) {
-    console.error("Scraping error:", error.message);
+    console.error("Database expertise lookup error:", error.message);
     res
       .status(500)
-      .json({ error: "Failed to fetch data from UTHM Community." });
+      .json({ success: false, message: "Failed to read expertise from database." });
   }
 };
