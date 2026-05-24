@@ -21,6 +21,8 @@ const {
   getBatchPrintSchedules,
   updateBatchTimeFrames,
   streamDocumentFile,
+  streamDocumentFileWithTicket,
+  createDocumentFileViewTicket,
 } = require("../controllers/timetableController");
 
 const matchingController = require("../controllers/matchingController");
@@ -49,10 +51,13 @@ const upload = multer({
   },
 });
 
+router.get("/documents/file/:fileId/view/:filename", streamDocumentFileWithTicket);
+
 router.use(authenticateToken);
 
 router.get("/my", getMyTimetable);
 router.get("/documents/file/:fileId", streamDocumentFile);
+router.post("/documents/file/:fileId/view-ticket", createDocumentFileViewTicket);
 
 router.post("/bulk", requireRole(["admin"]), createBulkTimetables);
 router.post("/create", requireRole(["admin"]), createTimetable);

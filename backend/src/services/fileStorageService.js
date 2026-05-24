@@ -107,6 +107,25 @@ const deleteStoredFile = async (fileId) => {
   }
 };
 
+const getStoredFileInfo = async (fileId) => {
+  if (!fileId || !ObjectId.isValid(fileId)) return null;
+
+  const bucket = getBucket();
+  const files = await bucket.find({ _id: new ObjectId(fileId) }).toArray();
+  const file = files[0];
+
+  if (!file) return null;
+
+  return {
+    id: String(file._id),
+    name: file.filename,
+    originalName: file.metadata?.originalName || file.filename || "",
+    mimeType:
+      file.contentType || file.metadata?.mimeType || "application/octet-stream",
+    size: String(file.length || file.metadata?.size || ""),
+  };
+};
+
 const streamStoredFile = async (fileId, res) => {
   if (!ObjectId.isValid(fileId)) {
     return res.status(400).json({
@@ -145,5 +164,6 @@ const streamStoredFile = async (fileId, res) => {
 module.exports = {
   uploadStoredFile,
   deleteStoredFile,
+  getStoredFileInfo,
   streamStoredFile,
 };

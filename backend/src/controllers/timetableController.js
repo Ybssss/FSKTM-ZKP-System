@@ -1,3 +1,4 @@
+const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
 const Timetable = require("../models/Timetable");
 const User = require("../models/User");
@@ -20,6 +21,7 @@ try {
 const {
   uploadStoredFile,
   deleteStoredFile,
+  getStoredFileInfo,
   streamStoredFile,
   uploadToGoogleDrive,
   deleteFromGoogleDrive,
@@ -28,6 +30,11 @@ const {
 
 const DEFAULT_BREAK_MINUTES = 5;
 const PANEL_REPLACEMENT_MIN_DAYS = 7;
+const FILE_VIEW_TICKET_PURPOSE = "session-material-view";
+const FILE_VIEW_TICKET_EXPIRES_IN = "2m";
+
+const getJwtSecret = () =>
+  process.env.JWT_SECRET || "your-fallback-secret-key";
 
 const cleanText = (value = "", max = 500) =>
   String(value)
@@ -158,6 +165,92 @@ const findTimetableForStoredFile = async (fileId) =>
       { "studentDocuments.fileStorageId": fileId },
     ],
   }).select("_id students panels studentDocuments");
+
+const findDocumentForStoredFile = (timetable, fileId) =>
+  timetable?.studentDocuments?.find(
+    (doc) => sameId(doc.fileStorageId, fileId) || sameId(doc.driveFileId, fileId),
+  );
+
+const documentFileName = async (document, fileId) => {
+  const storedInfo =
+    !document?.originalFileName && getStoredFileInfo
+      ? await getStoredFileInfo(fileId)
+      : null;
+
+  return (
+    cleanText(
+      document?.originalFileName ||
+        storedInfo?.originalName ||
+        document?.title ||
+        "student-material",
+      180,
+    ) || "student-material"
+  );
+};
+
+const buildPublicBackendUrl = (req) =>
+  String(
+    process.env.PUBLIC_BACKEND_URL ||
+      process.env.BACKEND_URL ||
+      `${req.protocol}://${req.get("host")}`,
+  ).replace(/\/$/, "");
+
+const buildDocumentViewUrl = (req, fileId, filename, ticket) =>
+  `${buildPublicBackendUrl(req)}/api/timetables/documents/file/${encodeURIComponent(
+    fileId,
+  )}/view/${encodeURIComponent(filename)}?ticket=${encodeURIComponent(ticket)}`;
+
+const resolveTicketUser = async (decoded) => {
+  const user = decoded?.userId ? await User.findById(decoded.userId) : null;
+  if (!user) return null;
+
+  const deviceId = decoded.deviceId || null;
+  if (deviceId) {
+    const activeDevice = (user.authenticatedDevices || []).find(
+      (device) =>
+        String(device.deviceId || "") === String(deviceId) &&
+        device.isActive !== false,
+    );
+    if (!activeDevice) return null;
+  }
+
+  return {
+    id: String(user._id),
+    _id: user._id,
+    userId: user.userId,
+    name: user.name,
+    email: user.email,
+    role: user.role,
+    deviceId,
+  };
+};
+
+const streamAuthorizedDocumentFile = async (fileId, user, res) => {
+  const streamer = streamStoredFile || streamLegacyFile;
+  if (!streamer) {
+    return res.status(404).json({
+      success: false,
+      message: "File streaming is not configured.",
+    });
+  }
+
+  const timetable = await findTimetableForStoredFile(fileId);
+  const document = findDocumentForStoredFile(timetable, fileId);
+
+  if (!timetable || !document) {
+    return res.status(404).json({ success: false, message: "Material not found." });
+  }
+
+  if (!canAccessSessionMaterial(timetable, user, document)) {
+    return res.status(403).json({
+      success: false,
+      message: "You do not have permission to view this material.",
+    });
+  }
+
+  res.setHeader("Cache-Control", "private, no-store");
+  return streamer(fileId, res);
+};
 
 const formatTimetable = (t) => {
   const doc = t?.toObject ? t.toObject() : t;
@@ -998,14 +1091,17 @@ exports.deleteDocument = async (req, res) => {
 
 exports.streamDocumentFile = async (req, res) => {
   try {
-    const streamer = streamStoredFile || streamLegacyFile;
-    if (!streamer) return res.status(404).json({ success: false, message: "File streaming is not configured." });
-    const timetable = await findTimetableForStoredFile(req.params.fileId);
-    const document = timetable?.studentDocuments?.find(
-      (doc) =>
-        sameId(doc.fileStorageId, req.params.fileId) ||
-        sameId(doc.driveFileId, req.params.fileId),
-    );
+    await streamAuthorizedDocumentFile(req.params.fileId, req.user, res);
+  } catch (error) {
+    res.status(500).json({ success: false, message: "Failed to load file.", error: error.message });
+  }
+};
+
+exports.createDocumentFileViewTicket = async (req, res) => {
+  try {
+    const fileId = req.params.fileId;
+    const timetable = await findTimetableForStoredFile(fileId);
+    const document = findDocumentForStoredFile(timetable, fileId);
 
     if (!timetable || !document) {
       return res.status(404).json({ success: false, message: "Material not found." });
@@ -1018,9 +1114,73 @@ exports.streamDocumentFile = async (req, res) => {
       });
     }
 
-    await streamer(req.params.fileId, res);
+    const filename = await documentFileName(document, fileId);
+    const ticket = jwt.sign(
+      {
+        purpose: FILE_VIEW_TICKET_PURPOSE,
+        fileId,
+        userId: req.user.id,
+        deviceId: req.user.deviceId || null,
+      },
+      getJwtSecret(),
+      { expiresIn: FILE_VIEW_TICKET_EXPIRES_IN },
+    );
+
+    res.json({
+      success: true,
+      url: buildDocumentViewUrl(req, fileId, filename, ticket),
+      filename,
+      expiresIn: FILE_VIEW_TICKET_EXPIRES_IN,
+    });
   } catch (error) {
-    res.status(500).json({ success: false, message: "Failed to load file.", error: error.message });
+    res.status(500).json({
+      success: false,
+      message: "Failed to prepare file viewer.",
+      error: error.message,
+    });
+  }
+};
+
+exports.streamDocumentFileWithTicket = async (req, res) => {
+  try {
+    const ticket = String(req.query.ticket || "");
+    if (!ticket) {
+      return res.status(401).json({
+        success: false,
+        code: "NO_FILE_TICKET",
+        message: "File view ticket is required.",
+      });
+    }
+
+    const decoded = jwt.verify(ticket, getJwtSecret());
+    if (
+      decoded.purpose !== FILE_VIEW_TICKET_PURPOSE ||
+      String(decoded.fileId || "") !== String(req.params.fileId || "")
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "Invalid file view ticket.",
+      });
+    }
+
+    const user = await resolveTicketUser(decoded);
+    if (!user) {
+      return res.status(401).json({
+        success: false,
+        message: "File view ticket is no longer valid.",
+      });
+    }
+
+    await streamAuthorizedDocumentFile(req.params.fileId, user, res);
+  } catch (error) {
+    const isExpired = error.name === "TokenExpiredError";
+    res.status(isExpired ? 401 : 500).json({
+      success: false,
+      message: isExpired
+        ? "File view ticket expired. Please open the material again."
+        : "Failed to load file.",
+      error: error.message,
+    });
   }
 };
 
