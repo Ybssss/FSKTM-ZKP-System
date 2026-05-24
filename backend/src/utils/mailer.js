@@ -83,10 +83,29 @@ exports.sendRegistrationEmail = async (
     </div>
   `;
 
+  const text = [
+    "FSKTM Zero-Knowledge Proof System",
+    "",
+    `Hello ${name},`,
+    isReset
+      ? "Your cryptographic keys have been securely reset by an administrator."
+      : "An account has been created for you.",
+    "",
+    "Please use the credentials below to bind your device and set up your passwordless login:",
+    `System User ID: ${userId}`,
+    `Registration Code: ${code}`,
+    "",
+    'Go to the system login page and click "First time? Register your ZKP identity".',
+    "",
+    "Securely yours,",
+    "FSKTM Admin Team",
+  ].join("\n");
+
   const info = await transporter.sendMail({
     from: `"FSKTM ZKP System" <${process.env.EMAIL_USER}>`,
     to: receiver,
     subject,
+    text,
     html,
   });
 

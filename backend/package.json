@@ -13,7 +13,8 @@
     "check:drive": "node -e \"require('./src/services/googleDriveService'); console.log('Google Drive config OK')\"",
     "check": "npm run check:server && npm run seed:check && npm run check:drive",
     "test": "jest --coverage",
-    "check:email": "node -e \"require('dotenv').config(); require('./src/utils/mailer').verifyEmailConfig().then(console.log).catch((e)=>{console.error(e.message); process.exit(1);})\""
+    "check:email": "node -e \"require('dotenv').config(); require('./src/utils/mailer').verifyEmailConfig().then(console.log).catch((e)=>{console.error(e.message); process.exit(1);})\"",
+    "send:test-email": "node src/scripts/sendTestEmail.js"
   },
   "keywords": [
     "zkp",
