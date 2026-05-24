@@ -61,9 +61,14 @@ export default function AttendancePage() {
 
     try {
       const parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") {
+        throw new Error("Manual attendance code");
+      }
+      const parsedToken = parsed.token || parsed.code || parsed.pin;
       return {
         timetableId: parsed.timetableId,
-        token: parsed.token || parsed.code,
+        token: parsedToken,
+        code: parsedToken,
       };
     } catch (_) {
       // Not JSON, continue.
@@ -78,12 +83,16 @@ export default function AttendancePage() {
         token:
           parsedUrl.searchParams.get("token") ||
           parsedUrl.searchParams.get("code"),
+        code:
+          parsedUrl.searchParams.get("code") ||
+          parsedUrl.searchParams.get("token"),
       };
     } catch (_) {
       // Not URL, treat as manual code.
     }
 
     return {
+      token: raw,
       code: raw,
     };
   };

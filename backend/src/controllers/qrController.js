@@ -2,6 +2,63 @@ const QRCode = require("qrcode");
 const crypto = require("crypto");
 const Timetable = require("../models/Timetable");
 const Attendance = require("../models/Attendance");
+
+const cleanAttendanceCode = (value = "") =>
+  String(value || "")
+    .trim()
+    .replace(/\s+/g, "");
+
+const parseAttendanceInput = (body = {}) => {
+  const rawValue =
+    body.token ||
+    body.code ||
+    body.pin ||
+    body.attendanceCode ||
+    body.qrToken ||
+    body.rawValue ||
+    body.value ||
+    body.data ||
+    "";
+
+  let timetableId = body.timetableId || body.sessionId || "";
+  let submittedToken = cleanAttendanceCode(rawValue);
+
+  if (!submittedToken) {
+    return { timetableId, submittedToken };
+  }
+
+  try {
+    const parsed = JSON.parse(submittedToken);
+    if (parsed && typeof parsed === "object") {
+      timetableId = timetableId || parsed.timetableId || parsed.sessionId || "";
+      submittedToken = cleanAttendanceCode(parsed.token || parsed.code || parsed.pin);
+    }
+  } catch (_) {
+    // Plain PIN or URL, continue.
+  }
+
+  if (!submittedToken) {
+    return { timetableId, submittedToken };
+  }
+
+  try {
+    const parsedUrl = new URL(submittedToken);
+    timetableId =
+      timetableId ||
+      parsedUrl.searchParams.get("timetableId") ||
+      parsedUrl.searchParams.get("sessionId") ||
+      "";
+    submittedToken = cleanAttendanceCode(
+      parsedUrl.searchParams.get("token") ||
+        parsedUrl.searchParams.get("code") ||
+        parsedUrl.searchParams.get("pin"),
+    );
+  } catch (_) {
+    // Not a URL.
+  }
+
+  return { timetableId, submittedToken };
+};
 // @desc    Generate QR code for timetable session
 // @route   POST /api/qr/generate/:timetableId
 // @access  Private (Panel, Admin)
@@ -113,9 +170,7 @@ exports.verifyQRCode = async (req, res) => {
     }
 
     const studentId = req.user.id;
-    const { timetableId, token, code } = req.body;
-
-    const submittedToken = String(token || code || "").trim();
+    const { timetableId, submittedToken } = parseAttendanceInput(req.body);
 
     if (!submittedToken) {
       return res.status(400).json({
@@ -125,10 +180,12 @@ exports.verifyQRCode = async (req, res) => {
     }
 
     const query = timetableId
-      ? { _id: timetableId, qrCode: submittedToken }
-      : { qrCode: submittedToken };
+      ? { _id: timetableId, qrCode: submittedToken, students: studentId }
+      : { qrCode: submittedToken, students: studentId };
 
-    const timetable = await Timetable.findOne(query);
+    const timetable = await Timetable.findOne(query).sort({
+      qrGeneratedAt: -1,
+    });
 
     if (!timetable) {
       return res.status(404).json({
