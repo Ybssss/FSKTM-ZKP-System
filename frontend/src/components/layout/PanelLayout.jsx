@@ -66,7 +66,7 @@ export default function PanelLayout() {
       to: "/panel/rubrics",
       icon: BookOpen,
       label: "Rubrics",
-      allowedRoles: ["superadmin", "admin"],
+      allowedRoles: ["superadmin", "admin", "panel"],
     },
     {
       to: "/panel/users",
