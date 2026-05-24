@@ -70,6 +70,7 @@ export default function TimetableManagementPage() {
   const [batches, setBatches] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [batchSearch, setBatchSearch] = useState("");
+  const [bulkStudentSearch, setBulkStudentSearch] = useState("");
 
   const [batchMode, setBatchMode] = useState("existing");
   const [selectedBatchId, setSelectedBatchId] = useState("");
@@ -297,6 +298,39 @@ export default function TimetableManagementPage() {
       .slice(0, 2)
       .map((assignment) => nameOf(resolvePanel(assignedPanelValue(assignment))))
       .filter((name) => name && name !== "-");
+
+  const filteredBulkStudents = useMemo(() => {
+    const term = bulkStudentSearch.toLowerCase().trim();
+
+    return students
+      .filter((student) => {
+        if (!term) return true;
+
+        const panelNames = assignedPanelNames(student);
+        return [
+          student.name,
+          student.matricNumber,
+          student.userId,
+          student.email,
+          student.researchTitle,
+          ...panelNames,
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase()
+          .includes(term);
+      })
+      .sort((a, b) => {
+        const aSelected = selectedStudentIds.includes(a._id);
+        const bSelected = selectedStudentIds.includes(b._id);
+        if (aSelected !== bSelected) return aSelected ? -1 : 1;
+        return String(a.name || "").localeCompare(String(b.name || ""));
+      });
+  }, [bulkStudentSearch, panels, selectedStudentIds, students]);
+
+  const studentsWithDefaultPanels = students.filter(
+    (student) => (student.assignedPanels || []).length >= 2,
+  ).length;
 
   const toggleStudentForBulk = (student) => {
     if (isExistingBatchMode && !selectedBatchId) return alert("Please select an existing batch first.");
@@ -721,9 +755,39 @@ export default function TimetableManagementPage() {
             </div>
 
             <div className="bg-white rounded-xl border shadow-sm p-5">
-              <h2 className="text-lg font-bold mb-3 flex items-center gap-2"><UserPlus className="w-5 h-5" /> Add Students</h2>
-              <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
-                {students.map((student) => {
+              <div className="flex items-center justify-between gap-3 mb-3">
+                <h2 className="text-lg font-bold flex items-center gap-2"><UserPlus className="w-5 h-5" /> Add Students</h2>
+                <span className="text-xs font-bold text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                  {filteredBulkStudents.length}/{students.length}
+                </span>
+              </div>
+              <div className="relative mb-3">
+                <Search className="w-4 h-4 text-gray-400 absolute left-3 top-3" />
+                <input
+                  value={bulkStudentSearch}
+                  onChange={(e) => setBulkStudentSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm focus:ring-2 focus:ring-indigo-500"
+                  placeholder="Search name, matric, title, panel..."
+                />
+              </div>
+              <div className="flex flex-wrap gap-2 mb-3 text-[11px] font-bold">
+                <span className="px-2 py-1 rounded bg-indigo-50 text-indigo-700 border border-indigo-100">
+                  Selected {selectedStudentIds.length}
+                </span>
+                <span className="px-2 py-1 rounded bg-green-50 text-green-700 border border-green-100">
+                  Ready {studentsWithDefaultPanels}
+                </span>
+                <span className="px-2 py-1 rounded bg-amber-50 text-amber-700 border border-amber-100">
+                  Need Panels {students.length - studentsWithDefaultPanels}
+                </span>
+              </div>
+              <div className="max-h-96 overflow-y-auto space-y-2 pr-1">
+                {filteredBulkStudents.length === 0 && (
+                  <div className="p-4 text-center text-sm text-gray-500 bg-gray-50 rounded-lg border border-dashed">
+                    No students match this search.
+                  </div>
+                )}
+                {filteredBulkStudents.map((student) => {
                   const defaultPanels = assignedPanelNames(student);
 
                   return (
