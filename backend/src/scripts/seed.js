@@ -946,51 +946,69 @@ const seedDatabase = async () => {
     const createdStudents = await User.create(studentUsers);
     allUsers = [...allUsers, ...createdStudents];
     const getUserId = (email) => allUsers.find((u) => u.email === email)._id;
+    const drSamihahId = getUserId("samihah@uthm.edu.my");
 
-    console.log("🔗 Saving Panel Assignments to Database...");
-
-    const panelAssignmentMap = [
+    const studentLifecyclePlan = [
       {
         studentEmail: "ali@student.uthm.edu.my",
-        panelIds: [createdPanels[0]._id, createdPanels[1]._id],
+        startTime: "09:00",
+        panels: [drSamihahId, createdPanels[1]._id],
       },
       {
         studentEmail: "siti@student.uthm.edu.my",
-        panelIds: [createdPanels[1]._id, createdPanels[2]._id],
+        startTime: "09:00",
+        panels: [createdPanels[2]._id, createdPanels[3]._id],
       },
       {
         studentEmail: "chong@student.uthm.edu.my",
-        panelIds: [createdPanels[2]._id, createdPanels[3]._id],
+        startTime: "10:05",
+        panels: [createdPanels[0]._id, drSamihahId],
       },
       {
         studentEmail: "meiling@student.uthm.edu.my",
-        panelIds: [createdPanels[3]._id, createdPanels[0]._id],
+        startTime: "10:05",
+        panels: [createdPanels[3]._id, createdPanels[4]._id],
       },
       {
         studentEmail: "aina@student.uthm.edu.my",
-        panelIds: [createdPanels[0]._id, createdPanels[4]._id],
+        startTime: "11:10",
+        panels: [drSamihahId, createdPanels[4]._id],
       },
       {
         studentEmail: "danish@student.uthm.edu.my",
-        panelIds: [createdPanels[1]._id, createdPanels[3]._id],
+        startTime: "11:10",
+        panels: [createdPanels[1]._id, createdPanels[3]._id],
       },
       {
         studentEmail: "priya@student.uthm.edu.my",
-        panelIds: [createdPanels[2]._id, createdPanels[4]._id],
+        startTime: "12:15",
+        panels: [createdPanels[2]._id, drSamihahId],
       },
       {
         studentEmail: "jiawei@student.uthm.edu.my",
-        panelIds: [createdPanels[3]._id, createdPanels[1]._id],
+        startTime: "12:15",
+        panels: [createdPanels[0]._id, createdPanels[1]._id],
       },
       {
         studentEmail: "hafiz@student.uthm.edu.my",
-        panelIds: [createdPanels[4]._id, createdPanels[0]._id],
+        startTime: "14:00",
+        panels: [drSamihahId, createdPanels[4]._id],
       },
       {
         studentEmail: "amira@student.uthm.edu.my",
-        panelIds: [createdPanels[4]._id, createdPanels[2]._id],
+        startTime: "14:00",
+        panels: [createdPanels[0]._id, createdPanels[2]._id],
       },
     ];
+
+    console.log("🔗 Saving Panel Assignments to Database...");
+
+    const panelAssignmentMap = studentLifecyclePlan.map(
+      ({ studentEmail, panels }) => ({
+        studentEmail,
+        panelIds: panels,
+      }),
+    );
 
     for (const assignment of panelAssignmentMap) {
       const studentId = getUserId(assignment.studentEmail);
@@ -1071,59 +1089,6 @@ const seedDatabase = async () => {
       date.setHours(hours, minutes + minutesToAdd, 0, 0);
       return date.toTimeString().slice(0, 5);
     };
-
-    const studentLifecyclePlan = [
-      {
-        studentEmail: "ali@student.uthm.edu.my",
-        startTime: "09:00",
-        panels: [createdPanels[0]._id, createdPanels[1]._id],
-      },
-      {
-        studentEmail: "siti@student.uthm.edu.my",
-        startTime: "09:00",
-        panels: [createdPanels[2]._id, createdPanels[3]._id],
-      },
-      {
-        studentEmail: "chong@student.uthm.edu.my",
-        startTime: "10:05",
-        panels: [createdPanels[0]._id, createdPanels[2]._id],
-      },
-      {
-        studentEmail: "meiling@student.uthm.edu.my",
-        startTime: "10:05",
-        panels: [createdPanels[3]._id, createdPanels[4]._id],
-      },
-      {
-        studentEmail: "aina@student.uthm.edu.my",
-        startTime: "11:10",
-        panels: [createdPanels[0]._id, createdPanels[4]._id],
-      },
-      {
-        studentEmail: "danish@student.uthm.edu.my",
-        startTime: "11:10",
-        panels: [createdPanels[1]._id, createdPanels[3]._id],
-      },
-      {
-        studentEmail: "priya@student.uthm.edu.my",
-        startTime: "12:15",
-        panels: [createdPanels[2]._id, createdPanels[4]._id],
-      },
-      {
-        studentEmail: "jiawei@student.uthm.edu.my",
-        startTime: "12:15",
-        panels: [createdPanels[0]._id, createdPanels[1]._id],
-      },
-      {
-        studentEmail: "hafiz@student.uthm.edu.my",
-        startTime: "14:00",
-        panels: [createdPanels[3]._id, createdPanels[4]._id],
-      },
-      {
-        studentEmail: "amira@student.uthm.edu.my",
-        startTime: "14:00",
-        panels: [createdPanels[0]._id, createdPanels[2]._id],
-      },
-    ];
 
     // Batch names follow the real-world idea of named rooms/tracks.
     // PIXEL, QUANTUM, WAVELET, and CYBER are used only as the four

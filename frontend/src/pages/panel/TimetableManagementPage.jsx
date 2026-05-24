@@ -3,6 +3,7 @@ import {
   AlertTriangle,
   Calendar as CalendarIcon,
   Clock,
+  Eye,
   GripVertical,
   Layers,
   Pencil,
@@ -860,9 +861,37 @@ export default function TimetableManagementPage() {
                       <td className="p-4 text-sm text-gray-700"><div>{normalizeDateKey(session.date)}</div><div className="font-semibold">{session.startTime || session.time} - {session.endTime}</div><a href={formatLink(session.venue || session.googleMeetLink)} target="_blank" rel="noreferrer" className="text-blue-700 font-semibold flex items-center gap-1"><Video className="w-4 h-4" /> Link</a></td>
                       <td className="p-4"><p className="font-bold">{student?.name || "-"}</p><p className="text-xs text-gray-500">{student?.matricNumber || student?.userId || "-"}</p></td>
                       <td className="p-4 text-sm"><p>{nameOf(getPanel(session, 0))}</p><p>{nameOf(getPanel(session, 1))}</p></td>
-                      <td className="p-4 text-right space-x-2">
-                        {isAdmin ? <button onClick={() => openEditSession(session)} className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold">Edit</button> : <button onClick={() => navigate(`/panel/sessions/${sessionId}`)} className="px-3 py-2 bg-gray-700 text-white rounded-lg text-sm font-bold">View Session</button>}
-                        {isAdmin && <button onClick={() => removeReviewRow({ type: "existing", sessionId })} className="px-3 py-2 bg-red-50 text-red-700 rounded-lg text-sm font-bold border border-red-200">Delete</button>}
+                      <td className="p-4">
+                        <div className="flex justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/panel/sessions/${sessionId}`)}
+                            className="inline-flex items-center gap-2 px-3 py-2 bg-gray-700 text-white rounded-lg text-sm font-bold"
+                          >
+                            <Eye className="w-4 h-4" />
+                            View
+                          </button>
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => openEditSession(session)}
+                              className="inline-flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold"
+                            >
+                              <Pencil className="w-4 h-4" />
+                              Edit
+                            </button>
+                          )}
+                          {isAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => removeReviewRow({ type: "existing", sessionId })}
+                              className="inline-flex items-center gap-2 px-3 py-2 bg-red-50 text-red-700 rounded-lg text-sm font-bold border border-red-200"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                              Delete
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
