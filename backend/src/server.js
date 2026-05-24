@@ -10,6 +10,23 @@ const expertiseRoutes = require("./routes/expertiseRoutes");
 const helmet = require("helmet");
 const mongoSanitize = require("express-mongo-sanitize");
 const sessionBatchRoutes = require("./routes/sessionBatch");
+const { getEmailConfigStatus } = require("./utils/mailer");
+
+const getAllowedOrigins = () => {
+  const configuredOrigins = [
+    process.env.FRONTEND_URL,
+    ...(process.env.FRONTEND_URLS || "")
+      .split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean),
+  ].filter(Boolean);
+
+  return [
+    "https://fsktm-zkp-system.vercel.app",
+    "http://localhost:5173",
+    ...configuredOrigins,
+  ];
+};
 
 // Middleware
 app.use(
@@ -40,7 +57,14 @@ app.use(
 
 app.use(
   cors({
-    origin: ["https://fsktm-zkp-system.vercel.app", "http://localhost:5173"],
+    origin(origin, callback) {
+      if (!origin || getAllowedOrigins().includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`Not allowed by CORS: ${origin}`));
+    },
     credentials: true,
   }),
 );
@@ -116,11 +140,21 @@ app.get("/", (req, res) => {
 
 // Health check endpoint
 app.get("/api/health", (req, res) => {
+  const emailConfig = getEmailConfigStatus();
+
   res.json({
     success: true,
     status: "healthy",
     database:
       mongoose.connection.readyState === 1 ? "connected" : "disconnected",
+    email: {
+      configured: emailConfig.ready,
+      missing: emailConfig.missing,
+      host: emailConfig.host,
+      port: emailConfig.port,
+      secure: emailConfig.secure,
+      userConfigured: emailConfig.userConfigured,
+    },
     timestamp: new Date().toISOString(),
   });
 });

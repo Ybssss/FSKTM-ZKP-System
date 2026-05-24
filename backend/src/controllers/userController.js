@@ -1,6 +1,9 @@
 const User = require("../models/User");
 const { logActivity } = require("../utils/logger");
-const { sendRegistrationEmail } = require("../utils/mailer"); // ✅ Import Mailer
+const {
+  getEmailConfigStatus,
+  sendRegistrationEmail,
+} = require("../utils/mailer"); // ✅ Import Mailer
 
 const queueRegistrationEmail = ({
   email,
@@ -14,7 +17,7 @@ const queueRegistrationEmail = ({
     .toLowerCase();
 
   const status = {
-    queued: Boolean(receiver),
+    queued: false,
     sent: false,
     error: null,
     receiver,
@@ -22,6 +25,21 @@ const queueRegistrationEmail = ({
   };
 
   if (!receiver) return status;
+
+  const emailConfig = getEmailConfigStatus();
+  if (!emailConfig.ready) {
+    status.error = `Email configuration missing on server: ${emailConfig.missing.join(", ")}`;
+    console.error(status.error);
+    return status;
+  }
+
+  status.queued = true;
+  console.log(`${isReset ? "Reset" : "Registration"} email queued:`, {
+    receiver,
+    host: emailConfig.host,
+    port: emailConfig.port,
+    secure: emailConfig.secure,
+  });
 
   sendRegistrationEmail(receiver, name, userId, code, isReset)
     .then((mailResult) => {
@@ -33,7 +51,13 @@ const queueRegistrationEmail = ({
     .catch((emailError) => {
       console.error(
         `${isReset ? "Reset" : "Registration"} email failed:`,
-        emailError.message || emailError,
+        {
+          message: emailError.message || String(emailError),
+          code: emailError.code,
+          responseCode: emailError.responseCode,
+          command: emailError.command,
+          response: emailError.response,
+        },
       );
     });
 
@@ -179,7 +203,9 @@ exports.createUser = async (req, res) => {
       success: true,
       message: emailStatus.queued
         ? "User created successfully. Registration email is being sent."
-        : "User created successfully. No receiver email was provided.",
+        : emailStatus.error
+          ? "User created successfully, but registration email could not be queued."
+          : "User created successfully. No receiver email was provided.",
       user: newUser,
       registrationCode,
       emailStatus,
@@ -233,7 +259,9 @@ exports.resetZkpRegistration = async (req, res) => {
       success: true,
       message: emailStatus.queued
         ? "User ZKP identity reset successfully. Reset email is being sent."
-        : "User ZKP identity reset successfully. No receiver email was provided.",
+        : emailStatus.error
+          ? "User ZKP identity reset successfully, but reset email could not be queued."
+          : "User ZKP identity reset successfully. No receiver email was provided.",
       registrationCode: newRegistrationCode,
       name: userToReset.name,
       userId: userToReset.userId,

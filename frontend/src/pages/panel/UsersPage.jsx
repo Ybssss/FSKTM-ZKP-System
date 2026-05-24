@@ -307,11 +307,7 @@ export default function UsersPage() {
   );
 
   const currentEmailStatus = newCredentials?.emailStatus || {};
-  const emailFailed = Boolean(
-    currentEmailStatus.queued &&
-      !currentEmailStatus.sent &&
-      currentEmailStatus.error,
-  );
+  const emailFailed = Boolean(currentEmailStatus.error);
   const emailSent = Boolean(currentEmailStatus.sent);
   const emailQueued = Boolean(
     currentEmailStatus.queued &&

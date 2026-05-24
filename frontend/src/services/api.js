@@ -1,10 +1,23 @@
 import axios from "axios";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+const resolveApiUrl = () => {
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL;
+  }
+
+  if (import.meta.env.PROD) {
+    console.error(
+      "VITE_API_URL is not configured. The deployed frontend will not reach the Render backend.",
+    );
+  }
+
+  return "http://localhost:5000/api";
+};
+
+const API_URL = resolveApiUrl();
 
 const api = axios.create({
-  // If it's live, use the Render URL. If local, use localhost.
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000/api",
+  baseURL: API_URL,
 });
 
 // Request Interceptor: Attach token

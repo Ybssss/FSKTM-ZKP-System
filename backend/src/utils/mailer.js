@@ -5,6 +5,34 @@ const requiredEmailEnv = ["EMAIL_USER", "EMAIL_PASS"];
 const getMissingEmailEnv = () =>
   requiredEmailEnv.filter((key) => !process.env[key]);
 
+const getEmailSettings = () => {
+  const host = process.env.EMAIL_HOST || "smtp.gmail.com";
+  const port = Number(process.env.EMAIL_PORT || 587);
+  const explicitSecure = String(process.env.EMAIL_SECURE || "")
+    .trim()
+    .toLowerCase();
+
+  return {
+    host,
+    port,
+    secure: explicitSecure ? explicitSecure === "true" : port === 465,
+  };
+};
+
+exports.getEmailConfigStatus = () => {
+  const missing = getMissingEmailEnv();
+  const settings = getEmailSettings();
+
+  return {
+    ready: missing.length === 0,
+    missing,
+    host: settings.host,
+    port: settings.port,
+    secure: settings.secure,
+    userConfigured: Boolean(process.env.EMAIL_USER),
+  };
+};
+
 const createTransporter = () => {
   const missing = getMissingEmailEnv();
 
@@ -12,16 +40,12 @@ const createTransporter = () => {
     throw new Error(`Email configuration missing: ${missing.join(", ")}`);
   }
 
-  const host = process.env.EMAIL_HOST || "smtp.gmail.com";
-  const port = Number(process.env.EMAIL_PORT || 587);
-  const explicitSecure = String(process.env.EMAIL_SECURE || "")
-    .trim()
-    .toLowerCase();
+  const { host, port, secure } = getEmailSettings();
 
   return nodemailer.createTransport({
     host,
     port,
-    secure: explicitSecure ? explicitSecure === "true" : port === 465,
+    secure,
     requireTLS: port === 587,
     auth: {
       user: process.env.EMAIL_USER,
