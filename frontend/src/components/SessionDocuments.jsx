@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Upload, FileText, Download, Trash2, Eye, Plus, X, Paperclip } from 'lucide-react';
 import { timetableAPI } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { openAuthenticatedFile } from '../utils/authenticatedFile';
 
 export default function SessionDocuments({ session, onUpdate }) {
   const { user } = useAuth();
@@ -57,6 +58,15 @@ export default function SessionDocuments({ session, onUpdate }) {
     } catch (error) {
       console.error('Delete error:', error);
       alert('Failed to delete document');
+    }
+  };
+
+  const handleOpen = async (document, download = false) => {
+    try {
+      await openAuthenticatedFile(document, { download });
+    } catch (error) {
+      console.error('Document open error:', error);
+      alert(error.response?.data?.message || 'Failed to open document');
     }
   };
 
@@ -172,24 +182,23 @@ export default function SessionDocuments({ session, onUpdate }) {
                 </div>
 
                 <div className="flex items-center gap-2 ml-4">
-                  <a
-                    href={document.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => handleOpen(document)}
                     className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                     title="View document"
                   >
                     <Eye className="w-5 h-5" />
-                  </a>
+                  </button>
 
-                  <a
-                    href={document.url}
-                    download
+                  <button
+                    type="button"
+                    onClick={() => handleOpen(document, true)}
                     className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
                     title="Download document"
                   >
                     <Download className="w-5 h-5" />
-                  </a>
+                  </button>
 
                   {canDelete(document) && (
                     <button

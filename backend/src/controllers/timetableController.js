@@ -134,6 +134,31 @@ const idString = (value) => String(value?._id || value || "");
 const rangesOverlap = (aStart, aEnd, bStart, bEnd) =>
   aStart < bEnd && bStart < aEnd;
 
+const sameId = (a, b) => idString(a) && idString(a) === idString(b);
+
+const sessionHasUser = (values = [], userId) =>
+  values.some((value) => sameId(value, userId));
+
+const getDocumentUploaderId = (document) => idString(document?.uploadedBy);
+
+const canAccessSessionMaterial = (timetable, user, document = null) => {
+  const userId = user?.id || user?._id;
+  if (!user || !userId) return false;
+  if (user.role === "admin") return true;
+  if (document && sameId(getDocumentUploaderId(document), userId)) return true;
+  if (user.role === "student") return sessionHasUser(timetable.students || [], userId);
+  if (user.role === "panel") return sessionHasUser(timetable.panels || [], userId);
+  return false;
+};
+
+const findTimetableForStoredFile = async (fileId) =>
+  Timetable.findOne({
+    $or: [
+      { "studentDocuments.driveFileId": fileId },
+      { "studentDocuments.fileStorageId": fileId },
+    ],
+  }).select("_id students panels studentDocuments");
+
 const formatTimetable = (t) => {
   const doc = t?.toObject ? t.toObject() : t;
   if (!doc) return null;
@@ -902,6 +927,12 @@ exports.uploadDocument = async (req, res) => {
   try {
     const timetable = await Timetable.findById(req.params.id);
     if (!timetable) return res.status(404).json({ success: false, message: "Session not found." });
+    if (!canAccessSessionMaterial(timetable, req.user)) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only upload materials for your own session.",
+      });
+    }
     if (!req.file) return res.status(400).json({ success: false, message: "Please choose a file to upload." });
 
     const uploader = uploadStoredFile || uploadToGoogleDrive;
@@ -916,6 +947,7 @@ exports.uploadDocument = async (req, res) => {
     const document = {
       title: cleanText(req.body.title || req.file.originalname, 150),
       url,
+      fileStorageId: uploaded.id,
       driveFileId: uploaded.id,
       mimeType: uploaded.mimeType || req.file.mimetype,
       source: uploaded.source || "gridfs",
@@ -942,12 +974,19 @@ exports.deleteDocument = async (req, res) => {
     if (!timetable) return res.status(404).json({ success: false, message: "Session not found." });
     const doc = timetable.studentDocuments.id(req.params.documentId);
     if (!doc) return res.status(404).json({ success: false, message: "Material not found." });
+    if (!canAccessSessionMaterial(timetable, req.user, doc)) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only delete materials you uploaded.",
+      });
+    }
 
     const remover = deleteStoredFile || deleteFromGoogleDrive;
-    if (remover && doc.driveFileId) await remover(doc.driveFileId);
+    if (remover && (doc.fileStorageId || doc.driveFileId)) await remover(doc.fileStorageId || doc.driveFileId);
     doc.deleteOne();
     await timetable.save();
-    res.json({ success: true, message: "Material deleted successfully." });
+    const updated = await populateTimetableQuery(Timetable.findById(timetable._id));
+    res.json({ success: true, message: "Material deleted successfully.", timetable: formatTimetable(updated) });
   } catch (error) {
     res.status(500).json({ success: false, message: "Failed to delete material.", error: error.message });
   }
@@ -957,6 +996,24 @@ exports.streamDocumentFile = async (req, res) => {
   try {
     const streamer = streamStoredFile || streamLegacyFile;
     if (!streamer) return res.status(404).json({ success: false, message: "File streaming is not configured." });
+    const timetable = await findTimetableForStoredFile(req.params.fileId);
+    const document = timetable?.studentDocuments?.find(
+      (doc) =>
+        sameId(doc.fileStorageId, req.params.fileId) ||
+        sameId(doc.driveFileId, req.params.fileId),
+    );
+
+    if (!timetable || !document) {
+      return res.status(404).json({ success: false, message: "Material not found." });
+    }
+
+    if (!canAccessSessionMaterial(timetable, req.user, document)) {
+      return res.status(403).json({
+        success: false,
+        message: "You do not have permission to view this material.",
+      });
+    }
+
     await streamer(req.params.fileId, res);
   } catch (error) {
     res.status(500).json({ success: false, message: "Failed to load file.", error: error.message });

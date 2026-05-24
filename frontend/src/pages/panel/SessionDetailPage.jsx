@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import api from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
+import { openAuthenticatedFile } from "../../utils/authenticatedFile";
 
 export default function SessionDetailPage() {
   const { id } = useParams();
@@ -332,6 +333,18 @@ export default function SessionDetailPage() {
         error.response?.data?.message ||
           error.response?.data?.error ||
           "Failed to delete material.",
+      );
+    }
+  };
+
+  const handleMaterialOpen = async (doc) => {
+    try {
+      await openAuthenticatedFile(doc);
+    } catch (error) {
+      alert(
+        error.response?.data?.message ||
+          error.response?.data?.error ||
+          "Failed to open material.",
       );
     }
   };
@@ -742,15 +755,14 @@ export default function SessionDetailPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <a
-                    href={doc.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => handleMaterialOpen(doc)}
                     className="inline-flex items-center gap-1 px-4 py-2 bg-white border border-indigo-200 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-50"
                   >
                     <ExternalLink className="w-4 h-4" />
                     Open
-                  </a>
+                  </button>
 
                   {canDeleteMaterial(doc) && (
                     <button
