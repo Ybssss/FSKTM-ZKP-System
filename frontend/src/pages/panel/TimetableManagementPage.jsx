@@ -196,21 +196,21 @@ export default function TimetableManagementPage() {
     );
   }, [batches, batchSearch]);
 
-  const getAutoSlot = (index) => {
+  const getAutoSlot = (index, config = bulkConfig, duration = slotDuration) => {
     const startTime = addMinutes(
-      bulkConfig.startTime || "09:00",
-      index * (Number(slotDuration || 30) + Number(bulkConfig.breakBetweenSlotsMinutes || 0)),
+      config.startTime || "09:00",
+      index * (Number(duration || 30) + Number(config.breakBetweenSlotsMinutes || 0)),
     );
-    return { startTime, endTime: addMinutes(startTime, Number(slotDuration || 30)) };
+    return { startTime, endTime: addMinutes(startTime, Number(duration || 30)) };
   };
 
-  const recalcRows = (rows) =>
+  const recalcRows = (rows, config = bulkConfig, duration = slotDuration) =>
     rows.map((row, index) => {
-      const slot = getAutoSlot(index);
+      const slot = getAutoSlot(index, config, duration);
       return {
         ...row,
         slotNo: index + 1,
-        date: bulkConfig.date,
+        date: config.date,
         startTime: slot.startTime,
         endTime: slot.endTime,
       };
@@ -253,11 +253,13 @@ export default function TimetableManagementPage() {
       venue: batch?.googleMeetLink || "",
       breakBetweenSlotsMinutes: batch?.breakBetweenSlotsMinutes ?? 5,
     };
+    const nextSlotDuration = Number(batch?.slotDurationMinutes || 30);
+
     setBulkConfig(config);
-    setSlotDuration(Number(batch?.slotDurationMinutes || 30));
+    setSlotDuration(nextSlotDuration);
     setSelectedStudentIds([]);
     const currentBatchSessions = sessionSource.filter((s) => String(s.batchId) === String(batch?.batchId));
-    setReviewRows(makeExistingRows(currentBatchSessions));
+    setReviewRows(recalcRows(makeExistingRows(currentBatchSessions), config, nextSlotDuration));
   };
 
   const handleSelectBatch = (batchId) => {
@@ -281,7 +283,7 @@ export default function TimetableManagementPage() {
     setBulkConfig((prev) => {
       const next = { ...prev, ...patch };
       if (patch.startTime || patch.date || patch.breakBetweenSlotsMinutes) {
-        setTimeout(() => setReviewRows((rows) => recalcRows(rows)), 0);
+        setReviewRows((rows) => recalcRows(rows, next, slotDuration));
       }
       return next;
     });
@@ -745,7 +747,7 @@ export default function TimetableManagementPage() {
               <input type="date" value={bulkConfig.date} disabled={isExistingBatchMode} onChange={(e) => updateBulkConfig({ date: e.target.value })} className="w-full p-2 border rounded-lg disabled:bg-gray-100" />
               <input type="time" value={bulkConfig.startTime} disabled={isExistingBatchMode} onChange={(e) => updateBulkConfig({ startTime: e.target.value })} className="w-full p-2 border rounded-lg disabled:bg-gray-100" />
               <div className="grid grid-cols-2 gap-2">
-                <input type="number" min="5" value={slotDuration} disabled={isExistingBatchMode} onChange={(e) => { setSlotDuration(Number(e.target.value)); localStorage.setItem("admin_slot_duration", e.target.value); setTimeout(() => setReviewRows((rows) => recalcRows(rows)), 0); }} className="w-full p-2 border rounded-lg disabled:bg-gray-100" placeholder="Duration" />
+                <input type="number" min="5" value={slotDuration} disabled={isExistingBatchMode} onChange={(e) => { const nextDuration = Number(e.target.value); setSlotDuration(nextDuration); localStorage.setItem("admin_slot_duration", e.target.value); setReviewRows((rows) => recalcRows(rows, bulkConfig, nextDuration)); }} className="w-full p-2 border rounded-lg disabled:bg-gray-100" placeholder="Duration" />
                 <input type="number" min="0" value={bulkConfig.breakBetweenSlotsMinutes} disabled={isExistingBatchMode} onChange={(e) => updateBulkConfig({ breakBetweenSlotsMinutes: Number(e.target.value) })} className="w-full p-2 border rounded-lg disabled:bg-gray-100" placeholder="Break" />
               </div>
               <select value={bulkConfig.rubricId} disabled={isExistingBatchMode} onChange={(e) => updateBulkConfig({ rubricId: e.target.value })} className="w-full p-2 border rounded-lg disabled:bg-gray-100">
