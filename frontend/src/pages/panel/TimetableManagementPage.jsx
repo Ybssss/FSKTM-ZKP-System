@@ -51,6 +51,7 @@ const getStudent = (session) => session.student || session.students?.[0] || null
 const getPanel = (session, index) => session.panels?.[index] || session[`panel${index + 1}Id`] || null;
 const idOf = (value) => String(value?._id || value || "");
 const nameOf = (value) => value?.name || value?.userId || "-";
+const assignedPanelValue = (assignment) => assignment?.panelId || assignment;
 
 const rangesOverlap = (aStart, aEnd, bStart, bEnd) => aStart < bEnd && bStart < aEnd;
 
@@ -285,6 +286,18 @@ export default function TimetableManagementPage() {
     });
   };
 
+  const resolvePanel = (value) => {
+    const panelId = idOf(value);
+    if (!panelId) return null;
+    return panels.find((panel) => String(panel._id) === panelId) || value;
+  };
+
+  const assignedPanelNames = (student) =>
+    (student.assignedPanels || [])
+      .slice(0, 2)
+      .map((assignment) => nameOf(resolvePanel(assignedPanelValue(assignment))))
+      .filter((name) => name && name !== "-");
+
   const toggleStudentForBulk = (student) => {
     if (isExistingBatchMode && !selectedBatchId) return alert("Please select an existing batch first.");
     const studentId = student._id;
@@ -292,8 +305,10 @@ export default function TimetableManagementPage() {
     if (assigned.length < 2) {
       return alert("This student does not have exactly 2 default panels. Assign panels first.");
     }
-    const p1 = assigned[0]?.panelId?._id || assigned[0]?.panelId || assigned[0];
-    const p2 = assigned[1]?.panelId?._id || assigned[1]?.panelId || assigned[1];
+    const p1 = assignedPanelValue(assigned[0]);
+    const p2 = assignedPanelValue(assigned[1]);
+    const panel1 = resolvePanel(p1);
+    const panel2 = resolvePanel(p2);
     const selectedRubric = rubrics.find((r) => r._id === bulkConfig.rubricId);
 
     if (selectedStudentIds.includes(studentId)) {
@@ -311,8 +326,8 @@ export default function TimetableManagementPage() {
       title: `${selectedRubric?.name || "Session"} - ${student.name}`,
       panel1Id: idOf(p1),
       panel2Id: idOf(p2),
-      panel1Name: nameOf(assigned[0]?.panelId || assigned[0]),
-      panel2Name: nameOf(assigned[1]?.panelId || assigned[1]),
+      panel1Name: nameOf(panel1),
+      panel2Name: nameOf(panel2),
       status: "draft",
     };
     setSelectedStudentIds((prev) => [...prev, studentId]);
@@ -708,12 +723,19 @@ export default function TimetableManagementPage() {
             <div className="bg-white rounded-xl border shadow-sm p-5">
               <h2 className="text-lg font-bold mb-3 flex items-center gap-2"><UserPlus className="w-5 h-5" /> Add Students</h2>
               <div className="max-h-80 overflow-y-auto space-y-2 pr-1">
-                {students.map((student) => (
-                  <button key={student._id} onClick={() => toggleStudentForBulk(student)} className={`w-full text-left p-3 rounded-lg border ${selectedStudentIds.includes(student._id) ? "bg-indigo-50 border-indigo-300" : "bg-white border-gray-200 hover:bg-gray-50"}`}>
-                    <p className="font-bold text-gray-900">{student.name}</p>
-                    <p className="text-xs text-gray-500">{student.matricNumber || student.userId}</p>
-                  </button>
-                ))}
+                {students.map((student) => {
+                  const defaultPanels = assignedPanelNames(student);
+
+                  return (
+                    <button key={student._id} onClick={() => toggleStudentForBulk(student)} className={`w-full text-left p-3 rounded-lg border ${selectedStudentIds.includes(student._id) ? "bg-indigo-50 border-indigo-300" : "bg-white border-gray-200 hover:bg-gray-50"}`}>
+                      <p className="font-bold text-gray-900">{student.name}</p>
+                      <p className="text-xs text-gray-500">{student.matricNumber || student.userId}</p>
+                      <p className={`text-[11px] mt-1 font-semibold ${defaultPanels.length === 2 ? "text-green-700" : "text-amber-700"}`}>
+                        Panels: {defaultPanels.length ? defaultPanels.join(" / ") : "Not assigned"}
+                      </p>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </div>

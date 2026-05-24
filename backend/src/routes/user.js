@@ -40,6 +40,8 @@ router.get("/", async (req, res) => {
     }
     const users = await User.find()
       .select("-passwordHash")
+      .populate("supervisorId", "name email userId")
+      .populate("assignedPanels.panelId", "name email userId expertiseTags")
       .sort({ createdAt: -1 });
     res.json({ success: true, users });
   } catch (error) {
