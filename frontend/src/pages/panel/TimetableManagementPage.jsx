@@ -54,6 +54,12 @@ const nameOf = (value) => value?.name || value?.userId || "-";
 const assignedPanelValue = (assignment) => assignment?.panelId || assignment;
 
 const rangesOverlap = (aStart, aEnd, bStart, bEnd) => aStart < bEnd && bStart < aEnd;
+const sortSessionsBySchedule = (items = []) =>
+  [...items].sort((a, b) => {
+    const aKey = `${normalizeDateKey(a.date)} ${a.startTime || a.time || ""} ${a.title || ""}`;
+    const bKey = `${normalizeDateKey(b.date)} ${b.startTime || b.time || ""} ${b.title || ""}`;
+    return aKey.localeCompare(bKey);
+  });
 
 export default function TimetableManagementPage() {
   const { user } = useAuth();
@@ -172,9 +178,9 @@ export default function TimetableManagementPage() {
 
   const selectedBatchSessions = useMemo(
     () =>
-      sessions
-        .filter((session) => String(session.batchId || "") === String(selectedBatchId || ""))
-        .sort((a, b) => String(a.startTime || a.time || "").localeCompare(String(b.startTime || b.time || ""))),
+      sortSessionsBySchedule(
+        sessions.filter((session) => String(session.batchId || "") === String(selectedBatchId || "")),
+      ),
     [sessions, selectedBatchId],
   );
 
@@ -258,7 +264,9 @@ export default function TimetableManagementPage() {
     setBulkConfig(config);
     setSlotDuration(nextSlotDuration);
     setSelectedStudentIds([]);
-    const currentBatchSessions = sessionSource.filter((s) => String(s.batchId) === String(batch?.batchId));
+    const currentBatchSessions = sortSessionsBySchedule(
+      sessionSource.filter((s) => String(s.batchId) === String(batch?.batchId)),
+    );
     setReviewRows(recalcRows(makeExistingRows(currentBatchSessions), config, nextSlotDuration));
   };
 
@@ -271,13 +279,20 @@ export default function TimetableManagementPage() {
   useEffect(() => {
     if (isExistingBatchMode && selectedBatchId) {
       setReviewRows((rows) => {
-        const existingKeys = new Set(rows.filter((row) => row.type !== "existing").map((row) => row.key));
         const existingRows = makeExistingRows();
-        const draftRows = rows.filter((row) => existingKeys.has(row.key));
+        const draftRows = rows.filter((row) => row.type === "draft");
         return recalcRows([...existingRows, ...draftRows]);
       });
     }
-  }, [selectedBatchSessions.length]);
+  }, [
+    isExistingBatchMode,
+    selectedBatchId,
+    selectedBatchSessions,
+    bulkConfig.date,
+    bulkConfig.startTime,
+    bulkConfig.breakBetweenSlotsMinutes,
+    slotDuration,
+  ]);
 
   const updateBulkConfig = (patch) => {
     setBulkConfig((prev) => {
@@ -397,16 +412,24 @@ export default function TimetableManagementPage() {
       if (!messages.includes(message)) conflicts.set(key, [...messages, message]);
     };
 
-    const rows = reviewRows.map((row) => ({
-      ...row,
-      source: "review",
-      sessionId: idOf(row.sessionId),
-      studentId: idOf(row.studentId),
-      date: normalizeDateKey(row.date),
-      start: timeToMinutes(row.startTime),
-      end: timeToMinutes(row.endTime),
-      panels: [row.panel1Id, row.panel2Id].map(idOf).filter(Boolean),
-    }));
+    const rows = reviewRows.map((row) => {
+      const panelEntries = [
+        [idOf(row.panel1Id), row.panel1Name],
+        [idOf(row.panel2Id), row.panel2Name],
+      ].filter(([panelId]) => panelId);
+
+      return {
+        ...row,
+        source: "review",
+        sessionId: idOf(row.sessionId),
+        studentId: idOf(row.studentId),
+        date: normalizeDateKey(row.date),
+        start: timeToMinutes(row.startTime),
+        end: timeToMinutes(row.endTime),
+        panels: panelEntries.map(([panelId]) => panelId),
+        panelNames: Object.fromEntries(panelEntries),
+      };
+    });
     const reviewedSessionIds = new Set(rows.map((row) => row.sessionId).filter(Boolean));
     const reviewDates = new Set(rows.map((row) => row.date).filter(Boolean));
     const existingItems = sessions
@@ -414,18 +437,23 @@ export default function TimetableManagementPage() {
       .map((session) => {
         const sessionId = idOf(session._id || session.id);
         const student = getStudent(session);
-        const panels = (session.panels?.length ? session.panels : [getPanel(session, 0), getPanel(session, 1)])
-          .map(idOf)
-          .filter(Boolean);
+        const panelValues = session.panels?.length ? session.panels : [getPanel(session, 0), getPanel(session, 1)];
+        const panelEntries = panelValues
+          .map((panel) => [idOf(panel), nameOf(panel)])
+          .filter(([panelId]) => panelId);
         return {
           source: "existing",
           sessionId,
           title: session.title || session.sessionType?.replaceAll("_", " ") || "Existing session",
           studentId: idOf(student),
+          studentName: student?.name || "Student",
           date: normalizeDateKey(session.date),
+          startTime: session.startTime || session.time || "",
+          endTime: session.endTime || "",
           start: timeToMinutes(session.startTime || session.time),
           end: timeToMinutes(session.endTime),
-          panels,
+          panels: panelEntries.map(([panelId]) => panelId),
+          panelNames: Object.fromEntries(panelEntries),
         };
       })
       .filter((item) => item.date && reviewDates.has(item.date))
@@ -443,6 +471,17 @@ export default function TimetableManagementPage() {
     const addToReviewRow = (item, message) => {
       if (item.source === "review") add(item.key, message);
     };
+    const itemLabel = (item) =>
+      item.source === "review"
+        ? `row #${item.slotNo} (${item.studentName || item.title || "session"})`
+        : `existing session "${item.title}"`;
+    const itemTime = (item) => `${item.startTime || "?"}-${item.endTime || "?"}`;
+    const panelNameFor = (item, panelId) => {
+      const directName = item.panelNames?.[panelId];
+      if (directName && directName !== "-") return directName;
+      const directoryName = nameOf(panels.find((panel) => idOf(panel) === panelId));
+      return directoryName && directoryName !== "-" ? directoryName : "Selected panel";
+    };
 
     for (let i = 0; i < allItems.length; i += 1) {
       for (let j = i + 1; j < allItems.length; j += 1) {
@@ -454,15 +493,11 @@ export default function TimetableManagementPage() {
         if (a.studentId && a.studentId === b.studentId) {
           addToReviewRow(
             a,
-            b.source === "existing"
-              ? `Student already has another session on this date: ${b.title}.`
-              : "Student already has another session on this date.",
+            `Student conflict: ${a.studentName || "This student"} already has ${itemLabel(b)} on ${a.date} at ${itemTime(b)}. One student can only have one session per day.`,
           );
           addToReviewRow(
             b,
-            a.source === "existing"
-              ? `Student already has another session on this date: ${a.title}.`
-              : "Student already has another session on this date.",
+            `Student conflict: ${b.studentName || "This student"} already has ${itemLabel(a)} on ${b.date} at ${itemTime(a)}. One student can only have one session per day.`,
           );
         }
         if (a.start === null || a.end === null || b.start === null || b.end === null) continue;
@@ -471,22 +506,18 @@ export default function TimetableManagementPage() {
         if (sharedPanel) {
           addToReviewRow(
             a,
-            b.source === "existing"
-              ? `Panel time conflict with existing session: ${b.title}.`
-              : "Panel time conflict with another row.",
+            `Panel conflict: ${panelNameFor(a, sharedPanel)} is also assigned to ${itemLabel(b)} at ${itemTime(b)}, which overlaps this row at ${itemTime(a)}.`,
           );
           addToReviewRow(
             b,
-            a.source === "existing"
-              ? `Panel time conflict with existing session: ${a.title}.`
-              : "Panel time conflict with another row.",
+            `Panel conflict: ${panelNameFor(b, sharedPanel)} is also assigned to ${itemLabel(a)} at ${itemTime(a)}, which overlaps this row at ${itemTime(b)}.`,
           );
         }
       }
     }
 
     return conflicts;
-  }, [reviewRows, sessions]);
+  }, [panels, reviewRows, sessions]);
 
   const publishConflictMap = useMemo(() => {
     const conflicts = new Map(
