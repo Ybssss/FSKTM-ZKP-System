@@ -390,7 +390,7 @@ export default function TimetableManagementPage() {
     setReviewRows((prev) => recalcRows(prev.filter((r) => r.key !== row.key)));
   };
 
-  const conflictMap = useMemo(() => {
+  const timingConflictMap = useMemo(() => {
     const conflicts = new Map();
     const add = (key, message) => conflicts.set(key, [...(conflicts.get(key) || []), message]);
 
@@ -431,12 +431,55 @@ export default function TimetableManagementPage() {
     return conflicts;
   }, [reviewRows]);
 
-  const hasConflicts = conflictMap.size > 0;
+  const publishConflictMap = useMemo(() => {
+    const conflicts = new Map(
+      [...timingConflictMap.entries()].map(([key, messages]) => [
+        key,
+        [...messages],
+      ]),
+    );
+    const add = (key, message) =>
+      conflicts.set(key, [...(conflicts.get(key) || []), message]);
+
+    reviewRows
+      .filter((row) => row.type === "draft")
+      .forEach((row) => {
+        if (isExistingBatchMode && !selectedBatchId) {
+          add(row.key, "Select an existing batch before publishing.");
+        }
+        if (!String(bulkConfig.batchName || "").trim()) {
+          add(row.key, "Batch name is required before publishing.");
+        }
+        if (!String(bulkConfig.academicSession || "").trim()) {
+          add(row.key, "Academic session is required before publishing.");
+        }
+        if (!bulkConfig.rubricId) {
+          add(row.key, "Rubric is required before publishing.");
+        }
+        if (!String(bulkConfig.venue || "").trim()) {
+          add(row.key, "Online meeting link is required before publishing.");
+        }
+      });
+
+    return conflicts;
+  }, [
+    bulkConfig.academicSession,
+    bulkConfig.batchName,
+    bulkConfig.rubricId,
+    bulkConfig.venue,
+    isExistingBatchMode,
+    reviewRows,
+    selectedBatchId,
+    timingConflictMap,
+  ]);
+
+  const hasTimingConflicts = timingConflictMap.size > 0;
+  const hasPublishConflicts = publishConflictMap.size > 0;
 
   const handleSaveTimeFrames = async () => {
     if (!selectedBatchId) return alert("Please select a batch first.");
     if (!reviewRows.length) return alert("There are no review timing rows to save.");
-    if (hasConflicts) return alert("Please fix highlighted conflicts before saving time frames.");
+    if (hasTimingConflicts) return alert("Please fix highlighted timing conflicts before saving time frames.");
     setSaving(true);
     try {
       const existingItems = reviewRows
@@ -465,12 +508,9 @@ export default function TimetableManagementPage() {
   };
 
   const handleBulkSubmit = async () => {
-    if (hasConflicts) return alert("Please fix highlighted conflicts before publishing.");
     const drafts = reviewRows.filter((row) => row.type === "draft");
     if (!drafts.length) return alert("Select at least one new student to publish.");
-    if (!bulkConfig.batchName.trim()) return alert("Please enter/select a batch name.");
-    if (!bulkConfig.venue) return alert("Please set an online meeting link.");
-    if (!bulkConfig.rubricId) return alert("Please select a rubric.");
+    if (hasPublishConflicts) return alert("Please fix highlighted row issues before publishing.");
 
     setSaving(true);
     try {
@@ -810,15 +850,15 @@ export default function TimetableManagementPage() {
             <div className="p-5 bg-gray-50 border-b flex flex-col md:flex-row md:items-center md:justify-between gap-3">
               <div>
                 <h2 className="text-xl font-bold text-gray-900">Review Timings</h2>
-                <p className="text-sm text-gray-500">Drag or use arrows to interchange time frames. Red rows mean student/day or panel/time crash.</p>
+                <p className="text-sm text-gray-500">Drag or use arrows to interchange time frames. Red rows show the exact timing or publish issue.</p>
               </div>
-              <button onClick={handleSaveTimeFrames} disabled={saving || !reviewRows.some((row) => row.type === "existing") || hasConflicts} className="px-4 py-2 rounded-lg bg-green-600 text-white font-bold disabled:opacity-50 flex items-center gap-2 justify-center"><Save className="w-4 h-4" /> Save Time Frames</button>
+              <button onClick={handleSaveTimeFrames} disabled={saving || !reviewRows.some((row) => row.type === "existing") || hasTimingConflicts} className="px-4 py-2 rounded-lg bg-green-600 text-white font-bold disabled:opacity-50 flex items-center gap-2 justify-center"><Save className="w-4 h-4" /> Save Time Frames</button>
             </div>
 
             <div className="max-h-[620px] overflow-y-auto divide-y divide-gray-100">
               {reviewRows.length === 0 && <div className="p-10 text-center text-gray-500">Select an existing batch or add students to review timings.</div>}
               {reviewRows.map((row, index) => {
-                const errors = conflictMap.get(row.key) || [];
+                const errors = publishConflictMap.get(row.key) || [];
                 return (
                   <div key={row.key} draggable onDragStart={() => setDragIndex(index)} onDragOver={(e) => e.preventDefault()} onDrop={() => { if (dragIndex !== null) moveRow(dragIndex, index); setDragIndex(null); }} className={`p-4 grid grid-cols-1 lg:grid-cols-[44px_90px_1fr_140px_180px_120px] gap-3 items-center ${errors.length ? "bg-red-50 border-l-4 border-red-500" : row.type === "existing" ? "bg-blue-50/30" : "bg-white"}`}>
                     <div className="flex items-center gap-2 text-gray-500"><GripVertical className="w-5 h-5" /><span className="font-bold">#{row.slotNo}</span></div>
@@ -838,8 +878,11 @@ export default function TimetableManagementPage() {
             </div>
 
             <div className="p-5 border-t bg-gray-50 flex flex-col md:flex-row justify-between gap-3">
-              <p className="text-sm text-gray-600">{reviewRows.filter((r) => r.type === "existing").length} existing, {reviewRows.filter((r) => r.type === "draft").length} new draft(s).</p>
-              <button onClick={handleBulkSubmit} disabled={saving || hasConflicts || !reviewRows.some((row) => row.type === "draft")} className="px-5 py-3 rounded-lg bg-indigo-600 text-white font-bold disabled:opacity-50">Publish New Sessions</button>
+              <div>
+                <p className="text-sm text-gray-600">{reviewRows.filter((r) => r.type === "existing").length} existing, {reviewRows.filter((r) => r.type === "draft").length} new draft(s).</p>
+                {hasPublishConflicts && <p className="text-xs text-red-700 font-semibold mt-1">Fix the red row reason(s) before publishing.</p>}
+              </div>
+              <button onClick={handleBulkSubmit} disabled={saving || hasPublishConflicts || !reviewRows.some((row) => row.type === "draft")} className="px-5 py-3 rounded-lg bg-indigo-600 text-white font-bold disabled:opacity-50">Publish New Sessions</button>
             </div>
           </div>
         </div>
