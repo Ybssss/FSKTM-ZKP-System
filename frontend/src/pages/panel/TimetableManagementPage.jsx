@@ -392,14 +392,44 @@ export default function TimetableManagementPage() {
 
   const timingConflictMap = useMemo(() => {
     const conflicts = new Map();
-    const add = (key, message) => conflicts.set(key, [...(conflicts.get(key) || []), message]);
+    const add = (key, message) => {
+      const messages = conflicts.get(key) || [];
+      if (!messages.includes(message)) conflicts.set(key, [...messages, message]);
+    };
 
     const rows = reviewRows.map((row) => ({
       ...row,
+      source: "review",
+      sessionId: idOf(row.sessionId),
+      studentId: idOf(row.studentId),
+      date: normalizeDateKey(row.date),
       start: timeToMinutes(row.startTime),
       end: timeToMinutes(row.endTime),
-      panels: [row.panel1Id, row.panel2Id].filter(Boolean),
+      panels: [row.panel1Id, row.panel2Id].map(idOf).filter(Boolean),
     }));
+    const reviewedSessionIds = new Set(rows.map((row) => row.sessionId).filter(Boolean));
+    const reviewDates = new Set(rows.map((row) => row.date).filter(Boolean));
+    const existingItems = sessions
+      .filter((session) => String(session.status || "").toLowerCase() !== "cancelled")
+      .map((session) => {
+        const sessionId = idOf(session._id || session.id);
+        const student = getStudent(session);
+        const panels = (session.panels?.length ? session.panels : [getPanel(session, 0), getPanel(session, 1)])
+          .map(idOf)
+          .filter(Boolean);
+        return {
+          source: "existing",
+          sessionId,
+          title: session.title || session.sessionType?.replaceAll("_", " ") || "Existing session",
+          studentId: idOf(student),
+          date: normalizeDateKey(session.date),
+          start: timeToMinutes(session.startTime || session.time),
+          end: timeToMinutes(session.endTime),
+          panels,
+        };
+      })
+      .filter((item) => item.date && reviewDates.has(item.date))
+      .filter((item) => !item.sessionId || !reviewedSessionIds.has(item.sessionId));
 
     rows.forEach((row) => {
       if (!row.studentId) add(row.key, "Missing student.");
@@ -409,27 +439,54 @@ export default function TimetableManagementPage() {
       if (new Set(row.panels).size !== row.panels.length) add(row.key, "Panel 1 and Panel 2 are duplicated.");
     });
 
-    for (let i = 0; i < rows.length; i += 1) {
-      for (let j = i + 1; j < rows.length; j += 1) {
-        const a = rows[i];
-        const b = rows[j];
+    const allItems = [...rows, ...existingItems];
+    const addToReviewRow = (item, message) => {
+      if (item.source === "review") add(item.key, message);
+    };
+
+    for (let i = 0; i < allItems.length; i += 1) {
+      for (let j = i + 1; j < allItems.length; j += 1) {
+        const a = allItems[i];
+        const b = allItems[j];
+        if (a.source !== "review" && b.source !== "review") continue;
+        if (a.sessionId && b.sessionId && a.sessionId === b.sessionId) continue;
         if (a.date !== b.date) continue;
         if (a.studentId && a.studentId === b.studentId) {
-          add(a.key, "Student already has another session on this date.");
-          add(b.key, "Student already has another session on this date.");
+          addToReviewRow(
+            a,
+            b.source === "existing"
+              ? `Student already has another session on this date: ${b.title}.`
+              : "Student already has another session on this date.",
+          );
+          addToReviewRow(
+            b,
+            a.source === "existing"
+              ? `Student already has another session on this date: ${a.title}.`
+              : "Student already has another session on this date.",
+          );
         }
         if (a.start === null || a.end === null || b.start === null || b.end === null) continue;
         if (!rangesOverlap(a.start, a.end, b.start, b.end)) continue;
         const sharedPanel = a.panels.find((panelId) => b.panels.includes(panelId));
         if (sharedPanel) {
-          add(a.key, "Panel time conflict with another row.");
-          add(b.key, "Panel time conflict with another row.");
+          addToReviewRow(
+            a,
+            b.source === "existing"
+              ? `Panel time conflict with existing session: ${b.title}.`
+              : "Panel time conflict with another row.",
+          );
+          addToReviewRow(
+            b,
+            a.source === "existing"
+              ? `Panel time conflict with existing session: ${a.title}.`
+              : "Panel time conflict with another row.",
+          );
         }
       }
     }
 
     return conflicts;
-  }, [reviewRows]);
+  }, [reviewRows, sessions]);
 
   const publishConflictMap = useMemo(() => {
     const conflicts = new Map(

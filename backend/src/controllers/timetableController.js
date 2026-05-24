@@ -270,7 +270,6 @@ const validateAgainstExisting = async ({ items, excludeSessionIds = [] }) => {
   if (!dates.length) return;
 
   const exclude = excludeSessionIds.map(idString).filter(Boolean);
-  const query = { date: { $in: dates.map((d) => new Date(`${d}T00:00:00`)) } };
 
   const existing = await Timetable.find({
     ...(exclude.length ? { _id: { $nin: exclude } } : {}),
@@ -291,7 +290,50 @@ const validateAgainstExisting = async ({ items, excludeSessionIds = [] }) => {
       })),
   );
 
-  validateItems([...existingItems, ...items]);
+  const errors = [];
+  for (const item of items) {
+    const itemStart = parseTimeToMinutes(item.startTime);
+    const itemEnd = parseTimeToMinutes(item.endTime);
+
+    for (const existingItem of existingItems) {
+      if (item.sessionId && item.sessionId === existingItem.sessionId) continue;
+      if (item.date !== existingItem.date) continue;
+
+      if (item.studentId && item.studentId === existingItem.studentId) {
+        errors.push(
+          `Student conflict: one student can only have one session per day (${item.title} / ${existingItem.title}).`,
+        );
+      }
+
+      const existingStart = parseTimeToMinutes(existingItem.startTime);
+      const existingEnd = parseTimeToMinutes(existingItem.endTime);
+      if (
+        itemStart === null ||
+        itemEnd === null ||
+        existingStart === null ||
+        existingEnd === null ||
+        !rangesOverlap(itemStart, itemEnd, existingStart, existingEnd)
+      ) {
+        continue;
+      }
+
+      const sharedPanels = item.panelIds.filter((panelId) =>
+        existingItem.panelIds.includes(panelId),
+      );
+      if (sharedPanels.length) {
+        errors.push(
+          `Panel conflict: the same panel is assigned at overlapping time (${item.title} / ${existingItem.title}).`,
+        );
+      }
+    }
+  }
+
+  if (errors.length) {
+    const err = new Error(errors.join("\n"));
+    err.statusCode = 400;
+    err.validationErrors = errors;
+    throw err;
+  }
 };
 
 const buildPendingEvaluations = (timetable, payload, semester) => {

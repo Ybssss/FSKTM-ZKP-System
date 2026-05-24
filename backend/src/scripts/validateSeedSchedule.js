@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const dotenv = require("dotenv");
 const path = require("path");
 const Timetable = require("../models/Timetable");
+require("../models/User");
 
 const envPath = path.join(__dirname, "../../.env");
 dotenv.config({ path: envPath });
