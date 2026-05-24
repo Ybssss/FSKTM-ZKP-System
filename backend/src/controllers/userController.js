@@ -2,6 +2,44 @@ const User = require("../models/User");
 const { logActivity } = require("../utils/logger");
 const { sendRegistrationEmail } = require("../utils/mailer"); // ✅ Import Mailer
 
+const queueRegistrationEmail = ({
+  email,
+  name,
+  userId,
+  code,
+  isReset = false,
+}) => {
+  const receiver = String(email || "")
+    .trim()
+    .toLowerCase();
+
+  const status = {
+    queued: Boolean(receiver),
+    sent: false,
+    error: null,
+    receiver,
+    messageId: null,
+  };
+
+  if (!receiver) return status;
+
+  sendRegistrationEmail(receiver, name, userId, code, isReset)
+    .then((mailResult) => {
+      console.log(
+        `${isReset ? "Reset" : "Registration"} email sent:`,
+        mailResult,
+      );
+    })
+    .catch((emailError) => {
+      console.error(
+        `${isReset ? "Reset" : "Registration"} email failed:`,
+        emailError.message || emailError,
+      );
+    });
+
+  return status;
+};
+
 exports.getAllUsers = async (req, res) => {
   try {
     const users = await User.find()
@@ -121,27 +159,13 @@ exports.createUser = async (req, res) => {
 
     await newUser.save();
 
-    const emailStatus = {
-      queued: Boolean(cleanEmail),
-      sent: false,
-      error: null,
-    };
-
-    if (cleanEmail) {
-      sendRegistrationEmail(
-        cleanEmail,
-        newUser.name,
-        newUser.userId,
-        registrationCode,
-        false,
-      )
-        .then((mailResult) => {
-          console.log("✅ Registration email sent:", mailResult);
-        })
-        .catch((emailError) => {
-          console.error("❌ Registration email failed:", emailError.message);
-        });
-    }
+    const emailStatus = queueRegistrationEmail({
+      email: cleanEmail,
+      name: newUser.name,
+      userId: newUser.userId,
+      code: registrationCode,
+      isReset: false,
+    });
 
     if (logActivity)
       await logActivity(
@@ -197,28 +221,13 @@ exports.resetZkpRegistration = async (req, res) => {
 
     await userToReset.save();
 
-    // ✅ Send Reset Email
-    const emailStatus = {
-      queued: Boolean(userToReset.email),
-      sent: false,
-      error: null,
-    };
-
-    if (userToReset.email) {
-      sendRegistrationEmail(
-        userToReset.email,
-        userToReset.name,
-        userToReset.userId,
-        newRegistrationCode,
-        true,
-      )
-        .then((mailResult) => {
-          console.log("✅ Reset email sent:", mailResult);
-        })
-        .catch((emailError) => {
-          console.error("❌ Reset email failed:", emailError.message);
-        });
-    }
+    const emailStatus = queueRegistrationEmail({
+      email: userToReset.email,
+      name: userToReset.name,
+      userId: userToReset.userId,
+      code: newRegistrationCode,
+      isReset: true,
+    });
 
     res.json({
       success: true,

@@ -306,6 +306,63 @@ export default function UsersPage() {
       u.userId.toLowerCase().includes(searchTerm.toLowerCase()),
   );
 
+  const currentEmailStatus = newCredentials?.emailStatus || {};
+  const emailFailed = Boolean(
+    currentEmailStatus.queued &&
+      !currentEmailStatus.sent &&
+      currentEmailStatus.error,
+  );
+  const emailSent = Boolean(currentEmailStatus.sent);
+  const emailQueued = Boolean(
+    currentEmailStatus.queued &&
+      !currentEmailStatus.sent &&
+      !currentEmailStatus.error,
+  );
+  const emailStatusTone = emailFailed
+    ? {
+        panel: "bg-red-50 border-red-200",
+        icon: "text-red-600",
+        title: "text-red-900",
+        text: "text-red-800",
+        meta: "text-red-700",
+        titleText: "Email Failed",
+      }
+    : emailSent
+      ? {
+          panel: "bg-blue-50 border-blue-200",
+          icon: "text-blue-600",
+          title: "text-blue-900",
+          text: "text-blue-800",
+          meta: "text-blue-700",
+          titleText: "Registration Email",
+        }
+      : emailQueued
+        ? {
+            panel: "bg-blue-50 border-blue-200",
+            icon: "text-blue-600",
+            title: "text-blue-900",
+            text: "text-blue-800",
+            meta: "text-blue-700",
+            titleText: "Email Queued",
+          }
+      : {
+          panel: "bg-gray-50 border-gray-200",
+          icon: "text-gray-600",
+          title: "text-gray-900",
+          text: "text-gray-700",
+          meta: "text-gray-600",
+          titleText: "Registration Email",
+        };
+  const emailStatusMessage =
+    newCredentials?.message ||
+    (emailSent
+      ? "Email sent successfully."
+      : emailFailed
+        ? "Email failed to send."
+        : "No receiver email was provided.");
+  const emailReceiver =
+    currentEmailStatus.receiver || newCredentials?.email || "None";
+
   return (
     <div className="max-w-7xl mx-auto space-y-6">
       <div className="flex justify-between items-center">
@@ -380,20 +437,35 @@ export default function UsersPage() {
                     </button>
                   </div>
                 </div>
-                <div className="bg-blue-50 p-6 rounded-xl border border-blue-200 flex flex-col justify-center items-center text-center h-full">
+                <div
+                  className={`${emailStatusTone.panel} p-6 rounded-xl border flex flex-col justify-center items-center text-center h-full`}
+                >
                   <div className="bg-white p-3 rounded-full shadow-sm mb-3">
-                    <Mail className="w-8 h-8 text-blue-600" />
+                    <Mail className={`w-8 h-8 ${emailStatusTone.icon}`} />
                   </div>
-                  <h4 className="text-base font-bold text-blue-900 mb-2">
-                    Registration Email
+                  <h4
+                    className={`text-base font-bold ${emailStatusTone.title} mb-2`}
+                  >
+                    {emailStatusTone.titleText}
                   </h4>
-                  <p className="text-sm text-blue-800 font-medium">
-                    {newCredentials.message ||
-                      "Registration email is being sent."}
+                  <p
+                    className={`text-sm ${emailStatusTone.text} font-medium`}
+                  >
+                    {emailStatusMessage}
                   </p>
-                  <p className="text-xs text-blue-700 mt-2">
-                    Receiver: <strong>{newCredentials.email}</strong>
+                  {emailFailed && (
+                    <p className="text-xs text-red-700 mt-2 break-words">
+                      {currentEmailStatus.error}
+                    </p>
+                  )}
+                  <p className={`text-xs ${emailStatusTone.meta} mt-2`}>
+                    Receiver: <strong>{emailReceiver}</strong>
                   </p>
+                  {emailSent && currentEmailStatus.messageId && (
+                    <p className="text-[10px] text-blue-700 mt-1 break-all">
+                      Message ID: {currentEmailStatus.messageId}
+                    </p>
+                  )}
                 </div>
               </div>
             </div>

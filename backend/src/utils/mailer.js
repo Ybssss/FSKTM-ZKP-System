@@ -12,19 +12,23 @@ const createTransporter = () => {
     throw new Error(`Email configuration missing: ${missing.join(", ")}`);
   }
 
+  const host = process.env.EMAIL_HOST || "smtp.gmail.com";
   const port = Number(process.env.EMAIL_PORT || 587);
+  const explicitSecure = String(process.env.EMAIL_SECURE || "")
+    .trim()
+    .toLowerCase();
 
   return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || "smtp.gmail.com",
+    host,
     port,
-    secure: port === 465,
+    secure: explicitSecure ? explicitSecure === "true" : port === 465,
     requireTLS: port === 587,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
     },
     tls: {
-      servername: "smtp.gmail.com",
+      servername: host,
     },
     connectionTimeout: 60000,
     greetingTimeout: 60000,
