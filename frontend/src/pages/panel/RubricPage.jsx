@@ -344,7 +344,7 @@ export default function RubricPage() {
                 <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-2">
-                      Rubric Name *
+                      Rubric Name / Session Type *
                     </label>
                     <input
                       type="text"
