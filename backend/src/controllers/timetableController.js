@@ -56,6 +56,32 @@ const normalizeDateOnly = (value) => {
   return match ? `${match[1]}-${match[2]}-${match[3]}` : raw.slice(0, 10);
 };
 
+
+const formatDateDisplay = (dateValue) => {
+  const dateOnly = normalizeDateOnly(dateValue);
+
+  if (!dateOnly) {
+    return { raw: "", display: "", dayName: "" };
+  }
+
+  const match = dateOnly.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (!match) {
+    return { raw: dateOnly, display: dateOnly, dayName: "" };
+  }
+
+  const [, year, month, day] = match;
+  const localDate = new Date(Number(year), Number(month) - 1, Number(day));
+
+  return {
+    raw: `${year}-${month}-${day}`,
+    display: `${day}/${month}/${year}`,
+    dayName: Number.isNaN(localDate.getTime())
+      ? ""
+      : localDate.toLocaleDateString("en-MY", { weekday: "long" }),
+  };
+};
+
 const parseTimeToMinutes = (timeValue) => {
   const raw = String(timeValue || "").trim();
   const match = raw.match(/^(\d{1,2}):(\d{2})$/);
@@ -102,7 +128,7 @@ const populateTimetableQuery = (query) =>
   query
     .populate({
       path: "students",
-      select: "name userId matricNumber program researchTitle researchAbstract supervisorId",
+      select: "name userId matricNumber program yearOfStudy researchTitle researchAbstract supervisorId",
       populate: { path: "supervisorId", select: "name userId email" },
     })
     .populate("panels", "name userId email expertiseTags profession")
@@ -663,13 +689,15 @@ exports.getAvailableBatches = async (req, res) => {
           _id: "$batchId",
           batchId: { $first: "$batchId" },
           batchName: { $first: "$batchName" },
-          date: { $min: "$date" },
           earliestDate: { $min: "$date" },
+          date: { $min: "$date" },
           sessionType: { $first: "$sessionType" },
           academicSession: { $first: "$academicSession" },
           scheduleTitle: { $first: "$scheduleTitle" },
           googleMeetLink: { $first: "$googleMeetLink" },
           startTime: { $min: "$startTime" },
+          slotDurationMinutes: { $first: "$slotDurationMinutes" },
+          breakBetweenSlotsMinutes: { $first: "$breakBetweenSlotsMinutes" },
           sessionCount: { $sum: 1 },
         },
       },
@@ -677,10 +705,34 @@ exports.getAvailableBatches = async (req, res) => {
 
     const storedBatches = await SessionBatch.find().lean();
     const map = new Map();
-    storedBatches.forEach((b) => map.set(b.batchId, { ...b, sessionCount: 0 }));
-    sessionAgg.forEach((b) => map.set(b.batchId, { ...(map.get(b.batchId) || {}), ...b }));
 
-    const batches = [...map.values()].sort((a, b) => new Date(b.date || b.createdAt) - new Date(a.date || a.createdAt));
+    sessionAgg.forEach((sessionBatch) => {
+      map.set(sessionBatch.batchId, {
+        ...sessionBatch,
+        totalSessions: sessionBatch.sessionCount || 0,
+      });
+    });
+
+    // Prefer SessionBatch metadata when it exists because it is the batch master.
+    // Before this fix, Timetable aggregation overwrote the edited batch date,
+    // so the dropdown could show one date while dashboard/print still used the old session date.
+    storedBatches.forEach((batch) => {
+      const existing = map.get(batch.batchId) || {};
+      map.set(batch.batchId, {
+        ...existing,
+        ...batch,
+        totalSessions: existing.sessionCount || existing.totalSessions || 0,
+        sessionCount: existing.sessionCount || existing.totalSessions || 0,
+        earliestDate: batch.date || existing.earliestDate || existing.date,
+        date: batch.date || existing.date || existing.earliestDate,
+        googleMeetLink: batch.googleMeetLink || existing.googleMeetLink || existing.venue || "",
+      });
+    });
+
+    const batches = [...map.values()].sort(
+      (a, b) => new Date(b.date || b.createdAt || 0) - new Date(a.date || a.createdAt || 0),
+    );
+
     res.json({ success: true, batches });
   } catch (error) {
     res.status(500).json({ success: false, message: "Failed to load batches", error: error.message });
@@ -688,30 +740,55 @@ exports.getAvailableBatches = async (req, res) => {
 };
 
 const buildBatchSchedule = async (batchId) => {
-  const sessions = await populateTimetableQuery(
-    Timetable.find({ batchId }).sort({ date: 1, startTime: 1 }),
-  );
-  if (!sessions.length) return null;
-  const first = sessions[0];
+  const [batch, sessions] = await Promise.all([
+    SessionBatch.findOne({ batchId }).lean(),
+    populateTimetableQuery(Timetable.find({ batchId }).sort({ date: 1, startTime: 1 })),
+  ]);
+
+  if (!sessions.length && !batch) return null;
+
+  const first = sessions[0] || {};
+  const dateSource = batch?.date || first.date;
+  const dateInfo = formatDateDisplay(dateSource);
+
+  const batchName = batch?.batchName || first.batchName || batchId;
+  const academicSession = batch?.academicSession || first.academicSession || "";
+  const scheduleTitle =
+    batch?.scheduleTitle || first.scheduleTitle || "Postgraduate Progress Presentation Schedule";
+  const googleMeetLink = batch?.googleMeetLink || first.googleMeetLink || first.venue || "";
+  const sessionType = batch?.sessionType || first.sessionType || "";
+  const rubricName = batch?.rubricId?.name || first.rubricId?.name || "";
+
   return {
+    title: scheduleTitle,
     batchId,
-    batchName: first.batchName || batchId,
-    date: normalizeDateOnly(first.date),
-    academicSession: first.academicSession || "",
-    scheduleTitle: first.scheduleTitle || "Postgraduate Progress Presentation Schedule",
-    googleMeetLink: first.googleMeetLink || first.venue || "",
+    batchName,
+    date: dateInfo.raw,
+    dateDisplay: dateInfo.display,
+    dayName: dateInfo.dayName,
+    academicSession,
+    scheduleTitle,
+    googleMeetLink,
+    sessionType,
+    rubricName,
+    generatedAt: new Date(),
     rows: sessions.map((s, index) => {
       const student = s.students?.[0] || {};
+      const researchTitle = student.researchTitle || s.title || "";
       return {
         no: index + 1,
-        time: `${s.startTime} - ${s.endTime}`,
+        time: `${s.startTime || ""} - ${s.endTime || ""}`,
         name: student.name || "-",
+        matricNumber: student.matricNumber || student.userId || "-",
         matricNo: student.matricNumber || student.userId || "-",
+        yearOfStudy: student.yearOfStudy || "",
         program: student.program || "-",
         examiner1: s.panels?.[0]?.name || "-",
         examiner2: s.panels?.[1]?.name || "-",
         supervisor: student.supervisorId?.name || "-",
-        title: student.researchTitle || s.title || "-",
+        researchTitle,
+        title: researchTitle,
+        titleOfResearch: researchTitle,
       };
     }),
   };

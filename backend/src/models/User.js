@@ -10,8 +10,9 @@ const userSchema = new mongoose.Schema(
       enum: ["admin", "panel", "student"],
       required: true,
     },
-    // 🔴 FIXED: ADDED THE MISSING UTHM DIRECTORY FIELDS
+
     matricNumber: { type: String, default: "" },
+    program: { type: String, default: "" },
     yearOfStudy: {
       type: Number,
       default: null,
@@ -34,7 +35,6 @@ const userSchema = new mongoose.Schema(
       default: [],
     },
 
-    // 🔴 FIXED: ADDED THE MISSING ASSIGNMENT ARRAYS
     assignedStudents: [
       {
         type: mongoose.Schema.Types.ObjectId,

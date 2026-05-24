@@ -39,13 +39,17 @@ export default function HistoricalFeedbackPage() {
     try {
       setLoading(true);
 
-      const res = await api.get("/evaluations");
-      const completed = (res.data.data || res.data.evaluations || []).filter(
-        (evaluation) => evaluation.status === "COMPLETED",
+      const res = await api.get("/feedback/search");
+      const allHistorical = res.data.evaluations || [];
+      const accessibleCompleted = allHistorical.filter(
+        (evaluation) => evaluation.status === "COMPLETED" || evaluation.accessGranted === true,
+      );
+      const lockedHistorical = allHistorical.filter(
+        (evaluation) => evaluation.accessGranted === false,
       );
 
-      setEvaluations(completed);
-      setLockedEvals(res.data.locked || []);
+      setEvaluations(accessibleCompleted);
+      setLockedEvals(lockedHistorical);
 
       if (canManagePermissions) {
         const [pendingRes, approvedRes, myRes] = await Promise.all([
@@ -74,14 +78,30 @@ export default function HistoricalFeedbackPage() {
     return value.name || value.userId || value.email || fallback;
   };
 
-  const getStudent = (item) =>
-    item?.studentId || item?.targetEvaluationId?.studentId || item?.sessionId?.students?.[0];
+  const getStudent = (item) => {
+    const evaluation = getEvaluation(item);
+    const session = evaluation?.sessionInfo || evaluation?.sessionId || item?.sessionInfo || item?.sessionId;
+    return (
+      evaluation?.studentId ||
+      item?.studentId ||
+      item?.targetEvaluationId?.studentId ||
+      session?.students?.[0] ||
+      null
+    );
+  };
 
   const getEvaluation = (item) => item?.targetEvaluationId || item;
 
   const getSession = (item) => {
     const evaluation = getEvaluation(item);
-    return evaluation?.sessionId || item?.currentSessionId || item?.sessionId;
+    return (
+      evaluation?.sessionInfo ||
+      evaluation?.sessionId ||
+      item?.sessionInfo ||
+      item?.currentSessionId ||
+      item?.sessionId ||
+      null
+    );
   };
 
   const getRubric = (item) => getEvaluation(item)?.rubricId;

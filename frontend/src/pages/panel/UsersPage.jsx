@@ -110,7 +110,6 @@ export default function UsersPage() {
     matricNumber: "",
     program: "",
     researchTitle: "",
-    researchAbstract: "",
     supervisorId: "",
     expertiseTags: [],
   });
@@ -146,7 +145,6 @@ export default function UsersPage() {
       matricNumber: targetUser.matricNumber || "",
       program: targetUser.program || "",
       researchTitle: targetUser.researchTitle || "",
-      researchAbstract: targetUser.researchAbstract || "",
       supervisorId:
         targetUser.supervisorId?._id || targetUser.supervisorId || "",
       expertiseTags: targetUser.expertiseTags || [],
@@ -184,7 +182,9 @@ export default function UsersPage() {
           return;
         }
 
-        payload.userId = payload.userId.replace(/\s+/g, "").toUpperCase();
+        // Preserve panel/admin User ID casing exactly as typed by admin.
+        // Only remove spaces because this ID is used for login.
+        payload.userId = payload.userId.replace(/\s+/g, "").trim();
         payload.expertiseTags = Array.isArray(payload.expertiseTags)
           ? payload.expertiseTags
               .map((tag) => String(tag).trim())
@@ -192,7 +192,6 @@ export default function UsersPage() {
           : [];
 
         delete payload.researchTitle;
-        delete payload.researchAbstract;
         delete payload.program;
         payload.supervisorId = null;
       }
@@ -243,7 +242,6 @@ export default function UsersPage() {
           .toUpperCase();
       } else if (payload.role === "panel" || payload.role === "admin") {
         delete payload.researchTitle;
-        delete payload.researchAbstract;
         delete payload.program;
       }
 
@@ -328,7 +326,6 @@ export default function UsersPage() {
               matricNumber: "",
               program: "",
               researchTitle: "",
-              researchAbstract: "",
               supervisorId: "",
               expertiseTags: [],
             });
@@ -651,27 +648,6 @@ export default function UsersPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">
-                      Research Abstract / Summary Optional
-                    </label>
-                    <textarea
-                      value={formData.researchAbstract}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          researchAbstract: e.target.value,
-                        })
-                      }
-                      maxLength={5000}
-                      className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500"
-                      rows="4"
-                      placeholder="Optional abstract or project summary to improve AI panel matching."
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      {(formData.researchAbstract || "").length}/5000 characters
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">
                       Assign Supervisor
                     </label>
                     <select
@@ -863,27 +839,6 @@ export default function UsersPage() {
                       }
                       className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500"
                     />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">
-                      Research Abstract / Summary Optional
-                    </label>
-                    <textarea
-                      value={formData.researchAbstract}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          researchAbstract: e.target.value,
-                        })
-                      }
-                      maxLength={5000}
-                      rows="4"
-                      className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500"
-                      placeholder="Optional abstract or project summary to improve AI panel matching."
-                    />
-                    <p className="text-xs text-gray-500 mt-1">
-                      {(formData.researchAbstract || "").length}/5000 characters
-                    </p>
                   </div>
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-1">

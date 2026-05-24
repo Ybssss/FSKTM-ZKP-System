@@ -1,109 +1,289 @@
-const path = require("path");
-const dotenv = require("dotenv");
+// src/scripts/validateSeedSchedule.js
 const mongoose = require("mongoose");
+const dotenv = require("dotenv");
+const path = require("path");
 const Timetable = require("../models/Timetable");
 
-dotenv.config({ path: path.join(__dirname, "../../.env") });
+const envPath = path.join(__dirname, "../../.env");
+dotenv.config({ path: envPath });
 
-const normalizeDateKey = (value) => {
+const MONGO_URI = process.env.MONGO_URI;
+
+if (!MONGO_URI) {
+  console.error("FATAL ERROR: MONGO_URI is undefined.");
+  process.exit(1);
+}
+
+const dateKey = (value) => {
   if (!value) return "";
+
   if (typeof value === "string") {
-    const m = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (m) return `${m[1]}-${m[2]}-${m[3]}`;
+    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) return `${match[1]}-${match[2]}-${match[3]}`;
   }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
+
+  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(
+    2,
+    "0",
+  )}-${String(date.getUTCDate()).padStart(2, "0")}`;
 };
 
-const toMinutes = (value) => {
-  const m = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
-  if (!m) return null;
-  return Number(m[1]) * 60 + Number(m[2]);
+const parseTimeToMinutes = (timeValue) => {
+  const match = String(timeValue || "").match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
 };
 
-const overlap = (aStart, aEnd, bStart, bEnd) => aStart < bEnd && bStart < aEnd;
-const id = (value) => String(value?._id || value || "");
+const reservedConcurrentBatchNames = new Set([
+  "PIXEL",
+  "QUANTUM",
+  "WAVELET",
+  "CYBER",
+]);
 
-async function main() {
-  if (!process.env.MONGO_URI) throw new Error("MONGO_URI is missing.");
-  await mongoose.connect(process.env.MONGO_URI);
+const validate = (sessions) => {
+  const violations = [];
+  const studentDayMap = new Map();
 
-  const sessions = await Timetable.find({ status: { $ne: "cancelled" } })
-    .populate("students", "name userId matricNumber")
-    .populate("panels", "name userId")
-    .sort({ date: 1, batchName: 1, startTime: 1 })
-    .lean();
+  sessions.forEach((session) => {
+    const sessionDate = dateKey(session.date);
+    (session.students || []).forEach((student) => {
+      const studentId = String(student?._id || student);
+      const key = `${studentId}:${sessionDate}`;
 
-  const errors = [];
-  const studentDay = new Map();
+      if (studentDayMap.has(key)) {
+        violations.push({
+          type: "STUDENT_DAY_DUPLICATE",
+          message: `Student ${student?.name || studentId} has more than one session on ${sessionDate}.`,
+          firstSession: studentDayMap.get(key),
+          secondSession: session.title,
+        });
+      } else {
+        studentDayMap.set(key, session.title);
+      }
+    });
+  });
 
-  for (const session of sessions) {
-    const date = normalizeDateKey(session.date);
-    const student = session.students?.[0];
-    const studentId = id(student);
-    if (!date || !studentId) continue;
-    const key = `${studentId}|${date}`;
-    if (studentDay.has(key)) {
-      errors.push(
-        `STUDENT-DAY DUPLICATE: ${student.name || student.userId} has more than one session on ${date}: ${studentDay.get(key).title} AND ${session.title}`,
-      );
+  const lifecycleByStudent = new Map();
+
+  sessions.forEach((session) => {
+    (session.students || []).forEach((student) => {
+      const studentId = String(student?._id || student);
+      if (!lifecycleByStudent.has(studentId)) lifecycleByStudent.set(studentId, []);
+      lifecycleByStudent.get(studentId).push(session);
+    });
+  });
+
+  lifecycleByStudent.forEach((studentSessions, studentId) => {
+    const studentName =
+      studentSessions[0]?.students?.find((student) => String(student?._id || student) === studentId)
+        ?.name || studentId;
+    const proposalSessions = studentSessions.filter(
+      (session) => session.sessionType === "PROPOSAL_DEFENSE",
+    );
+    const progressSessions = studentSessions.filter(
+      (session) => session.sessionType === "PROGRESS_ASSESSMENT",
+    );
+    const preVivaSessions = studentSessions.filter(
+      (session) => session.sessionType === "PRE_VIVA",
+    );
+
+    if (proposalSessions.length !== 1) {
+      violations.push({
+        type: "LIFECYCLE_PROPOSAL_COUNT",
+        message: `${studentName} must have exactly one Proposal Defense, found ${proposalSessions.length}.`,
+        firstSession: proposalSessions.map((session) => session.title).join(", ") || "None",
+        secondSession: "Expected exactly one Proposal Defense before progress assessments.",
+      });
     }
-    studentDay.set(key, session);
+
+    if (progressSessions.length < 2) {
+      violations.push({
+        type: "LIFECYCLE_PROGRESS_COUNT",
+        message: `${studentName} must have at least two Progress Assessments before Pre-Viva, found ${progressSessions.length}.`,
+        firstSession: progressSessions.map((session) => session.title).join(", ") || "None",
+        secondSession: "Expected at least two Progress Assessments.",
+      });
+    }
+
+    if (preVivaSessions.length !== 1) {
+      violations.push({
+        type: "LIFECYCLE_PREVIVA_COUNT",
+        message: `${studentName} must have exactly one Pre-Viva, found ${preVivaSessions.length}.`,
+        firstSession: preVivaSessions.map((session) => session.title).join(", ") || "None",
+        secondSession: "Expected exactly one Pre-Viva after progress assessments.",
+      });
+    }
+
+    if (
+      proposalSessions.length === 1 &&
+      progressSessions.length >= 2 &&
+      preVivaSessions.length === 1
+    ) {
+      const proposalDate = new Date(proposalSessions[0].date).getTime();
+      const latestProgressDate = Math.max(
+        ...progressSessions.map((session) => new Date(session.date).getTime()),
+      );
+      const preVivaDate = new Date(preVivaSessions[0].date).getTime();
+
+      if (!(proposalDate < latestProgressDate && latestProgressDate < preVivaDate)) {
+        violations.push({
+          type: "LIFECYCLE_ORDER",
+          message: `${studentName} lifecycle order is invalid. Expected Proposal Defense → Progress Assessment(s) → Pre-Viva.`,
+          firstSession: `${proposalSessions[0].title} / latest progress ${new Date(latestProgressDate).toISOString().slice(0, 10)}`,
+          secondSession: preVivaSessions[0].title,
+        });
+      }
+    }
+  });
+
+  const exactConcurrentBatchSessions = sessions.filter((session) =>
+    reservedConcurrentBatchNames.has(String(session.batchName || "").toUpperCase()),
+  );
+
+  const exactConcurrentNames = new Set(
+    exactConcurrentBatchSessions.map((session) => String(session.batchName).toUpperCase()),
+  );
+
+  for (const requiredName of reservedConcurrentBatchNames) {
+    if (!exactConcurrentNames.has(requiredName)) {
+      violations.push({
+        type: "RESERVED_BATCH_NAME_MISSING",
+        message: `Missing required same-day demo batch name ${requiredName}.`,
+        firstSession: "Seeded same-day demo batches",
+        secondSession: requiredName,
+      });
+    }
+  }
+
+  if (exactConcurrentNames.size !== reservedConcurrentBatchNames.size) {
+    violations.push({
+      type: "RESERVED_BATCH_NAME_SET",
+      message:
+        "Only PIXEL, QUANTUM, WAVELET, and CYBER should use the reserved same-day demo batch names.",
+      firstSession: [...exactConcurrentNames].join(", ") || "None",
+      secondSession: [...reservedConcurrentBatchNames].join(", "),
+    });
+  }
+
+  const exactConcurrentDates = new Set(
+    exactConcurrentBatchSessions.map((session) => dateKey(session.date)),
+  );
+
+  if (exactConcurrentDates.size !== 1) {
+    violations.push({
+      type: "RESERVED_BATCH_DATE_MISMATCH",
+      message: "PIXEL, QUANTUM, WAVELET, and CYBER demo batches must be on the same date.",
+      firstSession: [...exactConcurrentDates].join(", "),
+      secondSession: "Expected one shared date.",
+    });
+  }
+
+  exactConcurrentBatchSessions
+    .filter((session) => session.sessionType !== "PROGRESS_ASSESSMENT")
+    .forEach((session) => {
+      violations.push({
+        type: "RESERVED_BATCH_TYPE_MISMATCH",
+        message: `${session.batchName} must be a Progress Assessment session.`,
+        firstSession: session.title,
+        secondSession: session.sessionType,
+      });
+    });
+
+  for (const requiredName of reservedConcurrentBatchNames) {
+    const rowCount = exactConcurrentBatchSessions.filter(
+      (session) => String(session.batchName || "").toUpperCase() === requiredName,
+    ).length;
+
+    if (rowCount < 2) {
+      violations.push({
+        type: "RESERVED_BATCH_TOO_SMALL",
+        message: `${requiredName} should contain at least two students for richer demo export/print rows.`,
+        firstSession: `${requiredName} row count: ${rowCount}`,
+        secondSession: "Expected at least two timetable rows.",
+      });
+    }
   }
 
   for (let i = 0; i < sessions.length; i += 1) {
     const a = sessions[i];
-    const aDate = normalizeDateKey(a.date);
-    const aStart = toMinutes(a.startTime);
-    const aEnd = toMinutes(a.endTime);
+    const aDate = dateKey(a.date);
+    const aStart = parseTimeToMinutes(a.startTime);
+    const aEnd = parseTimeToMinutes(a.endTime);
+
     if (aStart === null || aEnd === null) continue;
 
     for (let j = i + 1; j < sessions.length; j += 1) {
       const b = sessions[j];
-      const bDate = normalizeDateKey(b.date);
+      const bDate = dateKey(b.date);
       if (aDate !== bDate) continue;
-      const bStart = toMinutes(b.startTime);
-      const bEnd = toMinutes(b.endTime);
-      if (bStart === null || bEnd === null) continue;
-      if (!overlap(aStart, aEnd, bStart, bEnd)) continue;
 
-      const aPanels = (a.panels || []).map(id);
-      const bPanels = (b.panels || []).map(id);
-      const shared = aPanels.find((panelId) => bPanels.includes(panelId));
-      if (shared) {
-        const panel = [...(a.panels || []), ...(b.panels || [])].find((p) => id(p) === shared);
-        errors.push(
-          `PANEL-TIME CONFLICT: ${panel?.name || shared} overlaps on ${aDate}: ${a.title} (${a.startTime}-${a.endTime}) AND ${b.title} (${b.startTime}-${b.endTime})`,
-        );
+      const bStart = parseTimeToMinutes(b.startTime);
+      const bEnd = parseTimeToMinutes(b.endTime);
+      if (bStart === null || bEnd === null) continue;
+
+      const overlaps = aStart < bEnd && bStart < aEnd;
+      if (!overlaps) continue;
+
+      const aPanels = new Map(
+        (a.panels || []).map((panel) => [String(panel?._id || panel), panel]),
+      );
+      const crashedPanel = (b.panels || []).find((panel) =>
+        aPanels.has(String(panel?._id || panel)),
+      );
+
+      if (crashedPanel) {
+        violations.push({
+          type: "PANEL_TIME_CRASH",
+          message: `Panel ${crashedPanel?.name || crashedPanel} has overlapping sessions on ${aDate}.`,
+          firstSession: `${a.title} (${a.startTime}-${a.endTime})`,
+          secondSession: `${b.title} (${b.startTime}-${b.endTime})`,
+        });
       }
     }
   }
 
-  const batches = new Map();
-  for (const session of sessions) {
-    const key = `${normalizeDateKey(session.date)}|${session.batchName || session.batchId || "No Batch"}`;
-    batches.set(key, (batches.get(key) || 0) + 1);
-  }
+  return violations;
+};
 
-  console.log("\n📅 Batch summary");
-  [...batches.entries()].forEach(([key, count]) => console.log(`${key}: ${count} session(s)`));
-
-  if (errors.length) {
-    console.error("\n❌ Schedule validation failed:");
-    errors.forEach((e) => console.error(`- ${e}`));
-    process.exitCode = 1;
-  } else {
-    console.log("\n✅ Schedule validation passed: one student/day/session and no panel-time crashes.");
-  }
-
-  await mongoose.disconnect();
-}
-
-main().catch(async (error) => {
-  console.error(error);
+const main = async () => {
   try {
-    await mongoose.disconnect();
-  } catch (_) {}
-  process.exit(1);
-});
+    await mongoose.connect(MONGO_URI);
+
+    const sessions = await Timetable.find({})
+      .populate("students", "name userId matricNumber")
+      .populate("panels", "name userId")
+      .sort({ date: 1, startTime: 1 })
+      .lean();
+
+    const violations = validate(sessions);
+
+    console.log(`Checked ${sessions.length} timetable session(s).`);
+
+    if (violations.length > 0) {
+      console.error(`❌ Schedule validation failed: ${violations.length} violation(s).`);
+      violations.forEach((violation, index) => {
+        console.error(`\n${index + 1}. ${violation.type}`);
+        console.error(violation.message);
+        console.error(`First: ${violation.firstSession}`);
+        console.error(`Second: ${violation.secondSession}`);
+      });
+      process.exitCode = 1;
+      return;
+    }
+
+    console.log(
+      "✅ Schedule validation passed: one student/day/session, no panel-time crashes, valid Proposal → Progress → Pre-Viva lifecycle, and four same-day PIXEL/QUANTUM/WAVELET/CYBER Progress Assessment demo batches with multiple students.",
+    );
+  } catch (error) {
+    console.error("❌ Validation error:", error);
+    process.exitCode = 1;
+  } finally {
+    await mongoose.connection.close();
+  }
+};
+
+main();

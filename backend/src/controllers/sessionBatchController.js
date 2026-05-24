@@ -1,4 +1,5 @@
 const SessionBatch = require("../models/SessionBatch");
+const Timetable = require("../models/Timetable");
 
 const cleanText = (value = "", max = 500) =>
   String(value)
@@ -152,6 +153,15 @@ exports.updateBatch = async (req, res) => {
       return res.status(403).json({ success: false, message: "Unauthorized" });
     }
 
+    const oldBatch = await SessionBatch.findOne({ batchId: req.params.batchId });
+
+    if (!oldBatch) {
+      return res.status(404).json({
+        success: false,
+        message: "Batch not found.",
+      });
+    }
+
     const updates = {};
 
     [
@@ -170,15 +180,32 @@ exports.updateBatch = async (req, res) => {
       if (req.body[field] !== undefined) updates[field] = req.body[field];
     });
 
-    if (updates.batchName)
+    if (updates.batchName !== undefined)
       updates.batchName = cleanText(updates.batchName, 100);
-    if (updates.academicSession)
+    if (updates.academicSession !== undefined)
       updates.academicSession = cleanText(updates.academicSession, 100);
-    if (updates.scheduleTitle)
+    if (updates.scheduleTitle !== undefined)
       updates.scheduleTitle = cleanText(updates.scheduleTitle, 150);
-    if (updates.googleMeetLink)
+    if (updates.googleMeetLink !== undefined)
       updates.googleMeetLink = cleanText(updates.googleMeetLink, 500);
-    if (updates.date) updates.date = normalizeDateOnly(updates.date);
+    if (updates.startTime !== undefined)
+      updates.startTime = cleanText(updates.startTime, 20);
+    if (updates.date !== undefined) updates.date = normalizeDateOnly(updates.date);
+
+    if (updates.sessionType && !allowedSessionTypes.includes(updates.sessionType)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid session type.",
+      });
+    }
+
+    if (updates.slotDurationMinutes !== undefined) {
+      updates.slotDurationMinutes = Number(updates.slotDurationMinutes || 60);
+    }
+
+    if (updates.breakBetweenSlotsMinutes !== undefined) {
+      updates.breakBetweenSlotsMinutes = Number(updates.breakBetweenSlotsMinutes ?? 5);
+    }
 
     const batch = await SessionBatch.findOneAndUpdate(
       { batchId: req.params.batchId },
@@ -186,14 +213,49 @@ exports.updateBatch = async (req, res) => {
       { new: true },
     );
 
-    if (!batch) {
-      return res.status(404).json({
-        success: false,
-        message: "Batch not found.",
-      });
+    // Keep the actual scheduled sessions in sync with the edited batch.
+    // Dashboard, Session Management, and Export/Print all read Timetable records,
+    // so changing only SessionBatch.date makes the dropdown correct but leaves
+    // every session on the old date.
+    const timetableUpdates = {};
+
+    if (updates.batchName !== undefined) timetableUpdates.batchName = batch.batchName;
+    if (updates.academicSession !== undefined)
+      timetableUpdates.academicSession = batch.academicSession;
+    if (updates.scheduleTitle !== undefined)
+      timetableUpdates.scheduleTitle = batch.scheduleTitle;
+    if (updates.sessionType !== undefined) timetableUpdates.sessionType = batch.sessionType;
+    if (updates.rubricId !== undefined) timetableUpdates.rubricId = batch.rubricId || null;
+    if (updates.date !== undefined) timetableUpdates.date = normalizeDateOnly(batch.date);
+    if (updates.slotDurationMinutes !== undefined)
+      timetableUpdates.slotDurationMinutes = batch.slotDurationMinutes;
+    if (updates.breakBetweenSlotsMinutes !== undefined)
+      timetableUpdates.breakBetweenSlotsMinutes = batch.breakBetweenSlotsMinutes;
+    if (updates.googleMeetLink !== undefined) {
+      timetableUpdates.googleMeetLink = batch.googleMeetLink;
+      timetableUpdates.venue = batch.googleMeetLink;
     }
 
-    res.json({ success: true, batch });
+    let syncedSessionsCount = 0;
+
+    if (Object.keys(timetableUpdates).length > 0) {
+      const result = await Timetable.updateMany(
+        { batchId: oldBatch.batchId },
+        { $set: timetableUpdates },
+      );
+
+      syncedSessionsCount = result.modifiedCount || result.nModified || 0;
+    }
+
+    res.json({
+      success: true,
+      batch,
+      syncedSessionsCount,
+      message:
+        syncedSessionsCount > 0
+          ? `Batch updated and ${syncedSessionsCount} scheduled session(s) synced.`
+          : "Batch updated.",
+    });
   } catch (error) {
     res.status(500).json({
       success: false,

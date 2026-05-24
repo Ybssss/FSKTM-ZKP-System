@@ -134,7 +134,23 @@ export default function TimetableManagementPage() {
         setRubrics(fetchedRubrics);
         setBatches(batchRes.batches || []);
         setBulkConfig((prev) => ({ ...prev, rubricId: prev.rubricId || fetchedRubrics[0]?._id || "" }));
+
+        return {
+          sessions: fetchedSessions,
+          evaluations: evRes.data.data || evRes.data.evaluations || [],
+          batches: batchRes.batches || [],
+          rubrics: fetchedRubrics,
+          users,
+        };
       }
+
+      return {
+        sessions: fetchedSessions,
+        evaluations: evRes.data.data || evRes.data.evaluations || [],
+        batches,
+        rubrics,
+        users: [],
+      };
     } catch (error) {
       console.error("Failed to load session data", error);
       alert(error.response?.data?.message || "Failed to load session data.");
@@ -223,7 +239,7 @@ export default function TimetableManagementPage() {
       };
     });
 
-  const resetRowsFromBatch = (batch) => {
+  const resetRowsFromBatch = (batch, sessionSource = sessions) => {
     const batchDate = normalizeDateKey(batch?.date || batch?.earliestDate || new Date());
     const config = {
       rubricId: batch?.rubricId?._id || batch?.rubricId || bulkConfig.rubricId,
@@ -238,7 +254,8 @@ export default function TimetableManagementPage() {
     setBulkConfig(config);
     setSlotDuration(Number(batch?.slotDurationMinutes || 30));
     setSelectedStudentIds([]);
-    setReviewRows(makeExistingRows(sessions.filter((s) => String(s.batchId) === String(batch?.batchId))));
+    const currentBatchSessions = sessionSource.filter((s) => String(s.batchId) === String(batch?.batchId));
+    setReviewRows(makeExistingRows(currentBatchSessions));
   };
 
   const handleSelectBatch = (batchId) => {
@@ -523,12 +540,39 @@ export default function TimetableManagementPage() {
   const submitEditBatch = async (e) => {
     e.preventDefault();
     try {
-      await sessionBatchAPI.update(selectedBatchId, batchForm);
+      const updateRes = await sessionBatchAPI.update(selectedBatchId, batchForm);
+
+      // Reload both master batches and actual timetable rows immediately.
+      // The backend syncs batch date/link/name into Timetable rows, and this refresh
+      // makes Session Management + Dashboard reflect the new batch date without waiting
+      // for a full page reload.
+      const sessionRes = await api.get("/timetables");
+      const freshSessions =
+        sessionRes.data.timetables || sessionRes.data.sessions || sessionRes.data.data || [];
+      const sortedFreshSessions = [...freshSessions].sort((a, b) => {
+        const da = `${normalizeDateKey(a.date)} ${a.startTime || a.time || ""}`;
+        const db = `${normalizeDateKey(b.date)} ${b.startTime || b.time || ""}`;
+        return db.localeCompare(da);
+      });
+      setSessions(sortedFreshSessions);
+
       const batchRes = await sessionBatchAPI.list();
-      setBatches(batchRes.batches || []);
+      const freshBatches = batchRes.batches || [];
+      setBatches(freshBatches);
+
+      const updatedBatch =
+        freshBatches.find((batch) => String(batch.batchId) === String(selectedBatchId)) ||
+        updateRes.batch;
+
+      if (updatedBatch) {
+        resetRowsFromBatch(updatedBatch, sortedFreshSessions);
+      }
+
       setEditingBatch(false);
-      handleSelectBatch(selectedBatchId);
-      alert("Batch updated successfully.");
+      alert(
+        updateRes.message ||
+          `Batch updated successfully. ${updateRes.syncedSessionsCount || 0} session(s) synced.`,
+      );
     } catch (error) {
       alert(error.response?.data?.message || "Failed to update batch.");
     }

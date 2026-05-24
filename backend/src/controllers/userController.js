@@ -49,7 +49,7 @@ exports.createUser = async (req, res) => {
             .toUpperCase()
         : String(userId || "")
             .replace(/\s+/g, "")
-            .toUpperCase();
+            .trim();
 
     if (!cleanUserId) {
       return res.status(400).json({

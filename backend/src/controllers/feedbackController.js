@@ -19,25 +19,68 @@ const isSameId = (a, b) => String(a || "") === String(b || "");
 
 const hasActivePermissionStatus = ["PENDING", "APPROVED"];
 
+const STUDENT_SELECT =
+  "name matricNumber userId program yearOfStudy email researchTitle supervisorId";
+const EVALUATOR_SELECT = "name email userId role profession expertiseTags";
+const RUBRIC_SELECT = "name sessionType criteria";
+const SESSION_SELECT =
+  "title sessionType date startTime endTime venue googleMeetLink batchId batchName academicSession scheduleTitle status studentDocuments students panels rubricId";
+
+const attachSessionInfo = (evaluation) => {
+  if (!evaluation) return evaluation;
+
+  const session = evaluation.sessionId;
+  if (session && typeof session === "object") {
+    evaluation.sessionInfo = {
+      _id: session._id,
+      title: session.title || "",
+      sessionType: session.sessionType || evaluation.sessionType || "",
+      date: session.date || null,
+      startTime: session.startTime || "",
+      endTime: session.endTime || "",
+      venue: session.venue || "",
+      googleMeetLink: session.googleMeetLink || "",
+      batchId: session.batchId || "",
+      batchName: session.batchName || "",
+      academicSession: session.academicSession || evaluation.semester || "",
+      scheduleTitle: session.scheduleTitle || "",
+      status: session.status || "",
+      studentDocuments: session.studentDocuments || [],
+      students: session.students || [],
+      panels: session.panels || [],
+    };
+  }
+
+  return evaluation;
+};
+
+const normalizePermissionRecord = (request) => {
+  if (!request) return request;
+  const doc = request.toObject ? request.toObject() : request;
+  if (doc.targetEvaluationId && typeof doc.targetEvaluationId === "object") {
+    doc.targetEvaluationId = attachSessionInfo(doc.targetEvaluationId);
+  }
+  return doc;
+};
+
 const detailedPermissionPopulate = (query) =>
   query
-    .populate("requestingPanelId", "name email userId role")
-    .populate("studentId", "name matricNumber userId program email researchTitle")
-    .populate("owningPanelId", "name email userId role")
-    .populate("approvedBy", "name email userId role")
-    .populate("withdrawnBy", "name email userId role")
+    .populate("requestingPanelId", EVALUATOR_SELECT)
+    .populate("studentId", STUDENT_SELECT)
+    .populate("owningPanelId", EVALUATOR_SELECT)
+    .populate("approvedBy", EVALUATOR_SELECT)
+    .populate("withdrawnBy", EVALUATOR_SELECT)
     .populate({
       path: "targetEvaluationId",
       select:
         "sessionType semester status totalMarks createdAt updatedAt rubricId evaluatorId studentId sessionId scores qualitativeFeedback overallComments summaryOfProgress commentsForImprovement overallSuggestions formFiller isUnlocked",
       populate: [
-        { path: "studentId", select: "name matricNumber userId program email" },
-        { path: "evaluatorId", select: "name email userId role" },
-        { path: "rubricId", select: "name sessionType criteria" },
+        { path: "studentId", select: STUDENT_SELECT },
+        { path: "evaluatorId", select: EVALUATOR_SELECT },
+        { path: "rubricId", select: RUBRIC_SELECT },
         {
           path: "sessionId",
-          select:
-            "title sessionType date startTime endTime venue googleMeetLink batchId batchName academicSession scheduleTitle status studentDocuments",
+          select: SESSION_SELECT,
           populate: {
             path: "studentDocuments.uploadedBy",
             select: "name userId matricNumber email role",
@@ -47,8 +90,7 @@ const detailedPermissionPopulate = (query) =>
     })
     .populate({
       path: "currentSessionId",
-      select:
-        "title sessionType date startTime endTime venue googleMeetLink batchId batchName academicSession scheduleTitle status",
+      select: SESSION_SELECT,
     });
 
 const canRequesterAccessStudent = async ({
@@ -126,13 +168,12 @@ exports.searchFeedback = async (req, res) => {
     console.log("📊 Search filter:", JSON.stringify(filter, null, 2));
 
     const evaluations = await Evaluation.find(filter)
-      .populate("studentId", "name matricNumber program email")
-      .populate("evaluatorId", "name email userId")
-      .populate("rubricId", "name")
+      .populate("studentId", STUDENT_SELECT)
+      .populate("evaluatorId", EVALUATOR_SELECT)
+      .populate("rubricId", RUBRIC_SELECT)
       .populate({
         path: "sessionId",
-        select:
-          "title sessionType date startTime endTime venue googleMeetLink batchId batchName academicSession scheduleTitle status studentDocuments",
+        select: SESSION_SELECT,
         populate: {
           path: "studentDocuments.uploadedBy",
           select: "name userId matricNumber email role",
@@ -161,6 +202,7 @@ exports.searchFeedback = async (req, res) => {
     );
 
     const protectedEvaluations = evaluations.map((ev) => {
+      ev = attachSessionInfo(ev);
       const evaluatorId = ev.evaluatorId?._id || ev.evaluatorId;
       const studentOwnerId = ev.studentId?._id || ev.studentId;
 
@@ -304,7 +346,7 @@ exports.getRecentFeedback = async (req, res) => {
     const evaluations = await Evaluation.find()
       .populate("studentId", "name matricNumber")
       .populate("evaluatorId", "name")
-      .populate("rubricId", "name")
+      .populate("rubricId", RUBRIC_SELECT)
       .sort({ date: -1 })
       .limit(parseInt(limit));
 
@@ -694,7 +736,7 @@ exports.getMyPermissions = async (req, res) => {
       PermissionRequest.find(filter),
     ).sort({ createdAt: -1 });
 
-    res.json({ success: true, count: requests.length, requests });
+    res.json({ success: true, count: requests.length, requests: requests.map(normalizePermissionRecord) });
   } catch (error) {
     res.status(500).json({
       success: false,
@@ -899,7 +941,7 @@ exports.getIncomingPermissions = async (req, res) => {
     res.json({
       success: true,
       count: requests.length,
-      requests,
+      requests: requests.map(normalizePermissionRecord),
     });
   } catch (error) {
     res.status(500).json({
@@ -1003,7 +1045,7 @@ exports.getAllPermissions = async (req, res) => {
     res.json({
       success: true,
       count: requests.length,
-      requests,
+      requests: requests.map(normalizePermissionRecord),
     });
   } catch (error) {
     res.status(500).json({

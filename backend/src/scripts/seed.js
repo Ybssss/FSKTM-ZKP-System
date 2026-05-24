@@ -806,6 +806,7 @@ const seedDatabase = async () => {
         role: "student",
         registrationCode: "demo",
         program: "Master of Information Technology",
+        yearOfStudy: 1,
         researchTitle: "Optimization of Zero-Knowledge Proof Authentication",
         researchAbstract:
           "This research focuses on optimizing zero-knowledge proof authentication for passwordless login in a web-based evaluation system.",
@@ -819,6 +820,7 @@ const seedDatabase = async () => {
         role: "student",
         registrationCode: "demo",
         program: "PhD in Computer Science",
+        yearOfStudy: 2,
         researchTitle: "Advanced Deep Learning Models for Academic Prediction",
         researchAbstract:
           "This research explores advanced deep learning models for intelligent prediction and classification tasks in academic data environments.",
@@ -832,6 +834,7 @@ const seedDatabase = async () => {
         role: "student",
         registrationCode: "demo",
         program: "Master of Software Engineering",
+        yearOfStudy: 1,
         researchTitle: "Blockchain-Based Healthcare Information System",
         researchAbstract:
           "This study proposes a blockchain-based healthcare information system to improve data integrity, auditability, and secure sharing.",
@@ -845,6 +848,7 @@ const seedDatabase = async () => {
         role: "student",
         registrationCode: "demo",
         program: "Master of Information Security",
+        yearOfStudy: 1,
         researchTitle: "Secure Online Evaluation Workflow Using ZKP",
         researchAbstract:
           "This research designs a secure online evaluation workflow using zero-knowledge proof authentication and role-based access control.",
@@ -858,6 +862,7 @@ const seedDatabase = async () => {
         role: "student",
         registrationCode: "demo",
         program: "Master of Information Security",
+        yearOfStudy: 1,
         researchTitle: "Privacy-Preserving Authentication for Academic Systems",
         researchAbstract:
           "This research investigates privacy-preserving authentication methods for academic web systems using cryptographic verification.",
@@ -871,6 +876,7 @@ const seedDatabase = async () => {
         role: "student",
         registrationCode: "demo",
         program: "Master of Computer Science",
+        yearOfStudy: 1,
         researchTitle:
           "Natural Language Processing for Academic Feedback Analysis",
         researchAbstract:
@@ -885,6 +891,7 @@ const seedDatabase = async () => {
         role: "student",
         registrationCode: "demo",
         program: "PhD in Computer Science",
+        yearOfStudy: 3,
         researchTitle: "Smart Contract Audit Trail for Research Evaluation",
         researchAbstract:
           "This study explores smart contract mechanisms for transparent and verifiable audit trails in academic evaluation workflows.",
@@ -898,6 +905,7 @@ const seedDatabase = async () => {
         role: "student",
         registrationCode: "demo",
         program: "Master of Software Engineering",
+        yearOfStudy: 1,
         researchTitle: "Usability Evaluation of Web-Based Assessment Platforms",
         researchAbstract:
           "This research evaluates usability factors in web-based academic assessment platforms through structured user testing.",
@@ -911,6 +919,7 @@ const seedDatabase = async () => {
         role: "student",
         registrationCode: "demo",
         program: "Master of Computer Networks",
+        yearOfStudy: 2,
         researchTitle: "IoT Network Monitoring for Smart Campus Environments",
         researchAbstract:
           "This research develops an IoT network monitoring approach for smart campus environments with emphasis on reliability and scalability.",
@@ -924,6 +933,7 @@ const seedDatabase = async () => {
         role: "student",
         registrationCode: "demo",
         program: "Master of Cloud Computing",
+        yearOfStudy: 1,
         researchTitle:
           "Cloud-Based Monitoring Framework for Distributed Applications",
         researchAbstract:
@@ -1004,123 +1014,55 @@ const seedDatabase = async () => {
     }
 
     // 5. Create Sessions (Using Timetable Model)
-    console.log("📅 Seeding Evaluation Sessions...");
+    console.log("📅 Seeding Evaluation Sessions with conflict-safe batches...");
 
-    // 🔴 FIXED: Added rubricId directly to the Timetable schema to prevent frontend errors
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 2);
+    const makeDate = (dateOnly) => new Date(`${dateOnly}T00:00:00.000Z`);
 
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const academicSession = "2025/2026, Semester 1";
+    const scheduleTitle = "Postgraduate Progress Presentation Schedule";
 
-    const nextWeek = new Date();
-    nextWeek.setDate(nextWeek.getDate() + 7);
-
-    const lastMonth = new Date();
-    lastMonth.setDate(lastMonth.getDate() - 30);
-
-    const lastWeek = new Date();
-    lastWeek.setDate(lastWeek.getDate() - 7);
-
-    const inThreeDays = new Date();
-    inThreeDays.setDate(inThreeDays.getDate() + 3);
-
-    const inTwoWeeks = new Date();
-    inTwoWeeks.setDate(inTwoWeeks.getDate() + 14);
-
-    const inThreeWeeks = new Date();
-    inThreeWeeks.setDate(inThreeWeeks.getDate() + 21);
-
-    const inOneMonth = new Date();
-    inOneMonth.setDate(inOneMonth.getDate() + 30);
-
-    const mainBatchDate = inThreeDays;
-    const mainBatchId = "BATCH-PRS-2026-MAIN";
-    const mainBatchName = "FSKTM PRS Main Batch";
-    const mainBatchMeetLink = "https://meet.google.com/fsktm-prs-main";
-
-    const completedHistoryBatchDate = lastWeek;
-    const completedHistoryBatchId = "BATCH-HIST-2025-A";
-    const completedHistoryBatchName = "FSKTM Completed Progress History";
-    const completedHistoryMeetLink = "https://meet.google.com/fsktm-progress-history";
-
-    await SessionBatch.create([
+    const stageConfigs = [
       {
-        batchName: "FSKTM PRS Demo Batch A",
-        batchId: "BATCH-PRS-2026-A",
-        academicSession: "2025/2026, Semester 1",
-        scheduleTitle: "Postgraduate Progress Presentation Schedule",
+        stageKey: "proposal",
+        batchSuffix: "PROPOSAL",
         sessionType: "PROPOSAL_DEFENSE",
-        rubricId: proposalRubric._id,
-        date: tomorrow,
-        startTime: "10:00",
-        slotDurationMinutes: 60,
-        breakBetweenSlotsMinutes: 5,
-        googleMeetLink: "https://meet.google.com/fsktm-prs-demo-a",
-        status: "active",
-        createdBy: getUserId("samihah@uthm.edu.my"),
-      },
-      {
-        batchName: "FSKTM PRS Demo Batch B",
-        batchId: "BATCH-PRS-2026-B",
-        academicSession: "2025/2026, Semester 1",
-        scheduleTitle: "Postgraduate Progress Presentation Schedule",
-        sessionType: "PROPOSAL_DEFENSE",
-        rubricId: proposalRubric._id,
-        date: lastMonth,
-        startTime: "09:30",
-        slotDurationMinutes: 60,
-        breakBetweenSlotsMinutes: 5,
-        googleMeetLink: "https://meet.google.com/fsktm-prs-demo-b",
-        status: "active",
-        createdBy: getUserId("samihah@uthm.edu.my"),
-      },
-      {
-        batchName: "FSKTM PRS Demo Batch C",
-        batchId: "BATCH-PRS-2026-C",
-        academicSession: "2025/2026, Semester 1",
-        scheduleTitle: "Postgraduate Progress Presentation Schedule",
-        sessionType: "PRE_VIVA",
-        rubricId: preVivaRubric._id,
-        date: inTwoWeeks,
-        startTime: "13:00",
-        slotDurationMinutes: 60,
-        breakBetweenSlotsMinutes: 5,
-        googleMeetLink: "https://meet.google.com/fsktm-prs-demo-c",
-        status: "active",
-        createdBy: getUserId("samihah@uthm.edu.my"),
-      },
-      {
-        batchName: mainBatchName,
-        batchId: mainBatchId,
-        academicSession: "2025/2026, Semester 1",
-        scheduleTitle: "Postgraduate Progress Presentation Schedule",
-        sessionType: "PROPOSAL_DEFENSE",
-        rubricId: proposalRubric._id,
-        date: mainBatchDate,
-        startTime: "09:00",
-        slotDurationMinutes: 60,
-        breakBetweenSlotsMinutes: 5,
-        googleMeetLink: mainBatchMeetLink,
-        status: "active",
-        createdBy: getUserId("samihah@uthm.edu.my"),
-      },
-      {
-        batchName: completedHistoryBatchName,
-        batchId: completedHistoryBatchId,
-        academicSession: "2024/2025, Semester 2",
-        scheduleTitle: "Postgraduate Progress Presentation Schedule",
-        sessionType: "PROGRESS_ASSESSMENT",
-        rubricId: progressRubric._id,
-        date: completedHistoryBatchDate,
-        startTime: "09:00",
-        slotDurationMinutes: 45,
-        breakBetweenSlotsMinutes: 5,
-        googleMeetLink: completedHistoryMeetLink,
+        rubric: proposalRubric,
+        date: makeDate("2026-06-10"),
         status: "completed",
-        createdBy: getUserId("samihah@uthm.edu.my"),
+        titlePrefix: "Proposal Defense",
+        googleMeetSegment: "proposal",
       },
-    ]);
+      {
+        stageKey: "progress1",
+        batchSuffix: "PROGRESS-1",
+        sessionType: "PROGRESS_ASSESSMENT",
+        rubric: progressRubric,
+        date: makeDate("2026-07-01"),
+        status: "completed",
+        titlePrefix: "Progress Assessment 1",
+        googleMeetSegment: "progress-1",
+      },
+      {
+        stageKey: "progress2",
+        batchSuffix: "PROGRESS-2",
+        sessionType: "PROGRESS_ASSESSMENT",
+        rubric: progressRubric,
+        date: makeDate("2026-07-22"),
+        status: "completed",
+        titlePrefix: "Progress Assessment 2",
+        googleMeetSegment: "progress-2",
+      },
+      {
+        stageKey: "previva",
+        batchSuffix: "PREVIVA",
+        sessionType: "PRE_VIVA",
+        rubric: preVivaRubric,
+        date: makeDate("2026-08-24"),
+        status: "scheduled",
+        titlePrefix: "Pre-Viva",
+        googleMeetSegment: "previva",
+      },
+    ];
 
     const addMinutesToHHMM = (time, minutesToAdd) => {
       const [hours, minutes] = time.split(":").map(Number);
@@ -1129,393 +1071,472 @@ const seedDatabase = async () => {
       return date.toTimeString().slice(0, 5);
     };
 
-    const batchSessionPlan = [
+    const studentLifecyclePlan = [
       {
         studentEmail: "ali@student.uthm.edu.my",
+        startTime: "09:00",
         panels: [createdPanels[0]._id, createdPanels[1]._id],
       },
       {
         studentEmail: "siti@student.uthm.edu.my",
-        panels: [createdPanels[1]._id, createdPanels[2]._id],
-      },
-      {
-        studentEmail: "chong@student.uthm.edu.my",
+        startTime: "09:00",
         panels: [createdPanels[2]._id, createdPanels[3]._id],
       },
       {
+        studentEmail: "chong@student.uthm.edu.my",
+        startTime: "10:05",
+        panels: [createdPanels[0]._id, createdPanels[2]._id],
+      },
+      {
         studentEmail: "meiling@student.uthm.edu.my",
-        panels: [createdPanels[3]._id, createdPanels[0]._id],
+        startTime: "10:05",
+        panels: [createdPanels[3]._id, createdPanels[4]._id],
       },
       {
         studentEmail: "aina@student.uthm.edu.my",
+        startTime: "11:10",
         panels: [createdPanels[0]._id, createdPanels[4]._id],
       },
       {
         studentEmail: "danish@student.uthm.edu.my",
+        startTime: "11:10",
         panels: [createdPanels[1]._id, createdPanels[3]._id],
       },
       {
         studentEmail: "priya@student.uthm.edu.my",
+        startTime: "12:15",
         panels: [createdPanels[2]._id, createdPanels[4]._id],
       },
       {
         studentEmail: "jiawei@student.uthm.edu.my",
-        panels: [createdPanels[3]._id, createdPanels[1]._id],
+        startTime: "12:15",
+        panels: [createdPanels[0]._id, createdPanels[1]._id],
       },
       {
         studentEmail: "hafiz@student.uthm.edu.my",
-        panels: [createdPanels[4]._id, createdPanels[0]._id],
+        startTime: "14:00",
+        panels: [createdPanels[3]._id, createdPanels[4]._id],
       },
       {
         studentEmail: "amira@student.uthm.edu.my",
-        panels: [createdPanels[4]._id, createdPanels[2]._id],
-      },
-    ];
-
-    const completedHistoryPlan = panelAssignmentMap.map(
-      ({ studentEmail, panelIds }) => ({
-        studentEmail,
-        panels: panelIds,
-      }),
-    );
-
-    const sessionsData = [
-      // Case 1: Upcoming proposal defense, evaluations pending
-      {
-        students: [getUserId("ali@student.uthm.edu.my")],
-        panels: [getUserId("samihah@uthm.edu.my"), createdPanels[1]._id],
-        title: "Proposal Defense - Muhammad Ali",
-        sessionType: "PROPOSAL_DEFENSE",
-        rubricId: proposalRubric._id,
-        date: tomorrow,
-        startTime: "10:00",
-        endTime: "11:00",
-        venue: "meet.google.com/ali-proposal-demo",
-        status: "scheduled",
-      },
-
-      // Case 2: Completed Pre-Viva, official report should publish
-      {
-        students: [getUserId("siti@student.uthm.edu.my")],
-        panels: [getUserId("samihah@uthm.edu.my"), createdPanels[2]._id],
-        title: "Pre-Viva - Siti Nuraisyah",
-        sessionType: "PRE_VIVA",
-        rubricId: preVivaRubric._id,
-        date: yesterday,
-        startTime: "14:30",
-        endTime: "15:30",
-        venue: "https://teams.microsoft.com/l/meetup-join/siti-previva-demo",
-        status: "completed",
-      },
-
-      // Case 3: Completed qualitative-only Progress Assessment
-      {
-        students: [getUserId("chong@student.uthm.edu.my")],
-        panels: [getUserId("samihah@uthm.edu.my"), createdPanels[3]._id],
-        title: "Progress Assessment - Chong Wei Ming",
-        sessionType: "PROGRESS_ASSESSMENT",
-        rubricId: progressRubric._id,
-        date: yesterday,
-        startTime: "09:00",
-        endTime: "10:00",
-        venue: "zoom.us/j/1234567890",
-        status: "completed",
-      },
-
-      // Case 4: Pending publication, only one panel completed
-      {
-        students: [getUserId("meiling@student.uthm.edu.my")],
-        panels: [createdPanels[1]._id, createdPanels[2]._id],
-        title: "Proposal Defense - Tan Mei Ling",
-        sessionType: "PROPOSAL_DEFENSE",
-        rubricId: proposalRubric._id,
-        date: nextWeek,
-        startTime: "11:30",
-        endTime: "12:30",
-        venue: "https://meet.google.com/meiling-proposal-demo",
-        status: "scheduled",
-      },
-      // Case 5: Siti completed Proposal Defense, scored official report
-      {
-        students: [getUserId("siti@student.uthm.edu.my")],
-        panels: [getUserId("samihah@uthm.edu.my"), createdPanels[1]._id],
-        title: "Proposal Defense - Siti Nuraisyah",
-        sessionType: "PROPOSAL_DEFENSE",
-        rubricId: proposalRubric._id,
-        date: lastMonth,
-        startTime: "09:30",
-        endTime: "10:30",
-        venue: "meet.google.com/siti-proposal-completed-demo",
-        status: "completed",
-      },
-
-      // Case 6: Ali completed qualitative Progress Assessment
-      {
-        students: [getUserId("ali@student.uthm.edu.my")],
-        panels: [getUserId("samihah@uthm.edu.my"), createdPanels[1]._id],
-        title: "Progress Assessment - Muhammad Ali",
-        sessionType: "PROGRESS_ASSESSMENT",
-        rubricId: progressRubric._id,
-        date: lastWeek,
-        startTime: "15:00",
-        endTime: "16:00",
-        venue: "https://zoom.us/j/9876543210",
-        status: "completed",
-      },
-
-      // Case 7: Ali completed Proposal Defense, official scored report
-      {
-        students: [getUserId("ali@student.uthm.edu.my")],
-        panels: [createdPanels[0]._id, createdPanels[1]._id],
-        title: "Completed Proposal Defense - Muhammad Ali",
-        sessionType: "PROPOSAL_DEFENSE",
-        rubricId: proposalRubric._id,
-        date: lastMonth,
-        startTime: "10:30",
-        endTime: "11:30",
-        venue: "meet.example.com/ali-proposal-completed-demo",
-        status: "completed",
-      },
-
-      // Case 8: Ali upcoming Pre-Viva, both pending
-      {
-        students: [getUserId("ali@student.uthm.edu.my")],
-        panels: [getUserId("samihah@uthm.edu.my"), createdPanels[2]._id],
-        title: "Pre-Viva - Muhammad Ali",
-        sessionType: "PRE_VIVA",
-        rubricId: preVivaRubric._id,
-        date: inThreeWeeks,
-        startTime: "10:30",
-        endTime: "11:30",
-        venue: "teams.microsoft.com/l/meetup-join/ali-previva-pending-demo",
-        status: "scheduled",
-      },
-
-      // Case 8: Chong upcoming Pre-Viva, both pending
-      {
-        students: [getUserId("chong@student.uthm.edu.my")],
-        panels: [createdPanels[2]._id, createdPanels[3]._id],
-        title: "Pre-Viva - Chong Wei Ming",
-        sessionType: "PRE_VIVA",
-        rubricId: preVivaRubric._id,
-        date: inTwoWeeks,
-        startTime: "13:00",
-        endTime: "14:00",
-        venue: "meet.google.com/chong-previva-pending-demo",
-        status: "scheduled",
-      },
-
-      // Case 9: Mei Ling completed qualitative Progress Assessment
-      {
-        students: [getUserId("meiling@student.uthm.edu.my")],
-        panels: [createdPanels[1]._id, createdPanels[2]._id],
-        title: "Progress Assessment - Tan Mei Ling",
-        sessionType: "PROGRESS_ASSESSMENT",
-        rubricId: progressRubric._id,
-        date: lastWeek,
-        startTime: "16:00",
-        endTime: "17:00",
-        venue: "https://meet.google.com/meiling-progress-completed-demo",
-        status: "completed",
-      },
-
-      // Case 10: Siti upcoming Progress Assessment, both pending
-      {
-        students: [getUserId("siti@student.uthm.edu.my")],
-        panels: [getUserId("samihah@uthm.edu.my"), createdPanels[2]._id],
-        title: "Progress Assessment - Siti Nuraisyah",
-        sessionType: "PROGRESS_ASSESSMENT",
-        rubricId: progressRubric._id,
-        date: inOneMonth,
-        startTime: "11:00",
-        endTime: "12:00",
-        venue: "https://zoom.us/j/2223334445",
-        status: "scheduled",
-      },
-    ];
-
-    sessionsData.push(
-      {
-        students: [getUserId("siti@student.uthm.edu.my")],
-        panels: [createdPanels[0]._id, createdPanels[3]._id],
-        title: "Demo Access Session - Siti Nuraisyah",
-        sessionType: "PROGRESS_ASSESSMENT",
-        rubricId: progressRubric._id,
-        date: inThreeDays,
-        startTime: "09:00",
-        endTime: "10:00",
-        venue: "https://meet.google.com/demo-siti-zkp-web",
-        status: "scheduled",
-      },
-      {
-        students: [getUserId("meiling@student.uthm.edu.my")],
-        panels: [createdPanels[0]._id, createdPanels[4]._id],
-        title: "Demo Access Session - Tan Mei Ling",
-        sessionType: "PRE_VIVA",
-        rubricId: preVivaRubric._id,
-        date: inTwoWeeks,
-        startTime: "15:00",
-        endTime: "16:00",
-        venue: "https://meet.google.com/demo-meiling-zkp-network",
-        status: "scheduled",
-      },
-      {
-        students: [getUserId("ali@student.uthm.edu.my")],
-        panels: [createdPanels[4]._id, createdPanels[3]._id],
-        title: "Demo Access Session - Muhammad Ali",
-        sessionType: "PROPOSAL_DEFENSE",
-        rubricId: proposalRubric._id,
-        date: inOneMonth,
         startTime: "14:00",
-        endTime: "15:00",
-        venue: "https://meet.google.com/demo-ali-network-web",
-        status: "scheduled",
+        panels: [createdPanels[0]._id, createdPanels[2]._id],
       },
-    );
+    ];
 
-    sessionsData.push(
-      ...batchSessionPlan.map((slot, index) => {
-        const student = allUsers.find((u) => u.email === slot.studentEmail);
-        const startTime = addMinutesToHHMM("09:00", index * 65);
-        const endTime = addMinutesToHHMM(startTime, 60);
-
-        return {
-          students: [getUserId(slot.studentEmail)],
-          panels: slot.panels,
-          title: `Batch Presentation - ${student.name}`,
-          sessionType: "PROPOSAL_DEFENSE",
-          rubricId: proposalRubric._id,
-          date: mainBatchDate,
-          startTime,
-          endTime,
-          venue: mainBatchMeetLink,
-          googleMeetLink: mainBatchMeetLink,
-          status: "scheduled",
-          batchId: mainBatchId,
-          batchName: mainBatchName,
-          academicSession: "2025/2026, Semester 1",
-          scheduleTitle: "Postgraduate Progress Presentation Schedule",
-          slotDurationMinutes: 60,
-          breakBetweenSlotsMinutes: 5,
-        };
-      }),
-    );
-
-    sessionsData.push(
-      ...completedHistoryPlan.map((slot, index) => {
-        const student = allUsers.find((u) => u.email === slot.studentEmail);
-        const startTime = addMinutesToHHMM("09:00", index * 50);
-        const endTime = addMinutesToHHMM(startTime, 45);
-
-        return {
-          students: [getUserId(slot.studentEmail)],
-          panels: slot.panels,
-          title: `Completed Progress Review - ${student.name}`,
-          sessionType: "PROGRESS_ASSESSMENT",
-          rubricId: progressRubric._id,
-          date: completedHistoryBatchDate,
-          startTime,
-          endTime,
-          venue: completedHistoryMeetLink,
-          googleMeetLink: completedHistoryMeetLink,
-          status: "completed",
-          batchId: completedHistoryBatchId,
-          batchName: completedHistoryBatchName,
-          academicSession: "2024/2025, Semester 2",
-          scheduleTitle: "Postgraduate Progress Presentation Schedule",
-          slotDurationMinutes: 45,
-          breakBetweenSlotsMinutes: 5,
-          studentDocuments: [
-            {
-              title: `${student.name} Progress Report`,
-              url: "",
-              source: "external-link",
-              type: "report",
-              uploadedBy: getUserId(slot.studentEmail),
-              description:
-                "Seeded progress report uploaded by the student for a completed evaluation.",
-            },
-            {
-              title: `${student.name} Presentation Slides`,
-              url: "",
-              source: "external-link",
-              type: "slides",
-              uploadedBy: getUserId(slot.studentEmail),
-              description:
-                "Seeded presentation slides uploaded by the student for completed panel review.",
-            },
+    // Batch names follow the real-world idea of named rooms/tracks.
+    // PIXEL, QUANTUM, WAVELET, and CYBER are used only as the four
+    // Progress Assessment 1 demo batches on the same date. Each batch
+    // now contains multiple students so printed/exported forms have
+    // richer demo rows.
+    const lifecycleBatchGroups = {
+      proposal: [
+        {
+          batchName: "ALPHA",
+          studentEmails: [
+            "ali@student.uthm.edu.my",
+            "chong@student.uthm.edu.my",
+            "aina@student.uthm.edu.my",
           ],
-        };
-      }),
+        },
+        {
+          batchName: "BETA",
+          studentEmails: [
+            "siti@student.uthm.edu.my",
+            "meiling@student.uthm.edu.my",
+            "danish@student.uthm.edu.my",
+          ],
+        },
+        {
+          batchName: "GAMMA",
+          studentEmails: [
+            "priya@student.uthm.edu.my",
+            "hafiz@student.uthm.edu.my",
+          ],
+        },
+        {
+          batchName: "DELTA",
+          studentEmails: [
+            "jiawei@student.uthm.edu.my",
+            "amira@student.uthm.edu.my",
+          ],
+        },
+      ],
+      progress1: [
+        {
+          batchName: "PIXEL",
+          studentEmails: [
+            "ali@student.uthm.edu.my",
+            "chong@student.uthm.edu.my",
+            "aina@student.uthm.edu.my",
+          ],
+        },
+        {
+          batchName: "QUANTUM",
+          studentEmails: [
+            "siti@student.uthm.edu.my",
+            "meiling@student.uthm.edu.my",
+            "danish@student.uthm.edu.my",
+          ],
+        },
+        {
+          batchName: "WAVELET",
+          studentEmails: [
+            "priya@student.uthm.edu.my",
+            "hafiz@student.uthm.edu.my",
+          ],
+        },
+        {
+          batchName: "CYBER",
+          studentEmails: [
+            "jiawei@student.uthm.edu.my",
+            "amira@student.uthm.edu.my",
+          ],
+        },
+      ],
+      progress2: [
+        {
+          batchName: "MATRIX",
+          studentEmails: [
+            "ali@student.uthm.edu.my",
+            "meiling@student.uthm.edu.my",
+            "priya@student.uthm.edu.my",
+          ],
+        },
+        {
+          batchName: "VECTOR",
+          studentEmails: [
+            "siti@student.uthm.edu.my",
+            "chong@student.uthm.edu.my",
+            "jiawei@student.uthm.edu.my",
+          ],
+        },
+        {
+          batchName: "NEXUS",
+          studentEmails: [
+            "aina@student.uthm.edu.my",
+            "hafiz@student.uthm.edu.my",
+          ],
+        },
+        {
+          batchName: "PULSE",
+          studentEmails: [
+            "danish@student.uthm.edu.my",
+            "amira@student.uthm.edu.my",
+          ],
+        },
+      ],
+      previva: [
+        {
+          batchName: "APEX",
+          studentEmails: [
+            "ali@student.uthm.edu.my",
+            "siti@student.uthm.edu.my",
+            "priya@student.uthm.edu.my",
+          ],
+        },
+        {
+          batchName: "MERIDIAN",
+          studentEmails: [
+            "chong@student.uthm.edu.my",
+            "meiling@student.uthm.edu.my",
+            "jiawei@student.uthm.edu.my",
+          ],
+        },
+        {
+          batchName: "HORIZON",
+          studentEmails: [
+            "aina@student.uthm.edu.my",
+            "danish@student.uthm.edu.my",
+          ],
+        },
+        {
+          batchName: "ECLIPSE",
+          studentEmails: [
+            "hafiz@student.uthm.edu.my",
+            "amira@student.uthm.edu.my",
+          ],
+        },
+      ],
+    };
+
+    const reservedConcurrentBatchNames = new Set([
+      "PIXEL",
+      "QUANTUM",
+      "WAVELET",
+      "CYBER",
+    ]);
+
+    const getStageBatchId = (stage, batchName) =>
+      `BATCH-${stage.batchSuffix}-2026-${batchName}`;
+
+    const getStageMeetingLink = (stage, batchName) =>
+      `https://meet.google.com/fsktm-${stage.googleMeetSegment}-${batchName.toLowerCase()}`;
+
+    const studentSlotMap = new Map(
+      studentLifecyclePlan.map((slot) => [slot.studentEmail, slot]),
     );
 
-    const enrichedSessionsData = await Promise.all(sessionsData.map(async (session, index) => {
-      const batchInfo =
-        index < 4
-          ? {
-              batchId: "BATCH-PRS-2026-A",
-              batchName: "FSKTM PRS Demo Batch A",
-              googleMeetLink: "https://meet.google.com/fsktm-prs-demo-a",
-            }
-          : index < 7
-            ? {
-                batchId: "BATCH-PRS-2026-B",
-                batchName: "FSKTM PRS Demo Batch B",
-                googleMeetLink: "https://meet.google.com/fsktm-prs-demo-b",
-              }
-            : {
-                batchId: "BATCH-PRS-2026-C",
-                batchName: "FSKTM PRS Demo Batch C",
-                googleMeetLink: "https://meet.google.com/fsktm-prs-demo-c",
-              };
+    const getBatchStartTime = (group) => {
+      const minutes = group.studentEmails
+        .map((studentEmail) => studentSlotMap.get(studentEmail)?.startTime)
+        .filter(Boolean)
+        .map((time) => {
+          const [hours, mins] = time.split(":").map(Number);
+          return hours * 60 + mins;
+        });
 
-      return {
-        ...session,
-        batchId: session.batchId || batchInfo.batchId,
-        batchName: session.batchName || batchInfo.batchName,
-        academicSession: session.academicSession || "2025/2026, Semester 1",
-        scheduleTitle:
-          session.scheduleTitle ||
-          "Postgraduate Progress Presentation Schedule",
-        googleMeetLink: session.googleMeetLink || batchInfo.googleMeetLink,
-        venue:
-          session.venue || session.googleMeetLink || batchInfo.googleMeetLink,
-        slotDurationMinutes: session.slotDurationMinutes || 60,
-        breakBetweenSlotsMinutes:
-          session.breakBetweenSlotsMinutes === undefined
-            ? 5
-            : session.breakBetweenSlotsMinutes,
+      if (!minutes.length) return "09:00";
+
+      const earliest = Math.min(...minutes);
+      return `${String(Math.floor(earliest / 60)).padStart(2, "0")}:${String(
+        earliest % 60,
+      ).padStart(2, "0")}`;
+    };
+
+    const stageBatchRecords = stageConfigs.flatMap((stage) =>
+      (lifecycleBatchGroups[stage.stageKey] || []).map((group) => ({
+        batchName: group.batchName,
+        batchId: getStageBatchId(stage, group.batchName),
+        academicSession,
+        scheduleTitle,
+        sessionType: stage.sessionType,
+        rubricId: stage.rubric._id,
+        date: stage.date,
+        startTime: getBatchStartTime(group),
+        slotDurationMinutes: 60,
+        breakBetweenSlotsMinutes: 5,
+        googleMeetLink: getStageMeetingLink(stage, group.batchName),
+        status: stage.status === "completed" ? "completed" : "active",
         createdBy: getUserId("samihah@uthm.edu.my"),
-        studentDocuments: await (async () => {
-          const student = allUsers.find(
-            (candidate) => String(candidate._id) === String(session.students?.[0]),
+      })),
+    );
+
+    await SessionBatch.create(stageBatchRecords);
+
+    const sessionsData = stageConfigs.flatMap((stage) =>
+      (lifecycleBatchGroups[stage.stageKey] || []).flatMap((group) =>
+        group.studentEmails.map((studentEmail) => {
+          const slot = studentSlotMap.get(studentEmail);
+          const student = allUsers.find((u) => u.email === studentEmail);
+          const endTime = addMinutesToHHMM(slot.startTime, 60);
+          const meetingLink = getStageMeetingLink(stage, group.batchName);
+
+          return {
+            students: [getUserId(studentEmail)],
+            panels: slot.panels,
+            title: `${stage.titlePrefix} - ${student.name}`,
+            sessionType: stage.sessionType,
+            rubricId: stage.rubric._id,
+            date: stage.date,
+            startTime: slot.startTime,
+            endTime,
+            venue: meetingLink,
+            googleMeetLink: meetingLink,
+            status: stage.status,
+            batchId: getStageBatchId(stage, group.batchName),
+            batchName: group.batchName,
+            academicSession,
+            scheduleTitle,
+            slotDurationMinutes: 60,
+            breakBetweenSlotsMinutes: 5,
+          };
+        }),
+      ),
+    );
+
+    const parseTimeToMinutes = (timeValue) => {
+      const [hours, minutes] = String(timeValue || "00:00").split(":").map(Number);
+      return hours * 60 + minutes;
+    };
+
+    const dateKey = (value) => new Date(value).toISOString().slice(0, 10);
+
+    const validateSeedSchedule = (sessions) => {
+      const studentDayMap = new Map();
+
+      for (const session of sessions) {
+        const keyDate = dateKey(session.date);
+        for (const studentId of session.students || []) {
+          const key = `${studentId}:${keyDate}`;
+          if (studentDayMap.has(key)) {
+            throw new Error(
+              `Seed violation: student has more than one session on ${keyDate}: ${session.title}`,
+            );
+          }
+          studentDayMap.set(key, session.title);
+        }
+      }
+
+      const lifecycleByStudent = new Map();
+
+      for (const session of sessions) {
+        for (const studentId of session.students || []) {
+          const key = String(studentId);
+          if (!lifecycleByStudent.has(key)) lifecycleByStudent.set(key, []);
+          lifecycleByStudent.get(key).push(session);
+        }
+      }
+
+      for (const [studentId, studentSessions] of lifecycleByStudent.entries()) {
+        const proposalSessions = studentSessions.filter(
+          (session) => session.sessionType === "PROPOSAL_DEFENSE",
+        );
+        const progressSessions = studentSessions.filter(
+          (session) => session.sessionType === "PROGRESS_ASSESSMENT",
+        );
+        const preVivaSessions = studentSessions.filter(
+          (session) => session.sessionType === "PRE_VIVA",
+        );
+
+        if (proposalSessions.length !== 1) {
+          throw new Error(
+            `Seed violation: student ${studentId} must have exactly one Proposal Defense, found ${proposalSessions.length}.`,
           );
-          const studentName = student?.name || "Student";
-          const safeTitle = String(session.title || "session")
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, "-")
-            .replace(/^-|-$/g, "")
-            .slice(0, 80);
+        }
 
-          const reportFile = await createSeedGridFsFile({
-            filename: `${safeTitle}-report.txt`,
-            content: makeSeedMaterialContent({
-              studentName,
-              sessionTitle: session.title,
-              materialType: "Report",
-            }),
-          });
+        if (progressSessions.length < 2) {
+          throw new Error(
+            `Seed violation: student ${studentId} must have at least two Progress Assessments before Pre-Viva, found ${progressSessions.length}.`,
+          );
+        }
 
-          const slidesFile = await createSeedGridFsFile({
-            filename: `${safeTitle}-slides.txt`,
-            content: makeSeedMaterialContent({
-              studentName,
-              sessionTitle: session.title,
-              materialType: "Presentation Slides",
-            }),
-          });
+        if (preVivaSessions.length !== 1) {
+          throw new Error(
+            `Seed violation: student ${studentId} must have exactly one Pre-Viva, found ${preVivaSessions.length}.`,
+          );
+        }
 
-          return [
+        const proposalDate = new Date(proposalSessions[0].date).getTime();
+        const latestProgressDate = Math.max(
+          ...progressSessions.map((session) => new Date(session.date).getTime()),
+        );
+        const preVivaDate = new Date(preVivaSessions[0].date).getTime();
+
+        if (!(proposalDate < latestProgressDate && latestProgressDate < preVivaDate)) {
+          throw new Error(
+            `Seed violation: student ${studentId} lifecycle must be Proposal Defense → Progress Assessment(s) → Pre-Viva.`,
+          );
+        }
+      }
+
+      const exactConcurrentBatchSessions = sessions.filter((session) =>
+        reservedConcurrentBatchNames.has(String(session.batchName || "").toUpperCase()),
+      );
+
+      const exactConcurrentNames = new Set(
+        exactConcurrentBatchSessions.map((session) => String(session.batchName).toUpperCase()),
+      );
+
+      for (const requiredName of reservedConcurrentBatchNames) {
+        if (!exactConcurrentNames.has(requiredName)) {
+          throw new Error(
+            `Seed violation: missing required same-day demo batch name ${requiredName}.`,
+          );
+        }
+      }
+
+      if (exactConcurrentNames.size !== reservedConcurrentBatchNames.size) {
+        throw new Error(
+          "Seed violation: only PIXEL, QUANTUM, WAVELET, and CYBER should use the reserved same-day demo batch names.",
+        );
+      }
+
+      const exactConcurrentDates = new Set(
+        exactConcurrentBatchSessions.map((session) => dateKey(session.date)),
+      );
+
+      if (exactConcurrentDates.size !== 1) {
+        throw new Error(
+          "Seed violation: PIXEL, QUANTUM, WAVELET, and CYBER demo batches must be on the same date.",
+        );
+      }
+
+      const invalidReservedType = exactConcurrentBatchSessions.find(
+        (session) => session.sessionType !== "PROGRESS_ASSESSMENT",
+      );
+
+      if (invalidReservedType) {
+        throw new Error(
+          `Seed violation: ${invalidReservedType.batchName} must be a Progress Assessment session.`,
+        );
+      }
+
+      for (const requiredName of reservedConcurrentBatchNames) {
+        const rowCount = exactConcurrentBatchSessions.filter(
+          (session) => String(session.batchName || "").toUpperCase() === requiredName,
+        ).length;
+
+        if (rowCount < 2) {
+          throw new Error(
+            `Seed violation: ${requiredName} should contain at least two students for richer demo export/print rows.`,
+          );
+        }
+      }
+
+      for (let i = 0; i < sessions.length; i += 1) {
+        const a = sessions[i];
+        const aDate = dateKey(a.date);
+        const aStart = parseTimeToMinutes(a.startTime);
+        const aEnd = parseTimeToMinutes(a.endTime);
+
+        for (let j = i + 1; j < sessions.length; j += 1) {
+          const b = sessions[j];
+          if (aDate !== dateKey(b.date)) continue;
+
+          const bStart = parseTimeToMinutes(b.startTime);
+          const bEnd = parseTimeToMinutes(b.endTime);
+          const overlaps = aStart < bEnd && bStart < aEnd;
+          if (!overlaps) continue;
+
+          const aPanels = new Set((a.panels || []).map(String));
+          const crashedPanel = (b.panels || []).find((panelId) => aPanels.has(String(panelId)));
+          if (crashedPanel) {
+            throw new Error(
+              `Seed violation: panel time crash on ${aDate} between "${a.title}" and "${b.title}".`,
+            );
+          }
+        }
+      }
+    };
+
+    validateSeedSchedule(sessionsData);
+    console.log("✅ Seed schedule validation passed before inserting timetables.");
+
+    const enrichedSessionsData = await Promise.all(
+      sessionsData.map(async (session) => {
+        const student = allUsers.find(
+          (candidate) => String(candidate._id) === String(session.students?.[0]),
+        );
+        const studentName = student?.name || "Student";
+        const safeTitle = String(session.title || "session")
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "")
+          .slice(0, 80);
+
+        const reportFile = await createSeedGridFsFile({
+          filename: `${safeTitle}-report.txt`,
+          content: makeSeedMaterialContent({
+            studentName,
+            sessionTitle: session.title,
+            materialType: "Report",
+          }),
+        });
+
+        const slidesFile = await createSeedGridFsFile({
+          filename: `${safeTitle}-slides.txt`,
+          content: makeSeedMaterialContent({
+            studentName,
+            sessionTitle: session.title,
+            materialType: "Presentation Slides",
+          }),
+        });
+
+        return {
+          ...session,
+          createdBy: getUserId("samihah@uthm.edu.my"),
+          studentDocuments: [
             {
               title: `${session.title} Demo Report`,
               url: reportFile.url,
@@ -1540,10 +1561,10 @@ const seedDatabase = async () => {
               description:
                 "Seeded demo slides stored in MongoDB GridFS for panel review testing.",
             },
-          ];
-        })(),
-      };
-    }));
+          ],
+        };
+      }),
+    );
 
     const createdSessions = await Timetable.create(enrichedSessionsData);
 
@@ -1559,6 +1580,7 @@ const seedDatabase = async () => {
 
     // 6. Auto-Create Evaluations
     console.log("📋 Seeding evaluations linked to Rubrics...");
+
     const makeScoreMapFromValues = (rubric, values = {}) => {
       const map = {};
 
@@ -1582,612 +1604,227 @@ const seedDatabase = async () => {
 
       return map;
     };
-    const evaluationsData = [
-      // Case 1: Ali upcoming proposal defense, both pending
-      {
-        sessionId: createdSessions[0]._id,
-        rubricId: proposalRubric._id,
-        studentId: getUserId("ali@student.uthm.edu.my"),
-        evaluatorId: getUserId("samihah@uthm.edu.my"),
-        semester: "Semester 1, 2025/2026",
-        sessionType: "PROPOSAL_DEFENSE",
-        status: "PENDING",
-      },
-      {
-        sessionId: createdSessions[0]._id,
-        rubricId: proposalRubric._id,
-        studentId: getUserId("ali@student.uthm.edu.my"),
-        evaluatorId: createdPanels[1]._id,
-        semester: "Semester 1, 2025/2026",
-        sessionType: "PROPOSAL_DEFENSE",
-        status: "PENDING",
-      },
 
-      // Case 2: Siti completed Pre-Viva, both panels completed
-      {
-        sessionId: createdSessions[1]._id,
-        rubricId: preVivaRubric._id,
-        studentId: getUserId("siti@student.uthm.edu.my"),
-        evaluatorId: getUserId("samihah@uthm.edu.my"),
-        semester: "Semester 1, 2025/2026",
-        sessionType: "PRE_VIVA",
-        status: "COMPLETED",
-        totalMarks: 76.25,
-        scores: makeScoreMapFromValues(preVivaRubric, {
-          crit_a_title: 3,
-          crit_b_abs: 4,
-          crit_c_prob: 3,
-          crit_d_obj: 3,
-          crit_e_lit: 2,
-          crit_f_meth: 4,
-          crit_g_res: 3,
-          crit_h_find: 3,
-          crit_i_eth: 4,
-          crit_j_contrib: 2,
-          crit_k_conc: 3,
-          crit_l_org2: 3,
-          crit_m_lang2: 3,
-          crit_n_ref2: 2,
-          crit_o_pres2: 3,
-          crit_p_delib: 3,
-        }),
-        qualitativeFeedback: makeQualitativeMap(
-          preVivaRubric,
-          "PASS. The candidate demonstrates solid understanding and adequate scholarly contribution. Minor improvements are required in literature structure and methodological explanation.",
-        ),
-        overallComments:
-          "The candidate demonstrates strong understanding and is ready to proceed with minor corrections.",
-      },
-      {
-        sessionId: createdSessions[1]._id,
-        rubricId: preVivaRubric._id,
-        studentId: getUserId("siti@student.uthm.edu.my"),
-        evaluatorId: createdPanels[2]._id,
-        semester: "Semester 1, 2025/2026",
-        sessionType: "PRE_VIVA",
-        status: "COMPLETED",
-        totalMarks: 81.5,
-        scores: makeScoreMapFromValues(preVivaRubric, {
-          crit_a_title: 4,
-          crit_b_abs: 3,
-          crit_c_prob: 3,
-          crit_d_obj: 4,
-          crit_e_lit: 3,
-          crit_f_meth: 3,
-          crit_g_res: 3,
-          crit_h_find: 4,
-          crit_i_eth: 3,
-          crit_j_contrib: 3,
-          crit_k_conc: 3,
-          crit_l_org2: 4,
-          crit_m_lang2: 3,
-          crit_n_ref2: 3,
-          crit_o_pres2: 3,
-          crit_p_delib: 4,
-        }),
-        qualitativeFeedback: makeQualitativeMap(
-          preVivaRubric,
-          "PASS with minor amendments. The contribution is acceptable, but the candidate should improve the abstract, literature synthesis, and conclusion flow.",
-        ),
-        overallComments:
-          "Good research maturity. The candidate should refine presentation of findings and thesis structure.",
-      },
+    const evaluationsData = [];
 
-      // Case 3: Chong completed qualitative-only Progress Assessment
-      {
-        sessionId: createdSessions[2]._id,
-        rubricId: progressRubric._id,
-        studentId: getUserId("chong@student.uthm.edu.my"),
-        evaluatorId: getUserId("samihah@uthm.edu.my"),
-        semester: "Semester 1, 2025/2026",
-        sessionType: "PROGRESS_ASSESSMENT",
-        status: "COMPLETED",
-        summaryOfProgress:
-          "The student has completed the system architecture, core backend API, and initial frontend integration.",
-        commentsForImprovement:
-          "The student should improve evaluation workflow validation and ensure consistent data formatting across routes.",
-        overallSuggestions:
-          "Proceed with usability testing and strengthen documentation for the ZKP authentication flow.",
-      },
-      {
-        sessionId: createdSessions[2]._id,
-        rubricId: progressRubric._id,
-        studentId: getUserId("chong@student.uthm.edu.my"),
-        evaluatorId: createdPanels[3]._id,
-        semester: "Semester 1, 2025/2026",
-        sessionType: "PROGRESS_ASSESSMENT",
-        status: "COMPLETED",
-        summaryOfProgress:
-          "The student has shown consistent progress and has prepared a working prototype for demonstration.",
-        commentsForImprovement:
-          "More testing is required for attendance, session details, and role-based UI hiding.",
-        overallSuggestions:
-          "Continue improving demo data coverage and prepare screenshots for final documentation.",
-      },
+    for (const stage of stageConfigs) {
+      for (const slot of studentLifecyclePlan) {
+        const student = allUsers.find((u) => u.email === slot.studentEmail);
+        const title = `${stage.titlePrefix} - ${student.name}`;
+        const isCompleted = stage.status === "completed";
 
-      // Case 4: Mei Ling pending publication, one completed and one pending
-      {
-        sessionId: createdSessions[3]._id,
-        rubricId: proposalRubric._id,
-        studentId: getUserId("meiling@student.uthm.edu.my"),
-        evaluatorId: createdPanels[1]._id,
-        semester: "Semester 1, 2025/2026",
-        sessionType: "PROPOSAL_DEFENSE",
-        status: "COMPLETED",
-        totalMarks: 68.0,
-        scores: makeScoreMapFromValues(proposalRubric, {
-          crit_a_title: 3,
-          crit_b_exec_summary: 2,
-          crit_c_problem: 2,
-          crit_d_objective: 3,
-          crit_e_literature: 2,
-          crit_f_methodology: 2,
-          crit_g_prelim: 2,
-          crit_h_ethics: 3,
-          crit_i_org: 3,
-          crit_j_lang: 3,
-          crit_k_ref: 2,
-          crit_l_pres: 3,
-        }),
-        qualitativeFeedback: makeQualitativeMap(
-          proposalRubric,
-          "The research direction is promising but the methodology and research questions require refinement.",
-        ),
-        overallComments:
-          "The student needs to sharpen the problem statement and justify the selected methodology.",
-      },
-      {
-        sessionId: createdSessions[3]._id,
-        rubricId: proposalRubric._id,
-        studentId: getUserId("meiling@student.uthm.edu.my"),
-        evaluatorId: createdPanels[2]._id,
-        semester: "Semester 1, 2025/2026",
-        sessionType: "PROPOSAL_DEFENSE",
-        status: "PENDING",
-      },
-      // Case 5: Siti completed Proposal Defense, both panels completed
-      {
-        sessionId: getSessionIdByTitle("Proposal Defense - Siti Nuraisyah"),
-        rubricId: proposalRubric._id,
-        studentId: getUserId("siti@student.uthm.edu.my"),
-        evaluatorId: getUserId("samihah@uthm.edu.my"),
-        semester: "Semester 2, 2024/2025",
-        sessionType: "PROPOSAL_DEFENSE",
-        status: "COMPLETED",
-        totalMarks: 74.5,
-        scores: makeScoreMapFromValues(proposalRubric, {
-          crit_a_title: 3,
-          crit_b_exec_summary: 3,
-          crit_c_problem: 3,
-          crit_d_objective: 4,
-          crit_e_literature: 3,
-          crit_f_methodology: 3,
-          crit_g_prelim: 2,
-          crit_h_ethics: 3,
-          crit_i_org: 4,
-          crit_j_lang: 3,
-          crit_k_ref: 3,
-          crit_l_pres: 3,
-        }),
-        qualitativeFeedback: makeQualitativeMap(
-          proposalRubric,
-          "The proposal is acceptable and demonstrates a clear direction. Improve methodology justification and expand the literature gap.",
-        ),
-        overallComments:
-          "Good proposal foundation. The candidate can proceed with refinement.",
-      },
-      {
-        sessionId: getSessionIdByTitle("Proposal Defense - Siti Nuraisyah"),
-        rubricId: proposalRubric._id,
-        studentId: getUserId("siti@student.uthm.edu.my"),
-        evaluatorId: createdPanels[1]._id,
-        semester: "Semester 2, 2024/2025",
-        sessionType: "PROPOSAL_DEFENSE",
-        status: "COMPLETED",
-        totalMarks: 79.0,
-        scores: makeScoreMapFromValues(proposalRubric, {
-          crit_a_title: 4,
-          crit_b_exec_summary: 3,
-          crit_c_problem: 3,
-          crit_d_objective: 4,
-          crit_e_literature: 3,
-          crit_f_methodology: 4,
-          crit_g_prelim: 3,
-          crit_h_ethics: 3,
-          crit_i_org: 3,
-          crit_j_lang: 4,
-          crit_k_ref: 3,
-          crit_l_pres: 3,
-        }),
-        qualitativeFeedback: makeQualitativeMap(
-          proposalRubric,
-          "The candidate shows strong potential. Research questions and expected outcome are clear, but literature coverage should be widened.",
-        ),
-        overallComments: "Strong presentation and clear research motivation.",
-      },
+        for (const panelId of slot.panels) {
+          const common = {
+            sessionId: getSessionIdByTitle(title),
+            rubricId: stage.rubric._id,
+            studentId: getUserId(slot.studentEmail),
+            evaluatorId: panelId,
+            semester: "Semester 1, 2025/2026",
+            sessionType: stage.sessionType,
+            status: isCompleted ? "COMPLETED" : "PENDING",
+          };
 
-      // Case 6: Ali completed qualitative Progress Assessment
-      {
-        sessionId: getSessionIdByTitle("Progress Assessment - Muhammad Ali"),
-        rubricId: progressRubric._id,
-        studentId: getUserId("ali@student.uthm.edu.my"),
-        evaluatorId: getUserId("samihah@uthm.edu.my"),
-        semester: "Semester 2, 2024/2025",
-        sessionType: "PROGRESS_ASSESSMENT",
-        status: "COMPLETED",
-        summaryOfProgress:
-          "The student has completed the initial ZKP authentication prototype and started integrating timetable workflows.",
-        commentsForImprovement:
-          "Improve frontend error handling and document the cryptographic authentication flow more clearly.",
-        overallSuggestions:
-          "Continue integration testing and prepare a clearer architecture diagram.",
-      },
-      {
-        sessionId: getSessionIdByTitle("Progress Assessment - Muhammad Ali"),
-        rubricId: progressRubric._id,
-        studentId: getUserId("ali@student.uthm.edu.my"),
-        evaluatorId: createdPanels[1]._id,
-        semester: "Semester 2, 2024/2025",
-        sessionType: "PROGRESS_ASSESSMENT",
-        status: "COMPLETED",
-        summaryOfProgress:
-          "The student is progressing well and has achieved a functional proof-of-concept.",
-        commentsForImprovement:
-          "More complete testing is needed for session detail, attendance, and role-based rendering.",
-        overallSuggestions:
-          "Proceed with controlled demo testing using seeded users and sessions.",
-      },
-
-      // Case 7: Ali completed Proposal Defense, both panels completed
-      {
-        sessionId: getSessionIdByTitle("Completed Proposal Defense - Muhammad Ali"),
-        rubricId: proposalRubric._id,
-        studentId: getUserId("ali@student.uthm.edu.my"),
-        evaluatorId: createdPanels[0]._id,
-        semester: "Semester 2, 2024/2025",
-        sessionType: "PROPOSAL_DEFENSE",
-        status: "COMPLETED",
-        totalMarks: 72.5,
-        scores: makeScoreMapFromValues(proposalRubric, {
-          crit_a_title: 3,
-          crit_b_exec_summary: 3,
-          crit_c_problem: 3,
-          crit_d_objective: 3,
-          crit_e_literature: 3,
-          crit_f_methodology: 3,
-          crit_g_prelim: 3,
-          crit_h_ethics: 3,
-          crit_i_org: 3,
-          crit_j_lang: 3,
-          crit_k_ref: 2,
-          crit_l_pres: 3,
-        }),
-        qualitativeFeedback: makeQualitativeMap(
-          proposalRubric,
-          "The proposal is acceptable and clearly related to authentication security. Improve citation coverage and methodology justification.",
-        ),
-        overallComments:
-          "Good foundation. The student may proceed with improvements to evaluation design and literature support.",
-      },
-      {
-        sessionId: getSessionIdByTitle("Completed Proposal Defense - Muhammad Ali"),
-        rubricId: proposalRubric._id,
-        studentId: getUserId("ali@student.uthm.edu.my"),
-        evaluatorId: createdPanels[1]._id,
-        semester: "Semester 2, 2024/2025",
-        sessionType: "PROPOSAL_DEFENSE",
-        status: "COMPLETED",
-        totalMarks: 76.0,
-        scores: makeScoreMapFromValues(proposalRubric, {
-          crit_a_title: 4,
-          crit_b_exec_summary: 3,
-          crit_c_problem: 3,
-          crit_d_objective: 4,
-          crit_e_literature: 3,
-          crit_f_methodology: 3,
-          crit_g_prelim: 3,
-          crit_h_ethics: 3,
-          crit_i_org: 3,
-          crit_j_lang: 3,
-          crit_k_ref: 3,
-          crit_l_pres: 3,
-        }),
-        qualitativeFeedback: makeQualitativeMap(
-          proposalRubric,
-          "The research direction is clear and feasible. The student should strengthen expected outcomes and validation planning.",
-        ),
-        overallComments:
-          "Clear presentation with suitable research direction. Proceed with minor refinements.",
-      },
-
-      // Case 8: Ali upcoming Pre-Viva, both pending
-      {
-        sessionId: getSessionIdByTitle("Pre-Viva - Muhammad Ali"),
-        rubricId: preVivaRubric._id,
-        studentId: getUserId("ali@student.uthm.edu.my"),
-        evaluatorId: getUserId("samihah@uthm.edu.my"),
-        semester: "Semester 1, 2025/2026",
-        sessionType: "PRE_VIVA",
-        status: "PENDING",
-      },
-      {
-        sessionId: getSessionIdByTitle("Pre-Viva - Muhammad Ali"),
-        rubricId: preVivaRubric._id,
-        studentId: getUserId("ali@student.uthm.edu.my"),
-        evaluatorId: createdPanels[2]._id,
-        semester: "Semester 1, 2025/2026",
-        sessionType: "PRE_VIVA",
-        status: "PENDING",
-      },
-
-      // Case 8: Chong upcoming Pre-Viva, both pending
-      {
-        sessionId: getSessionIdByTitle("Pre-Viva - Chong Wei Ming"),
-        rubricId: preVivaRubric._id,
-        studentId: getUserId("chong@student.uthm.edu.my"),
-        evaluatorId: createdPanels[2]._id,
-        semester: "Semester 1, 2025/2026",
-        sessionType: "PRE_VIVA",
-        status: "PENDING",
-      },
-      {
-        sessionId: getSessionIdByTitle("Pre-Viva - Chong Wei Ming"),
-        rubricId: preVivaRubric._id,
-        studentId: getUserId("chong@student.uthm.edu.my"),
-        evaluatorId: createdPanels[3]._id,
-        semester: "Semester 1, 2025/2026",
-        sessionType: "PRE_VIVA",
-        status: "PENDING",
-      },
-
-      // Case 9: Mei Ling completed qualitative Progress Assessment
-      {
-        sessionId: getSessionIdByTitle("Progress Assessment - Tan Mei Ling"),
-        rubricId: progressRubric._id,
-        studentId: getUserId("meiling@student.uthm.edu.my"),
-        evaluatorId: createdPanels[1]._id,
-        semester: "Semester 2, 2024/2025",
-        sessionType: "PROGRESS_ASSESSMENT",
-        status: "COMPLETED",
-        summaryOfProgress:
-          "The student has refined the research framework and completed the early security workflow design.",
-        commentsForImprovement:
-          "The student should improve evaluation of usability and provide more detailed testing evidence.",
-        overallSuggestions:
-          "Continue with prototype validation and prepare comparison against existing systems.",
-      },
-      {
-        sessionId: getSessionIdByTitle("Progress Assessment - Tan Mei Ling"),
-        rubricId: progressRubric._id,
-        studentId: getUserId("meiling@student.uthm.edu.my"),
-        evaluatorId: createdPanels[2]._id,
-        semester: "Semester 2, 2024/2025",
-        sessionType: "PROGRESS_ASSESSMENT",
-        status: "COMPLETED",
-        summaryOfProgress:
-          "The project direction is suitable and the student has made steady progress.",
-        commentsForImprovement:
-          "The problem statement should be more focused and technical validation should be expanded.",
-        overallSuggestions:
-          "Proceed with implementation testing and prepare clearer limitations.",
-      },
-
-      // Case 10: Siti upcoming Progress Assessment, both pending
-      {
-        sessionId: getSessionIdByTitle("Progress Assessment - Siti Nuraisyah"),
-        rubricId: progressRubric._id,
-        studentId: getUserId("siti@student.uthm.edu.my"),
-        evaluatorId: getUserId("samihah@uthm.edu.my"),
-        semester: "Semester 1, 2025/2026",
-        sessionType: "PROGRESS_ASSESSMENT",
-        status: "PENDING",
-      },
-      {
-        sessionId: getSessionIdByTitle("Progress Assessment - Siti Nuraisyah"),
-        rubricId: progressRubric._id,
-        studentId: getUserId("siti@student.uthm.edu.my"),
-        evaluatorId: createdPanels[2]._id,
-        semester: "Semester 1, 2025/2026",
-        sessionType: "PROGRESS_ASSESSMENT",
-        status: "PENDING",
-      },
-      {
-        sessionId: getSessionIdByTitle("Demo Access Session - Siti Nuraisyah"),
-        rubricId: progressRubric._id,
-        studentId: getUserId("siti@student.uthm.edu.my"),
-        evaluatorId: createdPanels[0]._id,
-        semester: "Semester 1, 2025/2026",
-        sessionType: "PROGRESS_ASSESSMENT",
-        status: "PENDING",
-      },
-      {
-        sessionId: getSessionIdByTitle("Demo Access Session - Siti Nuraisyah"),
-        rubricId: progressRubric._id,
-        studentId: getUserId("siti@student.uthm.edu.my"),
-        evaluatorId: createdPanels[3]._id,
-        semester: "Semester 1, 2025/2026",
-        sessionType: "PROGRESS_ASSESSMENT",
-        status: "PENDING",
-      },
-      {
-        sessionId: getSessionIdByTitle("Demo Access Session - Tan Mei Ling"),
-        rubricId: preVivaRubric._id,
-        studentId: getUserId("meiling@student.uthm.edu.my"),
-        evaluatorId: createdPanels[0]._id,
-        semester: "Semester 1, 2025/2026",
-        sessionType: "PRE_VIVA",
-        status: "PENDING",
-      },
-      {
-        sessionId: getSessionIdByTitle("Demo Access Session - Tan Mei Ling"),
-        rubricId: preVivaRubric._id,
-        studentId: getUserId("meiling@student.uthm.edu.my"),
-        evaluatorId: createdPanels[4]._id,
-        semester: "Semester 1, 2025/2026",
-        sessionType: "PRE_VIVA",
-        status: "PENDING",
-      },
-      {
-        sessionId: getSessionIdByTitle("Demo Access Session - Muhammad Ali"),
-        rubricId: proposalRubric._id,
-        studentId: getUserId("ali@student.uthm.edu.my"),
-        evaluatorId: createdPanels[4]._id,
-        semester: "Semester 1, 2025/2026",
-        sessionType: "PROPOSAL_DEFENSE",
-        status: "PENDING",
-      },
-      {
-        sessionId: getSessionIdByTitle("Demo Access Session - Muhammad Ali"),
-        rubricId: proposalRubric._id,
-        studentId: getUserId("ali@student.uthm.edu.my"),
-        evaluatorId: createdPanels[3]._id,
-        semester: "Semester 1, 2025/2026",
-        sessionType: "PROPOSAL_DEFENSE",
-        status: "PENDING",
-      },
-    ];
-
-    for (const slot of batchSessionPlan) {
-      const student = allUsers.find((u) => u.email === slot.studentEmail);
-
-      for (const panelId of slot.panels) {
-        evaluationsData.push({
-          sessionId: getSessionIdByTitle(
-            `Batch Presentation - ${student.name}`,
-          ),
-          rubricId: proposalRubric._id,
-          studentId: getUserId(slot.studentEmail),
-          evaluatorId: panelId,
-          semester: "Semester 1, 2025/2026",
-          sessionType: "PROPOSAL_DEFENSE",
-          status: "PENDING",
-        });
-      }
-    }
-
-    for (const slot of completedHistoryPlan) {
-      const student = allUsers.find((u) => u.email === slot.studentEmail);
-
-      for (const panelId of slot.panels) {
-        evaluationsData.push({
-          sessionId: getSessionIdByTitle(
-            `Completed Progress Review - ${student.name}`,
-          ),
-          rubricId: progressRubric._id,
-          studentId: getUserId(slot.studentEmail),
-          evaluatorId: panelId,
-          semester: "Semester 2, 2024/2025",
-          sessionType: "PROGRESS_ASSESSMENT",
-          status: "COMPLETED",
-          summaryOfProgress:
-            "The student has completed the planned milestone and demonstrated acceptable research progress.",
-          commentsForImprovement:
-            "The student should strengthen validation evidence, improve documentation, and prepare clearer analysis for the next stage.",
-          overallSuggestions:
-            "Proceed to the next phase with continuous supervision and scheduled follow-up review.",
-        });
+          if (!isCompleted) {
+            evaluationsData.push(common);
+          } else if (stage.sessionType === "PROGRESS_ASSESSMENT") {
+            evaluationsData.push({
+              ...common,
+              summaryOfProgress:
+                stage.stageKey === "progress1"
+                  ? "The student has completed early research milestones after proposal approval, including refinement of objectives and initial system design."
+                  : "The student has demonstrated continued progress, including prototype improvement, preliminary validation, and preparation for pre-viva readiness.",
+              commentsForImprovement:
+                stage.stageKey === "progress1"
+                  ? "The student should strengthen the literature gap, improve research planning, and prepare clearer evidence for the next progress review."
+                  : "The student should finalize data analysis, improve report structure, and prepare stronger justification before pre-viva.",
+              overallSuggestions:
+                stage.stageKey === "progress1"
+                  ? "Proceed to the next progress assessment after completing planned implementation milestones."
+                  : "Proceed toward pre-viva preparation with continuous supervision and final documentation refinement.",
+            });
+          } else if (stage.sessionType === "PRE_VIVA") {
+            evaluationsData.push({
+              ...common,
+              totalMarks: 80,
+              scores: makeScoreMapFromValues(stage.rubric, {
+                crit_a_title: 3,
+                crit_b_abs: 3,
+                crit_c_prob: 3,
+                crit_d_obj: 3,
+                crit_e_lit: 3,
+                crit_f_meth: 3,
+                crit_g_res: 3,
+                crit_h_find: 3,
+                crit_i_eth: 3,
+                crit_j_contrib: 3,
+                crit_k_conc: 3,
+                crit_l_org2: 3,
+                crit_m_lang2: 3,
+                crit_n_ref2: 3,
+                crit_o_pres2: 3,
+                crit_p_delib: 3,
+              }),
+              qualitativeFeedback: makeQualitativeMap(
+                stage.rubric,
+                "The candidate demonstrates acceptable thesis readiness with minor improvements required before final submission.",
+              ),
+              overallComments:
+                "The candidate is ready to proceed with minor amendments and improved presentation of findings.",
+            });
+          } else {
+            evaluationsData.push({
+              ...common,
+              totalMarks: 78,
+              scores: makeScoreMapFromValues(stage.rubric, {
+                crit_a_title: 3,
+                crit_b_exec_summary: 3,
+                crit_c_problem: 3,
+                crit_d_objective: 3,
+                crit_e_literature: 3,
+                crit_f_methodology: 3,
+                crit_g_prelim: 3,
+                crit_h_ethics: 3,
+                crit_i_org: 3,
+                crit_j_lang: 3,
+                crit_k_ref: 3,
+                crit_l_pres: 3,
+              }),
+              qualitativeFeedback: makeQualitativeMap(
+                stage.rubric,
+                "The proposal is acceptable. The research direction is clear and the methodology is suitable with minor refinement.",
+              ),
+              overallComments:
+                "Good proposal foundation. The candidate can proceed after refining literature gap and methodology justification.",
+            });
+          }
+        }
       }
     }
 
     const createdEvaluations = await Evaluation.create(evaluationsData);
+
     console.log("🧾 Seeding attendance records...");
 
-    await Attendance.create([
-      {
-        timetableId: createdSessions[1]._id,
-        studentId: getUserId("siti@student.uthm.edu.my"),
-        status: "present",
-        checkInTime: new Date(),
-      },
-      {
-        timetableId: createdSessions[2]._id,
-        studentId: getUserId("chong@student.uthm.edu.my"),
-        status: "present",
-        checkInTime: new Date(),
-      },
-      {
-        timetableId: createdSessions[3]._id,
-        studentId: getUserId("meiling@student.uthm.edu.my"),
-        status: "absent",
-      },
-      {
-        timetableId: getSessionIdByTitle("Proposal Defense - Siti Nuraisyah"),
-        studentId: getUserId("siti@student.uthm.edu.my"),
-        status: "present",
-        checkInTime: lastMonth,
-      },
-      {
-        timetableId: getSessionIdByTitle("Progress Assessment - Muhammad Ali"),
-        studentId: getUserId("ali@student.uthm.edu.my"),
-        status: "late",
-        checkInTime: lastWeek,
-        notes: "Demo late check-in record.",
-      },
-      {
-        timetableId: getSessionIdByTitle("Progress Assessment - Tan Mei Ling"),
-        studentId: getUserId("meiling@student.uthm.edu.my"),
-        status: "present",
-        checkInTime: lastWeek,
-      },
-    ]);
-
     await Attendance.create(
-      completedHistoryPlan.map((slot) => {
-        const student = allUsers.find((u) => u.email === slot.studentEmail);
+      stageConfigs
+        .filter((stage) => stage.status === "completed")
+        .flatMap((stage) =>
+          studentLifecyclePlan.map((slot) => {
+            const student = allUsers.find((u) => u.email === slot.studentEmail);
 
-        return {
-          timetableId: getSessionIdByTitle(
-            `Completed Progress Review - ${student.name}`,
-          ),
-          studentId: getUserId(slot.studentEmail),
-          status: "present",
-          checkInTime: completedHistoryBatchDate,
-          notes: "Seeded attendance for completed progress history.",
-        };
-      }),
+            return {
+              timetableId: getSessionIdByTitle(`${stage.titlePrefix} - ${student.name}`),
+              studentId: getUserId(slot.studentEmail),
+              status: "present",
+              checkInTime: stage.date,
+              notes: "Seeded attendance for completed lifecycle evaluation.",
+            };
+          }),
+        ),
     );
 
     console.log("🔐 Seeding permission request demo cases...");
 
-    const sitiCompletedEvalBySamihah = createdEvaluations.find(
-      (ev) =>
-        ev.studentId.toString() ===
-          getUserId("siti@student.uthm.edu.my").toString() &&
-        ev.evaluatorId.toString() ===
-          getUserId("samihah@uthm.edu.my").toString() &&
-        ev.status === "COMPLETED",
-    );
+    const findSessionByTitle = (title) =>
+      createdSessions.find((session) => session.title === title);
 
-    const chongCompletedEvalBySamihah = createdEvaluations.find(
-      (ev) =>
-        ev.studentId.toString() ===
-          getUserId("chong@student.uthm.edu.my").toString() &&
-        ev.evaluatorId.toString() ===
-          getUserId("samihah@uthm.edu.my").toString() &&
-        ev.status === "COMPLETED",
-    );
+    const findCompletedEvaluation = ({
+      studentEmail,
+      sessionTitle,
+      evaluatorId,
+      excludeEvaluatorId,
+    }) => {
+      const targetSession = findSessionByTitle(sessionTitle);
 
-    if (sitiCompletedEvalBySamihah) {
-      await PermissionRequest.create({
-        requestingPanelId: createdPanels[1]._id,
-        targetEvaluationId: sitiCompletedEvalBySamihah._id,
-        owningPanelId: getUserId("samihah@uthm.edu.my"),
-        studentId: getUserId("siti@student.uthm.edu.my"),
-        status: "PENDING",
-        reason: "Demo pending request for historical feedback vault.",
+      if (!targetSession) return null;
+
+      return createdEvaluations.find((ev) => {
+        const sameStudent =
+          ev.studentId.toString() === getUserId(studentEmail).toString();
+        const sameSession =
+          ev.sessionId.toString() === targetSession._id.toString();
+        const completed = ev.status === "COMPLETED";
+        const evaluatorMatches = evaluatorId
+          ? ev.evaluatorId.toString() === evaluatorId.toString()
+          : true;
+        const evaluatorExcluded = excludeEvaluatorId
+          ? ev.evaluatorId.toString() !== excludeEvaluatorId.toString()
+          : true;
+
+        return (
+          sameStudent &&
+          sameSession &&
+          completed &&
+          evaluatorMatches &&
+          evaluatorExcluded
+        );
       });
-    }
+    };
 
-    if (chongCompletedEvalBySamihah) {
-      await PermissionRequest.create({
-        requestingPanelId: createdPanels[2]._id,
-        targetEvaluationId: chongCompletedEvalBySamihah._id,
-        owningPanelId: getUserId("samihah@uthm.edu.my"),
-        studentId: getUserId("chong@student.uthm.edu.my"),
-        status: "APPROVED",
-        reason: "Demo approved request for historical feedback vault.",
+    const createPermissionDemo = async ({
+      studentEmail,
+      historicalSessionTitle,
+      currentSessionTitle,
+      requestingPanelId,
+      owningPanelId,
+      status,
+      reason,
+    }) => {
+      const currentSession = findSessionByTitle(currentSessionTitle);
+      const targetEvaluation = findCompletedEvaluation({
+        studentEmail,
+        sessionTitle: historicalSessionTitle,
+        evaluatorId: owningPanelId,
       });
-    }
+
+      if (!currentSession || !targetEvaluation) {
+        console.warn(
+          `⚠️ Skipped permission demo: ${studentEmail}, historical=${historicalSessionTitle}, current=${currentSessionTitle}`,
+        );
+        return;
+      }
+
+      const permissionPayload = {
+        requestingPanelId,
+        targetEvaluationId: targetEvaluation._id,
+        owningPanelId: targetEvaluation.evaluatorId,
+        studentId: getUserId(studentEmail),
+        status,
+        reason,
+        scope: "SINGLE_EVALUATION",
+        currentSessionId: currentSession._id,
+        batchId: currentSession.batchId || null,
+      };
+
+      if (status === "APPROVED") {
+        permissionPayload.approvedBy = targetEvaluation.evaluatorId;
+        permissionPayload.approvedAt = new Date();
+      }
+
+      await PermissionRequest.create(permissionPayload);
+    };
+
+    await createPermissionDemo({
+      studentEmail: "siti@student.uthm.edu.my",
+      historicalSessionTitle: "Proposal Defense - Siti Nuraisyah",
+      currentSessionTitle: "Pre-Viva - Siti Nuraisyah",
+      requestingPanelId: createdPanels[3]._id,
+      owningPanelId: createdPanels[2]._id,
+      status: "PENDING",
+      reason:
+        "Demo pending request to review Siti Nuraisyah's previous Proposal Defense before the current Pre-Viva session.",
+    });
+
+    await createPermissionDemo({
+      studentEmail: "chong@student.uthm.edu.my",
+      historicalSessionTitle: "Progress Assessment 2 - Chong Wei Ming",
+      currentSessionTitle: "Pre-Viva - Chong Wei Ming",
+      requestingPanelId: createdPanels[0]._id,
+      owningPanelId: createdPanels[2]._id,
+      status: "APPROVED",
+      reason:
+        "Demo approved request to review Chong Wei Ming's previous Progress Assessment before the current Pre-Viva session.",
+    });
     console.log("\n🧪 DEMO ACCOUNTS");
     console.log("Admin: admin_samihah / registration code: demo");
     console.log("Student Ali: AW240001 / code: demo");
