@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import api from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
+import { openAuthenticatedFile } from "../../utils/authenticatedFile";
 
 export default function HistoricalFeedbackPage() {
   const { user } = useAuth();
@@ -71,6 +72,18 @@ export default function HistoricalFeedbackPage() {
   };
 
   const getId = (value) => (typeof value === "object" ? value?._id : value);
+
+  const handleOpenMaterial = async (document) => {
+    try {
+      await openAuthenticatedFile(document);
+    } catch (error) {
+      alert(
+        error.response?.data?.message ||
+          error.response?.data?.error ||
+          "Failed to open material.",
+      );
+    }
+  };
 
   const getPersonName = (value, fallback = "-") => {
     if (!value) return fallback;
@@ -655,9 +668,14 @@ export default function HistoricalFeedbackPage() {
                 ) : (
                   <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
                     {(getSession(selectedEvaluation)?.studentDocuments || []).map((doc) => (
-                      <a key={doc._id || doc.url} href={doc.url} target="_blank" rel="noreferrer" className="block p-3 bg-white rounded-lg border text-sm font-bold text-blue-700 hover:underline">
+                      <button
+                        key={doc._id || doc.url}
+                        type="button"
+                        onClick={() => handleOpenMaterial(doc)}
+                        className="block w-full text-left p-3 bg-white rounded-lg border text-sm font-bold text-blue-700 hover:underline"
+                      >
                         {doc.title} <span className="text-blue-400">• {doc.type || "material"}</span>
-                      </a>
+                      </button>
                     ))}
                   </div>
                 )}

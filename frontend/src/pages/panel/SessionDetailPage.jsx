@@ -1025,15 +1025,14 @@ export default function SessionDetailPage() {
                             </p>
 
                             {ev.sessionId.studentDocuments.map((doc) => (
-                              <a
+                              <button
+                                type="button"
                                 key={doc._id}
-                                href={doc.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="block text-sm text-indigo-300 hover:text-indigo-200 hover:underline"
+                                onClick={() => handleMaterialOpen(doc)}
+                                className="block text-left text-sm text-indigo-300 hover:text-indigo-200 hover:underline"
                               >
                                 {doc.title || "Student material"}
-                              </a>
+                              </button>
                             ))}
                           </div>
                         ) : (
