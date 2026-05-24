@@ -74,6 +74,7 @@ export default function TimetableManagementPage() {
   const [rubrics, setRubrics] = useState([]);
   const [batches, setBatches] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [sessionScope, setSessionScope] = useState("all");
   const [batchSearch, setBatchSearch] = useState("");
   const [bulkStudentSearch, setBulkStudentSearch] = useState("");
 
@@ -752,9 +753,26 @@ export default function TimetableManagementPage() {
     }
   };
 
+  const currentUserId = idOf(user?.id || user?._id);
+  const isMyAssignedSession = (session) =>
+    (session.panels || []).some((panel) => idOf(panel) === currentUserId);
+
+  const visibleSessions = useMemo(
+    () =>
+      isAdmin && sessionScope === "mine"
+        ? sessions.filter(isMyAssignedSession)
+        : sessions,
+    [currentUserId, isAdmin, sessionScope, sessions],
+  );
+
+  const myAssignedSessionCount = useMemo(
+    () => sessions.filter(isMyAssignedSession).length,
+    [currentUserId, sessions],
+  );
+
   const filteredSessions = useMemo(() => {
     const term = searchTerm.toLowerCase().trim();
-    return sessions.filter((session) => {
+    return visibleSessions.filter((session) => {
       if (!term) return true;
       const student = getStudent(session);
       return [
@@ -772,7 +790,7 @@ export default function TimetableManagementPage() {
         .toLowerCase()
         .includes(term);
     });
-  }, [sessions, searchTerm]);
+  }, [visibleSessions, searchTerm]);
 
   const formatLink = (url) => {
     if (!url) return "#";
@@ -803,9 +821,29 @@ export default function TimetableManagementPage() {
 
       {activeTab === "list" && (
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="p-4 bg-gray-50 border-b flex items-center relative">
-            <Search className="w-5 h-5 text-gray-400 absolute ml-3" />
-            <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-lg" placeholder="Search student, batch, session, date, panel..." />
+          <div className="p-4 bg-gray-50 border-b flex flex-col lg:flex-row lg:items-center gap-3">
+            {isAdmin && (
+              <div className="flex bg-white border border-gray-200 rounded-lg p-1 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setSessionScope("all")}
+                  className={`px-3 py-2 rounded-md text-xs font-bold ${sessionScope === "all" ? "bg-indigo-600 text-white" : "text-gray-600 hover:bg-gray-100"}`}
+                >
+                  All Sessions ({sessions.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSessionScope("mine")}
+                  className={`px-3 py-2 rounded-md text-xs font-bold ${sessionScope === "mine" ? "bg-indigo-600 text-white" : "text-gray-600 hover:bg-gray-100"}`}
+                >
+                  My Assigned ({myAssignedSessionCount})
+                </button>
+              </div>
+            )}
+            <div className="relative flex-1">
+              <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-lg" placeholder="Search student, batch, session, date, panel..." />
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-left min-w-[900px]">

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useMemo, useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   Calendar,
@@ -24,6 +24,15 @@ import {
   getDocumentFileName,
   openAuthenticatedFile,
 } from "../../utils/authenticatedFile";
+
+const getFinalRecommendation = (average) => {
+  if (!Number.isFinite(average)) return "Pending";
+  if (average >= 90) return "Pass without amendment";
+  if (average >= 80) return "Pass with minor amendment";
+  if (average >= 65) return "Pass with major amendment";
+  if (average >= 50) return "Re-evaluation required";
+  return "Fail";
+};
 
 export default function SessionDetailPage() {
   const { id } = useParams();
@@ -206,6 +215,53 @@ export default function SessionDetailPage() {
     if (score >= 65) return "text-yellow-700 bg-yellow-100";
     return "text-red-700 bg-red-100";
   };
+
+  const sessionFinalResult = useMemo(() => {
+    const scoredEvaluations = evaluations.filter(
+      (evaluation) =>
+        evaluation.status === "COMPLETED" &&
+        evaluation.sessionType !== "PROGRESS_ASSESSMENT" &&
+        Number.isFinite(Number(evaluation.totalMarks)),
+    );
+
+    const expectedPanelCount = Math.max(
+      evaluations.length || 0,
+      session?.panels?.length || 0,
+      2,
+    );
+
+    if (!scoredEvaluations.length) {
+      return {
+        isScoredSession: evaluations.some(
+          (evaluation) => evaluation.sessionType !== "PROGRESS_ASSESSMENT",
+        ),
+        completedCount: 0,
+        expectedPanelCount,
+        isFinal: false,
+        average: null,
+        recommendation: "Pending panel submissions",
+      };
+    }
+
+    const average =
+      scoredEvaluations.reduce(
+        (sum, evaluation) => sum + Number(evaluation.totalMarks || 0),
+        0,
+      ) / scoredEvaluations.length;
+
+    const isFinal = scoredEvaluations.length >= expectedPanelCount;
+
+    return {
+      isScoredSession: true,
+      completedCount: scoredEvaluations.length,
+      expectedPanelCount,
+      isFinal,
+      average,
+      recommendation: isFinal
+        ? getFinalRecommendation(average)
+        : "Pending panel submissions",
+    };
+  }, [evaluations, session?.panels]);
 
   const toggleAttendance = async () => {
     if (attendanceActive) {
@@ -921,6 +977,43 @@ export default function SessionDetailPage() {
             </div>
           ) : (
             <div className="divide-y divide-gray-100">
+              {sessionFinalResult.isScoredSession && (
+                <div className="p-5 bg-indigo-50 border-b border-indigo-100 grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <p className="text-xs font-bold text-indigo-500 uppercase tracking-widest">
+                      Panel Marks
+                    </p>
+                    <p className="text-lg font-black text-indigo-950">
+                      {sessionFinalResult.completedCount}/
+                      {sessionFinalResult.expectedPanelCount} completed
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-indigo-500 uppercase tracking-widest">
+                      Final Average
+                    </p>
+                    <p
+                      className={`text-2xl font-black ${
+                        sessionFinalResult.isFinal
+                          ? "text-indigo-700"
+                          : "text-gray-500"
+                      }`}
+                    >
+                      {sessionFinalResult.isFinal
+                        ? `${sessionFinalResult.average.toFixed(2)}%`
+                        : "Pending"}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-bold text-indigo-500 uppercase tracking-widest">
+                      Recommendation
+                    </p>
+                    <p className="text-sm font-black text-gray-900">
+                      {sessionFinalResult.recommendation}
+                    </p>
+                  </div>
+                </div>
+              )}
               {evaluations.map((ev) => (
                 <div
                   key={ev._id}
@@ -940,7 +1033,7 @@ export default function SessionDetailPage() {
                       <>
                         <div className="text-right">
                           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
-                            Final Score
+                            Panel Score
                           </p>
                           <p
                             className={`px-4 py-1.5 rounded font-black border shadow-sm ${getScoreColor(ev.totalMarks)}`}
