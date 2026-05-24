@@ -100,15 +100,16 @@ router.patch("/me/research-abstract", async (req, res) => {
   }
 });
 
-// Student: get own profile with supervisor populated
+// Current user profile with role-specific fields.
 router.get("/me/profile", async (req, res) => {
   try {
     const user = await User.findById(req.user.id)
       .select(
-        "name userId email role matricNumber program researchTitle researchAbstract supervisorId assignedPanels zkpRegistered",
+        "name userId email role matricNumber program yearOfStudy profession researchTitle researchAbstract supervisorId assignedPanels assignedStudents expertiseTags authenticatedDevices zkpRegistered createdAt updatedAt",
       )
       .populate("supervisorId", "name userId email")
-      .populate("assignedPanels.panelId", "name userId email");
+      .populate("assignedPanels.panelId", "name userId email")
+      .populate("assignedStudents", "name userId email matricNumber researchTitle");
 
     if (!user) {
       return res.status(404).json({

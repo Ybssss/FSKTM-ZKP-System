@@ -9,6 +9,9 @@ import {
   GraduationCap,
   Users,
   CheckCircle2,
+  Briefcase,
+  CalendarDays,
+  Smartphone,
   Edit3,
   Save,
   X,
@@ -16,6 +19,16 @@ import {
 
 const normalizeText = (value = "") =>
   String(value).normalize("NFKC").replace(/\s+/g, " ").trim();
+
+const formatDateTime = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("en-MY", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+};
 
 export default function StudentProfile() {
   const { user } = useAuth();
@@ -103,6 +116,17 @@ export default function StudentProfile() {
         .map((assignment) => assignment.panelId || assignment)
         .filter(Boolean)
     : [];
+  const isStaffProfile = ["admin", "panel"].includes(displayUser.role);
+  const expertiseTags = Array.isArray(displayUser.expertiseTags)
+    ? displayUser.expertiseTags.filter(Boolean)
+    : [];
+  const assignedStudents = Array.isArray(displayUser.assignedStudents)
+    ? displayUser.assignedStudents
+    : [];
+  const activeDevices = Array.isArray(displayUser.authenticatedDevices)
+    ? displayUser.authenticatedDevices.filter((device) => device.isActive !== false)
+    : [];
+  const trustedDeviceCount = activeDevices.filter((device) => device.trusted).length;
 
   const cancelResearchEdit = () => {
     setResearchTitle(displayUser.researchTitle || "");
@@ -204,7 +228,9 @@ export default function StudentProfile() {
           <User className="w-8 h-8 text-indigo-600" /> My Profile
         </h1>
         <p className="text-gray-600 mt-2">
-          View your personal details and update your research information.
+          {displayUser.role === "student"
+            ? "View your personal details and update your research information."
+            : "View your staff identity, expertise profile, and account security status."}
         </p>
       </div>
 
@@ -425,6 +451,124 @@ export default function StudentProfile() {
                       No default panels assigned yet.
                     </p>
                   )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {isStaffProfile && (
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-6 border-b pb-3">
+                <Briefcase className="w-5 h-5 text-indigo-600" />
+                Staff Profile
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">
+                    Staff ID
+                  </p>
+                  <p className="font-mono font-bold text-gray-900 break-all">
+                    {displayUser.userId || "-"}
+                  </p>
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">
+                    Position / Profession
+                  </p>
+                  <p className="font-semibold text-gray-900">
+                    {displayUser.profession || "-"}
+                  </p>
+                </div>
+
+                <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 sm:col-span-2">
+                  <p className="text-xs font-bold text-indigo-800 uppercase tracking-widest mb-2 flex items-center gap-2">
+                    <BookOpen className="w-4 h-4" /> Expertise Tags
+                  </p>
+                  {expertiseTags.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {expertiseTags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="px-2.5 py-1 bg-white text-indigo-700 text-xs font-bold rounded border border-indigo-200"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm font-semibold text-gray-500">
+                      No expertise tags saved yet.
+                    </p>
+                  )}
+                </div>
+
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                  <p className="text-xs font-bold text-blue-800 uppercase tracking-widest mb-2 flex items-center gap-2">
+                    <Users className="w-4 h-4" /> Assigned Students
+                  </p>
+                  <p className="text-2xl font-black text-gray-900">
+                    {assignedStudents.length}
+                  </p>
+                  {assignedStudents.length > 0 && (
+                    <div className="mt-3 space-y-1">
+                      {assignedStudents.slice(0, 4).map((student) => (
+                        <p
+                          key={student._id || student.userId}
+                          className="text-sm font-semibold text-gray-700 truncate"
+                        >
+                          {student.name || student.userId}
+                        </p>
+                      ))}
+                      {assignedStudents.length > 4 && (
+                        <p className="text-xs font-bold text-blue-700">
+                          +{assignedStudents.length - 4} more
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-green-50 p-4 rounded-lg border border-green-100">
+                  <p className="text-xs font-bold text-green-800 uppercase tracking-widest mb-2 flex items-center gap-2">
+                    <Smartphone className="w-4 h-4" /> Active Devices
+                  </p>
+                  <p className="text-2xl font-black text-gray-900">
+                    {activeDevices.length}
+                  </p>
+                  <p className="text-xs font-semibold text-gray-600 mt-1">
+                    {trustedDeviceCount} trusted device(s)
+                  </p>
+                  {activeDevices.slice(0, 3).map((device) => (
+                    <p
+                      key={device.deviceId || device.createdAt}
+                      className="text-xs text-gray-600 mt-2 truncate"
+                    >
+                      {device.deviceName || "Unknown device"} ·{" "}
+                      {formatDateTime(device.lastLogin)}
+                    </p>
+                  ))}
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 sm:col-span-2">
+                  <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-2 flex items-center gap-2">
+                    <CalendarDays className="w-4 h-4" /> Account Timeline
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-500 font-bold">Created</p>
+                      <p className="font-semibold text-gray-900">
+                        {formatDateTime(displayUser.createdAt)}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500 font-bold">Last Updated</p>
+                      <p className="font-semibold text-gray-900">
+                        {formatDateTime(displayUser.updatedAt)}
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
