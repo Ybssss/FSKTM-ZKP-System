@@ -140,18 +140,38 @@ exports.submitEvaluation = async (req, res) => {
       });
     }
 
-    // Update with the submitted data based on session type
-    // 2. Update with the submitted data
-    if (evaluation.sessionType === "PROGRESS_ASSESSMENT") {
-      evaluation.summaryOfProgress = req.body.summaryOfProgress;
-      evaluation.commentsForImprovement = req.body.commentsForImprovement;
-      evaluation.overallSuggestions = req.body.overallSuggestions;
-    } else {
+    await evaluation.populate("rubricId", "criteria");
+    const criteria = evaluation.rubricId?.criteria || [];
+    const quantitativeCriteria = criteria.filter(
+      (criterion) => criterion.type === "quantitative",
+    );
+    const qualitativeCriteria = criteria.filter(
+      (criterion) => criterion.type === "qualitative",
+    );
+    const qualitativeFeedback = req.body.qualitativeFeedback || {};
+
+    if (quantitativeCriteria.length) {
       evaluation.scores = req.body.scores;
-      evaluation.qualitativeFeedback = req.body.qualitativeFeedback;
       evaluation.totalMarks = req.body.totalMarks;
-      evaluation.overallComments = req.body.overallComments;
     }
+
+    evaluation.qualitativeFeedback = qualitativeFeedback;
+    evaluation.overallComments = req.body.overallComments;
+    evaluation.summaryOfProgress =
+      req.body.summaryOfProgress ||
+      qualitativeFeedback.prog_1_summary ||
+      qualitativeFeedback[qualitativeCriteria[0]?.key] ||
+      "";
+    evaluation.commentsForImprovement =
+      req.body.commentsForImprovement ||
+      qualitativeFeedback.prog_2_improve ||
+      qualitativeFeedback[qualitativeCriteria[1]?.key] ||
+      "";
+    evaluation.overallSuggestions =
+      req.body.overallSuggestions ||
+      qualitativeFeedback.prog_3_suggest ||
+      qualitativeFeedback[qualitativeCriteria[2]?.key] ||
+      "";
 
     // Mark as COMPLETED
     evaluation.status = "COMPLETED";

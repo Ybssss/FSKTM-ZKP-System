@@ -294,6 +294,7 @@ export default function TimetableManagementPage() {
     }
     const p1 = assigned[0]?.panelId?._id || assigned[0]?.panelId || assigned[0];
     const p2 = assigned[1]?.panelId?._id || assigned[1]?.panelId || assigned[1];
+    const selectedRubric = rubrics.find((r) => r._id === bulkConfig.rubricId);
 
     if (selectedStudentIds.includes(studentId)) {
       setSelectedStudentIds((prev) => prev.filter((id) => id !== studentId));
@@ -307,7 +308,7 @@ export default function TimetableManagementPage() {
       studentId,
       studentName: student.name,
       matricNumber: student.matricNumber || student.userId || "-",
-      title: `Proposal Defense - ${student.name}`,
+      title: `${selectedRubric?.name || "Session"} - ${student.name}`,
       panel1Id: idOf(p1),
       panel2Id: idOf(p2),
       panel1Name: nameOf(assigned[0]?.panelId || assigned[0]),

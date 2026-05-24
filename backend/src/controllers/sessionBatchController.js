@@ -1,5 +1,7 @@
 const SessionBatch = require("../models/SessionBatch");
 const Timetable = require("../models/Timetable");
+const Rubric = require("../models/Rubric");
+const { toSessionTypeCode } = require("../utils/sessionType");
 
 const cleanText = (value = "", max = 500) =>
   String(value)
@@ -9,11 +11,29 @@ const cleanText = (value = "", max = 500) =>
     .trim()
     .slice(0, max);
 
-const allowedSessionTypes = [
-  "PROPOSAL_DEFENSE",
-  "PROGRESS_ASSESSMENT",
-  "PRE_VIVA",
-];
+const makeHttpError = (message, statusCode = 400) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+};
+
+const resolveRubricSessionType = async ({ sessionType, rubricId }) => {
+  if (rubricId) {
+    const rubric = await Rubric.findById(rubricId).select("sessionType");
+    if (!rubric) throw makeHttpError("Selected rubric was not found.");
+    return rubric.sessionType;
+  }
+
+  const resolved = toSessionTypeCode(sessionType);
+  if (!resolved) throw makeHttpError("Invalid session type.");
+
+  const rubricExists = await Rubric.exists({ sessionType: resolved });
+  if (!rubricExists) {
+    throw makeHttpError("Session type must match an existing rubric.");
+  }
+
+  return resolved;
+};
 
 const normalizeDateOnly = (value) => {
   if (!value) return "";
@@ -48,7 +68,7 @@ exports.createBatch = async (req, res) => {
     if (
       !batchName ||
       !batchId ||
-      !sessionType ||
+      (!sessionType && !rubricId) ||
       !date ||
       !startTime ||
       !googleMeetLink
@@ -60,12 +80,10 @@ exports.createBatch = async (req, res) => {
       });
     }
 
-    if (!allowedSessionTypes.includes(sessionType)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid session type.",
-      });
-    }
+    const resolvedSessionType = await resolveRubricSessionType({
+      sessionType,
+      rubricId,
+    });
 
     const batch = await SessionBatch.create({
       batchName: cleanText(batchName, 100),
@@ -75,7 +93,7 @@ exports.createBatch = async (req, res) => {
         scheduleTitle || "Postgraduate Progress Presentation Schedule",
         150,
       ),
-      sessionType,
+      sessionType: resolvedSessionType,
       rubricId: rubricId || null,
       date: normalizeDateOnly(date),
       startTime: cleanText(startTime, 20),
@@ -95,7 +113,7 @@ exports.createBatch = async (req, res) => {
       });
     }
 
-    res.status(500).json({
+    res.status(error.statusCode || 500).json({
       success: false,
       message: "Failed to create batch.",
       error: error.message,
@@ -192,10 +210,11 @@ exports.updateBatch = async (req, res) => {
       updates.startTime = cleanText(updates.startTime, 20);
     if (updates.date !== undefined) updates.date = normalizeDateOnly(updates.date);
 
-    if (updates.sessionType && !allowedSessionTypes.includes(updates.sessionType)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid session type.",
+    if (updates.sessionType !== undefined || updates.rubricId !== undefined) {
+      updates.sessionType = await resolveRubricSessionType({
+        sessionType: updates.sessionType || oldBatch.sessionType,
+        rubricId:
+          updates.rubricId !== undefined ? updates.rubricId : oldBatch.rubricId,
       });
     }
 
@@ -257,7 +276,7 @@ exports.updateBatch = async (req, res) => {
           : "Batch updated.",
     });
   } catch (error) {
-    res.status(500).json({
+    res.status(error.statusCode || 500).json({
       success: false,
       message: "Failed to update batch.",
       error: error.message,

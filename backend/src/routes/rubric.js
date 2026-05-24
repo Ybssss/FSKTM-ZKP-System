@@ -3,6 +3,7 @@ const express = require("express");
 const router = express.Router();
 const { authenticateToken } = require("../middleware/auth");
 const Rubric = require("../models/Rubric");
+const { toSessionTypeCode } = require("../utils/sessionType");
 const cleanText = (value = "", max = 1000) =>
   String(value)
     .normalize("NFKC")
@@ -11,18 +12,17 @@ const cleanText = (value = "", max = 1000) =>
     .trim()
     .slice(0, max);
 
-const allowedSessionTypes = [
-  "PROPOSAL_DEFENSE",
-  "PROGRESS_ASSESSMENT",
-  "PRE_VIVA",
-];
-
 const allowedCriterionTypes = ["quantitative", "qualitative"];
 
 const buildRubricPayload = (body) => {
-  const sessionType = cleanText(body.sessionType, 50);
+  const name = cleanText(body.name, 150);
+  const sessionType = toSessionTypeCode(body.sessionType || name);
 
-  if (!allowedSessionTypes.includes(sessionType)) {
+  if (!name) {
+    throw new Error("Rubric name is required.");
+  }
+
+  if (!sessionType) {
     throw new Error("Invalid rubric session type.");
   }
 
@@ -45,7 +45,7 @@ const buildRubricPayload = (body) => {
     : [];
 
   return {
-    name: cleanText(body.name, 150),
+    name,
     sessionType,
     criteria,
   };
@@ -130,7 +130,15 @@ router.post("/", async (req, res) => {
     });
   } catch (error) {
     console.error("Create rubric error:", error);
-    res.status(500).json({
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: "A rubric with this session type already exists.",
+        error: error.message,
+      });
+    }
+
+    res.status(error.message?.includes("required") || error.message?.includes("Invalid") ? 400 : 500).json({
       success: false,
       message: "Error creating rubric",
       error: error.message,
@@ -179,7 +187,15 @@ router.put("/:id", async (req, res) => {
     });
   } catch (error) {
     console.error("Update rubric error:", error);
-    res.status(500).json({
+    if (error.code === 11000) {
+      return res.status(409).json({
+        success: false,
+        message: "A rubric with this session type already exists.",
+        error: error.message,
+      });
+    }
+
+    res.status(error.message?.includes("required") || error.message?.includes("Invalid") ? 400 : 500).json({
       success: false,
       message: "Error updating rubric",
       error: error.message,

@@ -3,6 +3,8 @@ const Timetable = require("../models/Timetable");
 const User = require("../models/User");
 const Evaluation = require("../models/Evaluation");
 const SessionBatch = require("../models/SessionBatch");
+const Rubric = require("../models/Rubric");
+const { toSessionTypeCode } = require("../utils/sessionType");
 
 let fileStorage = {};
 try {
@@ -24,12 +26,6 @@ const {
   streamDocumentFile: streamLegacyFile,
 } = fileStorage;
 
-const allowedSessionTypes = [
-  "PROPOSAL_DEFENSE",
-  "PROGRESS_ASSESSMENT",
-  "PRE_VIVA",
-];
-
 const DEFAULT_BREAK_MINUTES = 5;
 const PANEL_REPLACEMENT_MIN_DAYS = 7;
 
@@ -42,6 +38,30 @@ const cleanText = (value = "", max = 500) =>
     .slice(0, max);
 
 const cleanArray = (value) => (Array.isArray(value) ? value.filter(Boolean) : []);
+
+const makeHttpError = (message, statusCode = 400) => {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+};
+
+const resolveRubricSessionType = async ({ sessionType, rubricId }) => {
+  if (rubricId) {
+    const rubric = await Rubric.findById(rubricId).select("sessionType");
+    if (!rubric) throw makeHttpError("Selected rubric was not found.");
+    return rubric.sessionType;
+  }
+
+  const resolved = toSessionTypeCode(sessionType);
+  if (!resolved) throw makeHttpError("Invalid session type.");
+
+  const rubricExists = await Rubric.exists({ sessionType: resolved });
+  if (!rubricExists) {
+    throw makeHttpError("Session type must match an existing rubric.");
+  }
+
+  return resolved;
+};
 
 const normalizeDateOnly = (value) => {
   if (!value) return "";
@@ -288,9 +308,11 @@ const buildPendingEvaluations = (timetable, payload, semester) => {
   }));
 };
 
-const buildPayload = (body, userId) => {
-  const sessionType = cleanText(body.sessionType, 50);
-  if (!allowedSessionTypes.includes(sessionType)) throw new Error("Invalid session type.");
+const buildPayload = async (body, userId) => {
+  const sessionType = await resolveRubricSessionType({
+    sessionType: body.sessionType,
+    rubricId: body.rubricId,
+  });
   const startTime = cleanText(body.startTime || body.time, 20);
   const endTime = buildSessionEndTime({
     startTime,
@@ -345,7 +367,7 @@ exports.createTimetable = async (req, res) => {
       return res.status(403).json({ success: false, message: "Unauthorized" });
     }
 
-    const payload = buildPayload(req.body, req.user.id);
+    const payload = await buildPayload(req.body, req.user.id);
     const validationItem = buildValidationItems([
       {
         ...payload,
@@ -465,7 +487,12 @@ exports.createBulkTimetables = async (req, res) => {
       DEFAULT_BREAK_MINUTES,
     );
 
-    const payloads = sessions.map((s, index) => {
+    const payloads = await Promise.all(sessions.map(async (s, index) => {
+      const rubricId = s.rubricId || req.body.rubricId || selectedBatch?.rubricId || null;
+      const sessionType = await resolveRubricSessionType({
+        sessionType: s.sessionType || req.body.sessionType || selectedBatch?.sessionType,
+        rubricId,
+      });
       const rowStart = cleanText(s.time || s.startTime, 20) ||
         formatMinutesToTime(parseTimeToMinutes(effectiveStartTime) + index * (effectiveSlotDuration + effectiveBreak));
       const rowEnd = buildSessionEndTime({
@@ -475,9 +502,9 @@ exports.createBulkTimetables = async (req, res) => {
       });
       const titleStudent = s.studentName ? ` - ${cleanText(s.studentName, 80)}` : "";
       return {
-        sessionType: cleanText(s.sessionType || req.body.sessionType || "PROPOSAL_DEFENSE", 50),
-        rubricId: s.rubricId || req.body.rubricId || selectedBatch?.rubricId || null,
-        title: cleanText(s.title || `${(s.sessionType || "PROPOSAL_DEFENSE").replaceAll("_", " ")}${titleStudent}`, 150),
+        sessionType,
+        rubricId,
+        title: cleanText(s.title || `${sessionType.replaceAll("_", " ")}${titleStudent}`, 150),
         date: normalizeDateOnly(s.date || effectiveDate),
         startTime: rowStart,
         endTime: rowEnd,
@@ -494,7 +521,7 @@ exports.createBulkTimetables = async (req, res) => {
         slotDurationMinutes: effectiveSlotDuration,
         breakBetweenSlotsMinutes: effectiveBreak,
       };
-    });
+    }));
 
     const validationItems = buildValidationItems(
       payloads.map((p) => ({ ...p, studentId: p.students[0], panelIds: p.panels })),
@@ -549,6 +576,13 @@ exports.updateTimetable = async (req, res) => {
     }
     if (req.body.endTime !== undefined) updates.endTime = cleanText(req.body.endTime, 20);
     if (nextPanels.length) updates.panels = nextPanels;
+    if (updates.sessionType !== undefined || updates.rubricId !== undefined) {
+      updates.sessionType = await resolveRubricSessionType({
+        sessionType: updates.sessionType || existing.sessionType,
+        rubricId:
+          updates.rubricId !== undefined ? updates.rubricId : existing.rubricId,
+      });
+    }
 
     const nextPayload = {
       ...existing.toObject(),

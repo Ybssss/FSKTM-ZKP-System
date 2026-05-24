@@ -35,9 +35,12 @@ const rubricSchema = new mongoose.Schema(
     name: { type: String, required: true },
     sessionType: {
       type: String,
-      enum: ["PROPOSAL_DEFENSE", "PRE_VIVA", "PROGRESS_ASSESSMENT"],
       required: true,
       unique: true,
+      trim: true,
+      uppercase: true,
+      maxlength: 50,
+      match: /^[A-Z0-9_]+$/,
     },
     criteria: [criterionSchema],
   },

@@ -7,10 +7,20 @@ import {
   X,
   Settings,
   FileText,
-  CheckCircle2,
 } from "lucide-react";
 import api from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
+
+const toSessionTypeCode = (value = "") =>
+  String(value)
+    .normalize("NFKC")
+    .replace(/'/g, "")
+    .replace(/[^A-Za-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toUpperCase()
+    .slice(0, 50);
+
+const formatSessionType = (value = "") => String(value).replaceAll("_", " ");
 
 export default function RubricPage() {
   const { user } = useAuth();
@@ -96,10 +106,6 @@ export default function RubricPage() {
       alert("Please enter a rubric name");
       return false;
     }
-    if (!formData.sessionType) {
-      alert("Please select a session type");
-      return false;
-    }
     if (formData.criteria.length === 0) {
       alert("Please add at least one criterion");
       return false;
@@ -135,11 +141,17 @@ export default function RubricPage() {
 
     try {
       setIsSubmitting(true);
+      const payload = {
+        ...formData,
+        sessionType:
+          editingRubric?.sessionType || toSessionTypeCode(formData.name),
+      };
+
       if (editingRubric) {
-        await api.put(`/rubrics/${editingRubric._id}`, formData);
+        await api.put(`/rubrics/${editingRubric._id}`, payload);
         alert("Rubric updated successfully!");
       } else {
-        await api.post("/rubrics", formData);
+        await api.post("/rubrics", payload);
         alert("Rubric created successfully!");
       }
 
@@ -250,7 +262,7 @@ export default function RubricPage() {
                           {rubric.name}
                         </h3>
                         <span className="px-3 py-1 bg-indigo-50 border border-indigo-100 text-indigo-800 text-xs font-bold uppercase rounded-full">
-                          {rubric.sessionType?.replace("_", " ")}
+                          {formatSessionType(rubric.sessionType || rubric.name)}
                         </span>
                       </div>
 
@@ -329,7 +341,7 @@ export default function RubricPage() {
                 onSubmit={handleSubmit}
                 className="space-y-8"
               >
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
+                <div className="bg-white p-6 rounded-xl border border-gray-200 shadow-sm">
                   <div>
                     <label className="block text-sm font-bold text-gray-700 mb-2">
                       Rubric Name *
@@ -344,29 +356,6 @@ export default function RubricPage() {
                       placeholder="e.g., Pre-Viva Final Evaluation"
                       required
                     />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-2">
-                      Linked Session Type *
-                    </label>
-                    <select
-                      value={formData.sessionType}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          sessionType: e.target.value,
-                        })
-                      }
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 bg-white"
-                      required
-                    >
-                      <option value="">-- Select --</option>
-                      <option value="PROPOSAL_DEFENSE">Proposal Defense</option>
-                      <option value="PRE_VIVA">Pre-Viva Voce</option>
-                      <option value="PROGRESS_ASSESSMENT">
-                        Progress Assessment
-                      </option>
-                    </select>
                   </div>
                 </div>
 
@@ -633,15 +622,15 @@ export default function RubricPage() {
       )}
 
       {showViewModal && viewingRubric && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-y-auto flex flex-col">
-            <div className="sticky top-0 bg-white border-b border-gray-200 px-8 py-5 flex items-center justify-between z-10 rounded-t-xl">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm overflow-hidden">
+          <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full h-[90vh] overflow-hidden flex flex-col">
+            <div className="bg-white border-b border-gray-200 px-8 py-5 flex items-center justify-between z-10 rounded-t-xl flex-shrink-0">
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">
                   {viewingRubric.name}
                 </h2>
                 <span className="inline-block mt-2 px-3 py-1 bg-indigo-50 border border-indigo-100 text-indigo-800 text-xs font-bold uppercase rounded-full">
-                  {viewingRubric.sessionType?.replace("_", " ")}
+                  {formatSessionType(viewingRubric.sessionType || viewingRubric.name)}
                 </span>
               </div>
               <button
@@ -655,7 +644,7 @@ export default function RubricPage() {
               </button>
             </div>
 
-            <div className="p-8 bg-gray-50 flex-1">
+            <div className="p-8 bg-gray-50 flex-1 overflow-y-auto min-h-0">
               <div className="space-y-6">
                 {viewingRubric.criteria?.map((criterion, index) => (
                   <div
@@ -742,7 +731,7 @@ export default function RubricPage() {
               </div>
             </div>
 
-            <div className="px-8 py-5 border-t border-gray-200 flex justify-end bg-white rounded-b-xl sticky bottom-0">
+            <div className="px-8 py-5 border-t border-gray-200 flex justify-end bg-white rounded-b-xl flex-shrink-0">
               <button
                 onClick={() => {
                   setShowViewModal(false);

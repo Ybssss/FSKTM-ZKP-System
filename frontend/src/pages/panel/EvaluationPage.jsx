@@ -23,6 +23,20 @@ const SCALE = [
   { label: "Novice", value: 0 },
 ];
 
+const getCriteria = (evaluation) => evaluation?.rubricId?.criteria || [];
+const getQuantitativeCriteria = (evaluation) =>
+  getCriteria(evaluation).filter((c) => c.type === "quantitative");
+const getQualitativeCriteria = (evaluation) =>
+  getCriteria(evaluation).filter((c) => c.type === "qualitative");
+const hasQuantitativeCriteria = (evaluation) =>
+  getQuantitativeCriteria(evaluation).length > 0;
+
+const legacyProgressFeedback = (evaluation) => ({
+  prog_1_summary: evaluation?.summaryOfProgress || "",
+  prog_2_improve: evaluation?.commentsForImprovement || "",
+  prog_3_suggest: evaluation?.overallSuggestions || "",
+});
+
 export default function EvaluationPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -158,11 +172,7 @@ export default function EvaluationPage() {
   }, [urlId, evaluations]);
 
   const calculateTotalScore = () => {
-    if (!selectedEval?.rubricId?.criteria) return 0;
-
-    const quantitativeCriteria = selectedEval.rubricId.criteria.filter(
-      (c) => c.type === "quantitative",
-    );
+    const quantitativeCriteria = getQuantitativeCriteria(selectedEval);
     if (quantitativeCriteria.length === 0) return 0;
 
     let totalEarned = 0;
@@ -187,15 +197,11 @@ export default function EvaluationPage() {
     setIsSubmitting(true);
 
     try {
-      const isScored =
-        selectedEval.sessionType === "PROPOSAL_DEFENSE" ||
-        selectedEval.sessionType === "PRE_VIVA";
+      const quantitativeCriteria = getQuantitativeCriteria(selectedEval);
+      const qualitativeCriteria = getQualitativeCriteria(selectedEval);
+      const isScored = quantitativeCriteria.length > 0;
 
       if (isScored) {
-        const quantitativeCriteria =
-          selectedEval.rubricId?.criteria?.filter(
-            (c) => c.type === "quantitative",
-          ) || [];
         if (Object.keys(scores).length < quantitativeCriteria.length) {
           alert("Please provide a score for ALL criteria before submitting.");
           setIsSubmitting(false);
@@ -210,14 +216,26 @@ export default function EvaluationPage() {
 
       if (isScored) {
         payload.scores = scores;
-        payload.qualitativeFeedback = qualFeedback;
         payload.totalMarks = parseFloat(calculateTotalScore());
-        payload.overallComments = overallComments;
-      } else {
-        payload.summaryOfProgress = progressData.summaryOfProgress;
-        payload.commentsForImprovement = progressData.commentsForImprovement;
-        payload.overallSuggestions = progressData.overallSuggestions;
       }
+
+      payload.qualitativeFeedback = qualFeedback;
+      payload.overallComments = overallComments;
+      payload.summaryOfProgress =
+        progressData.summaryOfProgress ||
+        qualFeedback.prog_1_summary ||
+        qualFeedback[qualitativeCriteria[0]?.key] ||
+        "";
+      payload.commentsForImprovement =
+        progressData.commentsForImprovement ||
+        qualFeedback.prog_2_improve ||
+        qualFeedback[qualitativeCriteria[1]?.key] ||
+        "";
+      payload.overallSuggestions =
+        progressData.overallSuggestions ||
+        qualFeedback.prog_3_suggest ||
+        qualFeedback[qualitativeCriteria[2]?.key] ||
+        "";
 
       await api.post("/evaluations/submit", payload);
       alert("✅ Evaluation submitted successfully and is now LOCKED.");
@@ -245,17 +263,20 @@ export default function EvaluationPage() {
     }
 
     if (ev.status === "COMPLETED") {
-      if (ev.sessionType === "PROGRESS_ASSESSMENT") {
-        setProgressData({
-          summaryOfProgress: ev.summaryOfProgress || "",
-          commentsForImprovement: ev.commentsForImprovement || "",
-          overallSuggestions: ev.overallSuggestions || "",
-        });
-      } else {
-        setScores(ev.scores || {});
-        setQualFeedback(ev.qualitativeFeedback || {});
-        setOverallComments(ev.overallComments || "");
-      }
+      const savedQualFeedback =
+        ev.qualitativeFeedback && Object.keys(ev.qualitativeFeedback).length
+          ? ev.qualitativeFeedback
+          : legacyProgressFeedback(ev);
+
+      setScores(ev.scores || {});
+      setQualFeedback(savedQualFeedback);
+      setOverallComments(ev.overallComments || "");
+      setProgressData({
+        summaryOfProgress: ev.summaryOfProgress || savedQualFeedback.prog_1_summary || "",
+        commentsForImprovement:
+          ev.commentsForImprovement || savedQualFeedback.prog_2_improve || "",
+        overallSuggestions: ev.overallSuggestions || savedQualFeedback.prog_3_suggest || "",
+      });
     } else {
       const savedDraft = localStorage.getItem(`eval_draft_${ev._id}`);
       if (savedDraft) {
@@ -418,7 +439,7 @@ export default function EvaluationPage() {
                         </span>
                       </td>
                       <td className="p-4 text-center">
-                        {ev.sessionType === "PROGRESS_ASSESSMENT" ? (
+                        {!hasQuantitativeCriteria(ev) ? (
                           <span className="text-gray-400 text-xs italic">
                             Text Only
                           </span>
@@ -590,7 +611,7 @@ export default function EvaluationPage() {
                       </span>
                     </div>
                     {isLocked &&
-                      selectedEval.sessionType !== "PROGRESS_ASSESSMENT" && (
+                      hasQuantitativeCriteria(selectedEval) && (
                         <div className="text-right">
                           <p className="text-xs font-bold text-gray-500 uppercase mb-1">
                             Total Marks
@@ -616,76 +637,7 @@ export default function EvaluationPage() {
               )}
 
               <form id="evalForm" onSubmit={handleSubmit}>
-                {selectedEval.sessionType === "PROGRESS_ASSESSMENT" && (
-                  <div className="space-y-6">
-                    <div className="bg-white border border-gray-300 rounded-lg overflow-hidden shadow-sm">
-                      <div className="bg-gray-100 px-4 py-3 border-b border-gray-300">
-                        <span className="font-bold text-gray-800 uppercase text-sm tracking-widest">
-                          Section B: Progress Report
-                        </span>
-                      </div>
-                      <div className="p-6 space-y-6">
-                        <div>
-                          <label className="block text-sm font-bold text-gray-900 mb-2">
-                            Summary of Research Progress
-                          </label>
-                          <textarea
-                            required
-                            disabled={!canEdit}
-                            rows="4"
-                            className="w-full border border-gray-300 rounded-lg p-4 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-800"
-                            value={progressData.summaryOfProgress}
-                            onChange={(e) =>
-                              setProgressData({
-                                ...progressData,
-                                summaryOfProgress: e.target.value,
-                              })
-                            }
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-bold text-gray-900 mb-2">
-                            Comments for Improvement
-                          </label>
-                          <textarea
-                            required
-                            disabled={!canEdit}
-                            rows="4"
-                            className="w-full border border-gray-300 rounded-lg p-4 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-800"
-                            value={progressData.commentsForImprovement}
-                            onChange={(e) =>
-                              setProgressData({
-                                ...progressData,
-                                commentsForImprovement: e.target.value,
-                              })
-                            }
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-bold text-gray-900 mb-2">
-                            Overall Suggestions
-                          </label>
-                          <textarea
-                            required
-                            disabled={!canEdit}
-                            rows="4"
-                            className="w-full border border-gray-300 rounded-lg p-4 focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-50 disabled:text-gray-800"
-                            value={progressData.overallSuggestions}
-                            onChange={(e) =>
-                              setProgressData({
-                                ...progressData,
-                                overallSuggestions: e.target.value,
-                              })
-                            }
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {(selectedEval.sessionType === "PROPOSAL_DEFENSE" ||
-                  selectedEval.sessionType === "PRE_VIVA") && (
+                {selectedEval && (
                   <div>
                     {!selectedEval.rubricId ? (
                       <div className="p-8 text-center text-red-600 bg-red-50 rounded-lg border border-red-200">
@@ -705,9 +657,7 @@ export default function EvaluationPage() {
                         </div>
 
                         <div className="space-y-6 mb-8">
-                          {selectedEval.rubricId.criteria
-                            ?.filter((c) => c.type === "quantitative")
-                            .map((crit) => (
+                          {getQuantitativeCriteria(selectedEval).map((crit) => (
                               <div
                                 key={crit.key}
                                 className="border border-gray-300 bg-white rounded-b-lg overflow-hidden shadow-sm"
@@ -787,7 +737,7 @@ export default function EvaluationPage() {
                             ))}
                         </div>
 
-                        {canEdit && (
+                        {canEdit && hasQuantitativeCriteria(selectedEval) && (
                           <div className="bg-gradient-to-r from-gray-900 to-indigo-900 text-white p-6 rounded-xl flex justify-between items-center mb-8 shadow-xl">
                             <div>
                               <span className="block text-lg font-bold uppercase tracking-widest text-indigo-300">
@@ -803,6 +753,7 @@ export default function EvaluationPage() {
                           </div>
                         )}
 
+                        {getQualitativeCriteria(selectedEval).length > 0 && (
                         <div className="border border-gray-300 bg-white rounded-lg overflow-hidden shadow-sm mb-8">
                           <div className="bg-gray-100 px-5 py-3 border-b border-gray-300">
                             <span className="font-bold text-gray-800 uppercase text-sm tracking-widest">
@@ -810,9 +761,7 @@ export default function EvaluationPage() {
                             </span>
                           </div>
                           <div className="p-6 space-y-6 bg-gray-50">
-                            {selectedEval.rubricId.criteria
-                              ?.filter((c) => c.type === "qualitative")
-                              .map((crit) => (
+                            {getQualitativeCriteria(selectedEval).map((crit) => (
                                 <div
                                   key={crit.key}
                                   className="bg-white border border-gray-200 p-5 rounded-lg shadow-sm"
@@ -864,6 +813,7 @@ export default function EvaluationPage() {
                             </div>
                           </div>
                         </div>
+                        )}
                       </>
                     )}
                   </div>

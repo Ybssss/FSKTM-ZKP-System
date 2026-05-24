@@ -24,8 +24,9 @@ const sessionBatchSchema = new mongoose.Schema(
     },
     sessionType: {
       type: String,
-      enum: ["PROPOSAL_DEFENSE", "PROGRESS_ASSESSMENT", "PRE_VIVA"],
       required: true,
+      trim: true,
+      uppercase: true,
     },
     rubricId: {
       type: mongoose.Schema.Types.ObjectId,
