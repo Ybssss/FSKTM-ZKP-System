@@ -72,7 +72,6 @@ export default function TimetableManagementPage() {
   const [students, setStudents] = useState([]);
   const [panels, setPanels] = useState([]);
   const [rubrics, setRubrics] = useState([]);
-  const [evaluations, setEvaluations] = useState([]);
   const [batches, setBatches] = useState([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [batchSearch, setBatchSearch] = useState("");
@@ -126,9 +125,6 @@ export default function TimetableManagementPage() {
         }),
       );
 
-      const evRes = await api.get("/evaluations");
-      setEvaluations(evRes.data.data || evRes.data.evaluations || []);
-
       if (isAdmin) {
         const [usersRes, rubRes, batchRes] = await Promise.all([
           api.get("/users"),
@@ -145,7 +141,6 @@ export default function TimetableManagementPage() {
 
         return {
           sessions: fetchedSessions,
-          evaluations: evRes.data.data || evRes.data.evaluations || [],
           batches: batchRes.batches || [],
           rubrics: fetchedRubrics,
           users,
@@ -154,7 +149,6 @@ export default function TimetableManagementPage() {
 
       return {
         sessions: fetchedSessions,
-        evaluations: evRes.data.data || evRes.data.evaluations || [],
         batches,
         rubrics,
         users: [],
@@ -822,11 +816,6 @@ export default function TimetableManagementPage() {
                 {filteredSessions.map((session) => {
                   const sessionId = session._id || session.id;
                   const student = getStudent(session);
-                  const pendingEval = evaluations.find((ev) => {
-                    const evSessionId = ev.sessionId?._id || ev.sessionId;
-                    const evEvaluator = ev.evaluatorId?._id || ev.evaluatorId;
-                    return String(evSessionId) === String(sessionId) && String(evEvaluator) === String(user.id) && ev.status === "PENDING";
-                  });
                   return (
                     <tr key={sessionId} className="hover:bg-gray-50">
                       <td className="p-4"><p className="font-bold text-gray-900">{session.title || session.sessionType}</p><p className="text-xs text-gray-500">{session.batchName || session.batchId || "No batch"}</p></td>
@@ -834,7 +823,7 @@ export default function TimetableManagementPage() {
                       <td className="p-4"><p className="font-bold">{student?.name || "-"}</p><p className="text-xs text-gray-500">{student?.matricNumber || student?.userId || "-"}</p></td>
                       <td className="p-4 text-sm"><p>{nameOf(getPanel(session, 0))}</p><p>{nameOf(getPanel(session, 1))}</p></td>
                       <td className="p-4 text-right space-x-2">
-                        {isAdmin ? <button onClick={() => openEditSession(session)} className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold">Edit</button> : pendingEval ? <button onClick={() => navigate(`/panel/evaluation/${pendingEval._id}`)} className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold">Evaluate</button> : <button onClick={() => navigate(`/panel/sessions/${sessionId}`)} className="px-3 py-2 bg-gray-700 text-white rounded-lg text-sm font-bold">View</button>}
+                        {isAdmin ? <button onClick={() => openEditSession(session)} className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-sm font-bold">Edit</button> : <button onClick={() => navigate(`/panel/sessions/${sessionId}`)} className="px-3 py-2 bg-gray-700 text-white rounded-lg text-sm font-bold">View Session</button>}
                         {isAdmin && <button onClick={() => removeReviewRow({ type: "existing", sessionId })} className="px-3 py-2 bg-red-50 text-red-700 rounded-lg text-sm font-bold border border-red-200">Delete</button>}
                       </td>
                     </tr>

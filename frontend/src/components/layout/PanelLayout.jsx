@@ -41,7 +41,7 @@ export default function PanelLayout() {
     {
       to: "/panel/sessions",
       icon: Calendar,
-      label: "Timetable Management",
+      label: "Session Management",
       allowedRoles: ["admin", "panel", "coordinator"],
     },
     {

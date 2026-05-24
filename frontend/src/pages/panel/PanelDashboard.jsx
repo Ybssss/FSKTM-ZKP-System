@@ -30,7 +30,6 @@ export default function PanelDashboard() {
   const isAdmin = user?.role === "admin";
 
   const [sessions, setSessions] = useState([]);
-  const [evaluations, setEvaluations] = useState([]);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(() => dateKey(new Date()));
   const [loading, setLoading] = useState(true);
@@ -43,13 +42,6 @@ export default function PanelDashboard() {
       const sessionRes = await api.get(isAdmin ? "/timetables" : "/timetables/my");
       const loadedSessions = sessionRes.data?.timetables || sessionRes.data?.data || sessionRes.data?.sessions || [];
       setSessions(loadedSessions);
-
-      try {
-        const evRes = await api.get("/evaluations");
-        setEvaluations(evRes.data?.data || evRes.data?.evaluations || []);
-      } catch (_) {
-        setEvaluations([]);
-      }
     } catch (err) {
       console.error("Dashboard load error:", err);
       setError(err.response?.data?.message || err.message || "Failed to load dashboard.");
@@ -95,22 +87,8 @@ export default function PanelDashboard() {
     return cells;
   }, [calendarMonth]);
 
-  const pendingEvalForSession = (sessionId) =>
-    evaluations.find((ev) => {
-      const evSessionId = ev.sessionId?._id || ev.sessionId;
-      const evEvaluator = ev.evaluatorId?._id || ev.evaluatorId;
-      return String(evSessionId) === String(sessionId) && String(evEvaluator) === String(user?.id) && ev.status === "PENDING";
-    });
-
   const openSessionAction = (session) => {
     const sessionId = session._id || session.id;
-    if (!isAdmin) {
-      const pending = pendingEvalForSession(sessionId);
-      if (pending?._id) {
-        navigate(`/panel/evaluation/${pending._id}`);
-        return;
-      }
-    }
     navigate(`/panel/sessions/${sessionId}`);
   };
 
@@ -177,7 +155,6 @@ export default function PanelDashboard() {
             {selectedSessions.map((session) => {
               const student = getStudent(session);
               const sessionId = session._id || session.id;
-              const pending = pendingEvalForSession(sessionId);
               return (
                 <div key={sessionId} className="p-4 rounded-xl border border-gray-200 hover:border-indigo-300 hover:shadow-sm transition bg-white">
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -189,7 +166,7 @@ export default function PanelDashboard() {
                         <span className="px-2 py-1 bg-gray-100 rounded-full flex gap-1 items-center"><MapPin className="w-3 h-3" />{session.venue || session.googleMeetLink || "Online"}</span>
                       </div>
                     </div>
-                    <button onClick={() => openSessionAction(session)} className={`px-4 py-2 rounded-lg text-white font-bold text-sm ${pending ? "bg-indigo-600" : "bg-gray-700"}`}>{isAdmin ? "Manage" : pending ? "Evaluate" : "View"}</button>
+                    <button onClick={() => openSessionAction(session)} className="px-4 py-2 rounded-lg text-white font-bold text-sm bg-gray-700">{isAdmin ? "Manage" : "View"}</button>
                   </div>
                 </div>
               );
@@ -207,7 +184,6 @@ export default function PanelDashboard() {
           {upcomingSessions.slice(0, 6).map((session) => {
             const student = getStudent(session);
             const sessionId = session._id || session.id;
-            const pending = pendingEvalForSession(sessionId);
             return (
               <div key={sessionId} className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 hover:bg-gray-50">
                 <div>
@@ -217,7 +193,7 @@ export default function PanelDashboard() {
                     <span>{dateKey(session.date)}</span><span>{session.startTime || session.time}</span><span>{session.venue || session.googleMeetLink || "Online"}</span>
                   </div>
                 </div>
-                <button onClick={() => openSessionAction(session)} className={`px-4 py-2 rounded-lg text-white font-bold text-sm ${pending ? "bg-indigo-600" : "bg-gray-700"}`}>{isAdmin ? "Manage" : pending ? "Evaluate" : "View"}</button>
+                <button onClick={() => openSessionAction(session)} className="px-4 py-2 rounded-lg text-white font-bold text-sm bg-gray-700">{isAdmin ? "Manage" : "View"}</button>
               </div>
             );
           })}
