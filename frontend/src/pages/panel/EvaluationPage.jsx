@@ -676,14 +676,30 @@ export default function EvaluationPage() {
                 </div>
               </div>
 
-              {selectedEval.studentId?.researchTitle && (
-                <div className="mb-8 p-5 bg-indigo-50 border border-indigo-100 rounded-lg shadow-sm">
-                  <p className="text-xs font-bold text-indigo-800 uppercase tracking-widest mb-1">
-                    Research Title
-                  </p>
-                  <p className="font-bold text-gray-900 text-lg leading-snug">
-                    {selectedEval.studentId.researchTitle}
-                  </p>
+              {(selectedEval.studentId?.researchTitle ||
+                selectedEval.studentId?.researchAbstract) && (
+                <div className="mb-8 p-5 bg-indigo-50 border border-indigo-100 rounded-lg shadow-sm space-y-4">
+                  {selectedEval.studentId?.researchTitle && (
+                    <div>
+                      <p className="text-xs font-bold text-indigo-800 uppercase tracking-widest mb-1">
+                        Research Title
+                      </p>
+                      <p className="font-bold text-gray-900 text-lg leading-snug">
+                        {selectedEval.studentId.researchTitle}
+                      </p>
+                    </div>
+                  )}
+
+                  {selectedEval.studentId?.researchAbstract && (
+                    <div>
+                      <p className="text-xs font-bold text-indigo-800 uppercase tracking-widest mb-1">
+                        Abstract
+                      </p>
+                      <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-line">
+                        {selectedEval.studentId.researchAbstract}
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
 
