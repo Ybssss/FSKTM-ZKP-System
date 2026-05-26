@@ -206,6 +206,16 @@ export default function HistoricalFeedbackPage() {
     [myRequests, searchTerm],
   );
 
+  const getPermissionTargetId = (permission) =>
+    getId(permission?.targetEvaluationId);
+
+  const getRequestForEvaluation = (evaluationId) =>
+    myRequests.find(
+      (request) =>
+        String(getPermissionTargetId(request)) === String(getId(evaluationId)) &&
+        request.status !== "WITHDRAWN",
+    );
+
   const getScoreColor = (score) => {
     if (!score && score !== 0) return "text-gray-600 bg-gray-100";
     if (score >= 80) return "text-green-700 bg-green-100";
@@ -309,6 +319,25 @@ export default function HistoricalFeedbackPage() {
     const session = getSession(evaluation);
     const student = getStudent(evaluation);
     const rubric = getRubric(evaluation);
+    const request = locked ? getRequestForEvaluation(evaluation._id) : null;
+    const isPending = request?.status === "PENDING";
+    const isApproved = request?.status === "APPROVED";
+    const isRejected = request?.status === "REJECTED";
+
+    const handleLockedAction = () => {
+      if (isPending) return;
+      if (isApproved) {
+        setSelectedEvaluation(evaluation);
+        return;
+      }
+
+      setRequestModalData(evaluation);
+      setRequestReason(
+        isRejected
+          ? `Re-requesting access after previous rejection. Reason: ${request?.reason || ""}`
+          : "",
+      );
+    };
 
     return (
       <div className="p-4 sm:p-5 hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-b-0">
@@ -324,6 +353,19 @@ export default function HistoricalFeedbackPage() {
               {locked && (
                 <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-red-100 text-red-700 flex items-center gap-1">
                   <Lock className="w-3 h-3" /> Locked
+                </span>
+              )}
+              {request && (
+                <span
+                  className={`px-2 py-1 rounded-full text-[11px] font-bold ${
+                    isApproved
+                      ? "bg-green-100 text-green-700"
+                      : isRejected
+                        ? "bg-red-100 text-red-700"
+                        : "bg-yellow-100 text-yellow-700"
+                  }`}
+                >
+                  Request {request.status}
                 </span>
               )}
             </div>
@@ -345,6 +387,17 @@ export default function HistoricalFeedbackPage() {
               <InfoLine label="Rubric" value={rubric?.name || evaluation.sessionType} />
               <InfoLine label="Materials" value={`${session?.studentDocuments?.length || 0} file(s)`} />
             </div>
+
+            {locked && request && (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                  Your Request Reason
+                </p>
+                <p className="text-sm text-gray-800 break-words">
+                  {request.reason || "-"}
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-row xl:flex-col items-center xl:items-end gap-2 shrink-0">
@@ -354,15 +407,26 @@ export default function HistoricalFeedbackPage() {
               </span>
             )}
             <button
-              onClick={() => (locked ? setRequestModalData(evaluation) : setSelectedEvaluation(evaluation))}
+              onClick={() =>
+                locked ? handleLockedAction() : setSelectedEvaluation(evaluation)
+              }
+              disabled={isPending}
               className={`px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 ${
-                locked
+                isPending
+                  ? "bg-yellow-100 text-yellow-800 cursor-not-allowed"
+                  : locked
                   ? "bg-indigo-600 text-white hover:bg-indigo-700"
                   : "bg-gray-900 text-white hover:bg-gray-800"
               }`}
             >
               {locked ? <Unlock className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              {locked ? "Request" : "View"}
+              {isPending
+                ? "Pending"
+                : isRejected
+                  ? "Request Again"
+                  : locked
+                    ? "Request Access"
+                    : "View"}
             </button>
           </div>
         </div>

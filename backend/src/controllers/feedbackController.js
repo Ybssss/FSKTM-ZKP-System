@@ -428,21 +428,6 @@ exports.requestAccess = async (req, res) => {
       });
     }
 
-    const isAssignedToStudent = await canRequesterAccessStudent({
-      requester,
-      requesterId: requestingPanelId,
-      studentId,
-      currentSessionId,
-    });
-
-    if (!isAssignedToStudent) {
-      return res.status(403).json({
-        success: false,
-        message:
-          "You can only request historical access for students currently assigned to you.",
-      });
-    }
-
     const existing = await PermissionRequest.findOne({
       requestingPanelId,
       targetEvaluationId,
