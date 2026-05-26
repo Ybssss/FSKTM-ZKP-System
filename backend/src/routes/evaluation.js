@@ -22,6 +22,12 @@ router.get(
   evaluationController.searchHistoricalComments,
 );
 
+router.get(
+  "/session/:sessionId",
+  authenticateToken,
+  evaluationController.getSessionEvaluations,
+);
+
 // 🔴 NEW: Get evaluations strictly by student ID (Fixes 404 on Student Progress/Reports page)
 router.get("/student/:studentId", authenticateToken, async (req, res) => {
   try {

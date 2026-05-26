@@ -1,6 +1,7 @@
 const Evaluation = require("../models/Evaluation");
 const { calculateUTHMGrade } = require("../utils/gradeCalculator");
 const PermissionRequest = require("../models/PermissionRequest");
+const Timetable = require("../models/Timetable");
 
 // --- 1. Filter getAllEvaluations based on Permissions ---
 exports.getAllEvaluations = async (req, res) => {
@@ -225,6 +226,73 @@ const getAuthUserId = (req) => req.user.id || req.user._id;
 
 const isSameId = (a, b) => String(a || "") === String(b || "");
 
+const hasUserId = (items = [], userId) =>
+  items.some((item) => isSameId(item?._id || item, userId));
+
+exports.getSessionEvaluations = async (req, res) => {
+  try {
+    const viewerId = getAuthUserId(req);
+    const viewerRole = req.user.role;
+    const { sessionId } = req.params;
+
+    const timetable = await Timetable.findById(sessionId).select("students panels");
+
+    if (!timetable) {
+      return res.status(404).json({
+        success: false,
+        message: "Session not found.",
+      });
+    }
+
+    const isAdmin = viewerRole === "admin";
+    const isAssignedPanel =
+      viewerRole === "panel" && hasUserId(timetable.panels || [], viewerId);
+
+    if (!isAdmin && !isAssignedPanel) {
+      return res.status(403).json({
+        success: false,
+        message: "You do not have permission to view this session's evaluations.",
+      });
+    }
+
+    const evaluations = await Evaluation.find({ sessionId })
+      .populate({
+        path: "studentId",
+        select:
+          "name email matricNumber program researchTitle researchAbstract supervisorId",
+        strictPopulate: false,
+      })
+      .populate({
+        path: "evaluatorId",
+        select: "name email userId expertiseTags",
+        strictPopulate: false,
+      })
+      .populate({
+        path: "sessionId",
+        select: "title semester sessionType date startTime endTime venue",
+        strictPopulate: false,
+      })
+      .populate({
+        path: "rubricId",
+        select: "name sessionType criteria",
+        strictPopulate: false,
+      })
+      .sort({ createdAt: 1 });
+
+    res.json({
+      success: true,
+      evaluations,
+      data: evaluations,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: "Failed to fetch session evaluations.",
+      error: error.message,
+    });
+  }
+};
+
 exports.getEvaluationById = async (req, res) => {
   try {
     const viewerId = getAuthUserId(req);
@@ -261,6 +329,16 @@ exports.getEvaluationById = async (req, res) => {
     const isOwnerPanel = isSameId(evaluatorId, viewerId);
     const isStudentOwner =
       viewerRole === "student" && isSameId(studentId, viewerId);
+    const sessionRefId = evaluation.sessionId?._id || evaluation.sessionId;
+    const isAssignedSessionPanel =
+      viewerRole === "panel" &&
+      sessionRefId &&
+      Boolean(
+        await Timetable.exists({
+          _id: sessionRefId,
+          panels: viewerId,
+        }),
+      );
 
     const approvedPermission = await PermissionRequest.findOne({
       requestingPanelId: viewerId,
@@ -270,7 +348,13 @@ exports.getEvaluationById = async (req, res) => {
 
     const hasApprovedAccess = Boolean(approvedPermission);
 
-    if (!isAdmin && !isOwnerPanel && !isStudentOwner && !hasApprovedAccess) {
+    if (
+      !isAdmin &&
+      !isOwnerPanel &&
+      !isStudentOwner &&
+      !hasApprovedAccess &&
+      !isAssignedSessionPanel
+    ) {
       return res.status(403).json({
         success: false,
         message: "You do not have permission to view this evaluation.",

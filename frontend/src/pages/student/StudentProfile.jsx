@@ -20,6 +20,11 @@ import {
 const normalizeText = (value = "") =>
   String(value).normalize("NFKC").replace(/\s+/g, " ").trim();
 
+const shortText = (value = "", max = 260) => {
+  const text = normalizeText(value);
+  return text.length > max ? `${text.slice(0, max)}...` : text;
+};
+
 const formatDateTime = (value) => {
   if (!value) return "-";
   const date = new Date(value);
@@ -504,29 +509,63 @@ export default function StudentProfile() {
                   )}
                 </div>
 
-                <div className="bg-blue-50 p-4 rounded-lg border border-blue-100">
+                <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 sm:col-span-2">
                   <p className="text-xs font-bold text-blue-800 uppercase tracking-widest mb-2 flex items-center gap-2">
-                    <Users className="w-4 h-4" /> Assigned Students
+                    <Users className="w-4 h-4" /> My Students
                   </p>
                   <p className="text-2xl font-black text-gray-900">
                     {assignedStudents.length}
                   </p>
                   {assignedStudents.length > 0 && (
-                    <div className="mt-3 space-y-1">
-                      {assignedStudents.slice(0, 4).map((student) => (
-                        <p
+                    <div className="mt-3 space-y-3">
+                      {assignedStudents.slice(0, 6).map((student) => (
+                        <div
                           key={student._id || student.userId}
-                          className="text-sm font-semibold text-gray-700 truncate"
+                          className="bg-white border border-blue-100 rounded-lg p-3"
                         >
-                          {student.name || student.userId}
-                        </p>
+                          <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-bold text-gray-900">
+                                {student.name || student.userId}
+                              </p>
+                              <p className="text-xs font-mono text-gray-500">
+                                {student.matricNumber || student.userId || "-"}
+                              </p>
+                            </div>
+                            {student.profileRelation && (
+                              <span className="w-fit px-2 py-1 rounded bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-bold uppercase tracking-wide">
+                                {student.profileRelation}
+                              </span>
+                            )}
+                          </div>
+
+                          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mt-3">
+                            Research Title
+                          </p>
+                          <p className="text-sm font-semibold text-gray-800 mt-1">
+                            {student.researchTitle || "No research title registered."}
+                          </p>
+
+                          <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mt-3">
+                            Research Abstract
+                          </p>
+                          <p className="text-sm text-gray-700 mt-1 leading-relaxed">
+                            {shortText(student.researchAbstract) ||
+                              "No abstract submitted yet."}
+                          </p>
+                        </div>
                       ))}
-                      {assignedStudents.length > 4 && (
+                      {assignedStudents.length > 6 && (
                         <p className="text-xs font-bold text-blue-700">
-                          +{assignedStudents.length - 4} more
+                          +{assignedStudents.length - 6} more
                         </p>
                       )}
                     </div>
+                  )}
+                  {assignedStudents.length === 0 && (
+                    <p className="text-sm font-semibold text-gray-500 mt-3">
+                      No assigned or supervised students yet.
+                    </p>
                   )}
                 </div>
 

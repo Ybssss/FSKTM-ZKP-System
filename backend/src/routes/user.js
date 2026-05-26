@@ -4,6 +4,53 @@ const { authenticateToken } = require("../middleware/auth");
 const User = require("../models/User");
 const userController = require("../controllers/userController");
 
+const STAFF_STUDENT_SELECT =
+  "name userId email matricNumber program researchTitle researchAbstract supervisorId";
+
+const idString = (value) => String(value?._id || value || "");
+
+const mergeStaffStudents = (assignedStudents = [], supervisedStudents = []) => {
+  const byId = new Map();
+
+  const addStudent = (student, relation) => {
+    const raw = student?.toObject ? student.toObject() : student;
+    if (!raw) return;
+
+    const key = idString(raw._id);
+    const existing = byId.get(key);
+
+    if (existing) {
+      const relations = new Set([
+        ...(existing.profileRelations || [existing.profileRelation]).filter(Boolean),
+        relation,
+      ]);
+      existing.profileRelations = [...relations];
+      existing.profileRelation = [...relations].join(" & ");
+      byId.set(key, existing);
+      return;
+    }
+
+    byId.set(key, {
+      ...raw,
+      profileRelations: [relation],
+      profileRelation: relation,
+    });
+  };
+
+  assignedStudents.forEach((student) => addStudent(student, "Panel"));
+  supervisedStudents.forEach((student) => addStudent(student, "Supervisor"));
+
+  return [...byId.values()].sort((a, b) =>
+    String(a.name || a.userId || "").localeCompare(String(b.name || b.userId || "")),
+  );
+};
+
+const getSupervisedStudents = (staffId) =>
+  User.find({ role: "student", supervisorId: staffId })
+    .select(STAFF_STUDENT_SELECT)
+    .populate("supervisorId", "name userId email")
+    .lean();
+
 router.get("/assignments", authenticateToken, userController.getAssignments);
 router.use(authenticateToken);
 
@@ -19,10 +66,16 @@ router.get("/my-students", async (req, res) => {
     const panel = await User.findById(myId)
       .populate(
         "assignedStudents",
-        "name userId email matricNumber program researchTitle researchAbstract supervisorId",
+        STAFF_STUDENT_SELECT,
       )
+      .populate("assignedStudents.supervisorId", "name userId email")
       .select("assignedStudents");
-    res.json({ success: true, students: panel?.assignedStudents || [] });
+    const supervisedStudents = await getSupervisedStudents(req.user.id);
+    const students = mergeStaffStudents(
+      panel?.assignedStudents || [],
+      supervisedStudents,
+    );
+    res.json({ success: true, students });
   } catch (error) {
     res
       .status(500)
@@ -109,13 +162,31 @@ router.get("/me/profile", async (req, res) => {
       )
       .populate("supervisorId", "name userId email")
       .populate("assignedPanels.panelId", "name userId email")
-      .populate("assignedStudents", "name userId email matricNumber researchTitle");
+      .populate({
+        path: "assignedStudents",
+        select: STAFF_STUDENT_SELECT,
+        populate: { path: "supervisorId", select: "name userId email" },
+      })
+      .lean();
 
     if (!user) {
       return res.status(404).json({
         success: false,
         message: "User not found.",
       });
+    }
+
+    if (["admin", "panel"].includes(user.role)) {
+      const supervisedStudents = await getSupervisedStudents(user._id);
+      user.assignedStudents = mergeStaffStudents(
+        user.assignedStudents || [],
+        supervisedStudents,
+      );
+      user.supervisedStudents = supervisedStudents.map((student) => ({
+        ...student,
+        profileRelation: "Supervisor",
+        profileRelations: ["Supervisor"],
+      }));
     }
 
     res.json({

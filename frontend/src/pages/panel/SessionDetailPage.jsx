@@ -95,11 +95,8 @@ export default function SessionDetailPage() {
         return;
       }
 
-      const evalRes = await api.get("/evaluations");
-      const allEvals = evalRes.data.data || evalRes.data.evaluations || [];
-      const sessionEvals = allEvals.filter(
-        (e) => e.sessionId?._id === id || e.sessionId === id,
-      );
+      const evalRes = await api.get(`/evaluations/session/${id}`);
+      const sessionEvals = evalRes.data.data || evalRes.data.evaluations || [];
       setEvaluations(sessionEvals);
 
       if (foundSession?.student?._id || foundSession?.student) {
