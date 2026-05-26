@@ -3,6 +3,28 @@ const { calculateUTHMGrade } = require("../utils/gradeCalculator");
 const PermissionRequest = require("../models/PermissionRequest");
 const Timetable = require("../models/Timetable");
 
+const toFiniteNumber = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+const calculateWeightedTotalMarks = (criteria = [], scores = {}) => {
+  const total = criteria.reduce((sum, criterion) => {
+    const key = criterion.key;
+    const weight = Math.max(toFiniteNumber(criterion.weight, 0), 0);
+    const maxScore = Math.max(toFiniteNumber(criterion.maxScore, 4), 1);
+
+    if (!key || weight <= 0) return sum;
+
+    const score = clamp(toFiniteNumber(scores[key], 0), 0, maxScore);
+    return sum + (score / maxScore) * weight;
+  }, 0);
+
+  return Number(total.toFixed(2));
+};
+
 // --- 1. Filter getAllEvaluations based on Permissions ---
 exports.getAllEvaluations = async (req, res) => {
   try {
@@ -152,8 +174,12 @@ exports.submitEvaluation = async (req, res) => {
     const qualitativeFeedback = req.body.qualitativeFeedback || {};
 
     if (quantitativeCriteria.length) {
-      evaluation.scores = req.body.scores;
-      evaluation.totalMarks = req.body.totalMarks;
+      const submittedScores = req.body.scores || {};
+      evaluation.scores = submittedScores;
+      evaluation.totalMarks = calculateWeightedTotalMarks(
+        quantitativeCriteria,
+        submittedScores,
+      );
     }
 
     evaluation.qualitativeFeedback = qualitativeFeedback;

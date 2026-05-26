@@ -1563,6 +1563,20 @@ const seedDatabase = async () => {
       return map;
     };
 
+    const calculateWeightedTotalMarks = (rubric, scores = {}) =>
+      Number(
+        rubric.criteria
+          .filter((criterion) => criterion.type === "quantitative")
+          .reduce((sum, criterion) => {
+            const score = Number(scores[criterion.key] || 0);
+            const maxScore = Number(criterion.maxScore || 4);
+            const weight = Number(criterion.weight || 0);
+
+            return maxScore > 0 ? sum + (score / maxScore) * weight : sum;
+          }, 0)
+          .toFixed(2),
+      );
+
     const makeQualitativeMap = (rubric, text) => {
       const map = {};
 
@@ -1613,27 +1627,29 @@ const seedDatabase = async () => {
                   : "Proceed toward pre-viva preparation with continuous supervision and final documentation refinement.",
             });
           } else if (stage.sessionType === "PRE_VIVA") {
+            const scores = makeScoreMapFromValues(stage.rubric, {
+              crit_a_title: 3,
+              crit_b_abs: 3,
+              crit_c_prob: 3,
+              crit_d_obj: 3,
+              crit_e_lit: 3,
+              crit_f_meth: 3,
+              crit_g_res: 3,
+              crit_h_find: 3,
+              crit_i_eth: 3,
+              crit_j_contrib: 3,
+              crit_k_conc: 3,
+              crit_l_org2: 3,
+              crit_m_lang2: 3,
+              crit_n_ref2: 3,
+              crit_o_pres2: 3,
+              crit_p_delib: 3,
+            });
+
             evaluationsData.push({
               ...common,
-              totalMarks: 80,
-              scores: makeScoreMapFromValues(stage.rubric, {
-                crit_a_title: 3,
-                crit_b_abs: 3,
-                crit_c_prob: 3,
-                crit_d_obj: 3,
-                crit_e_lit: 3,
-                crit_f_meth: 3,
-                crit_g_res: 3,
-                crit_h_find: 3,
-                crit_i_eth: 3,
-                crit_j_contrib: 3,
-                crit_k_conc: 3,
-                crit_l_org2: 3,
-                crit_m_lang2: 3,
-                crit_n_ref2: 3,
-                crit_o_pres2: 3,
-                crit_p_delib: 3,
-              }),
+              totalMarks: calculateWeightedTotalMarks(stage.rubric, scores),
+              scores,
               qualitativeFeedback: makeQualitativeMap(
                 stage.rubric,
                 "The candidate demonstrates acceptable thesis readiness with minor improvements required before final submission.",
@@ -1642,23 +1658,25 @@ const seedDatabase = async () => {
                 "The candidate is ready to proceed with minor amendments and improved presentation of findings.",
             });
           } else {
+            const scores = makeScoreMapFromValues(stage.rubric, {
+              crit_a_title: 3,
+              crit_b_exec_summary: 3,
+              crit_c_problem: 3,
+              crit_d_objective: 3,
+              crit_e_literature: 3,
+              crit_f_methodology: 3,
+              crit_g_prelim: 3,
+              crit_h_ethics: 3,
+              crit_i_org: 3,
+              crit_j_lang: 3,
+              crit_k_ref: 3,
+              crit_l_pres: 3,
+            });
+
             evaluationsData.push({
               ...common,
-              totalMarks: 78,
-              scores: makeScoreMapFromValues(stage.rubric, {
-                crit_a_title: 3,
-                crit_b_exec_summary: 3,
-                crit_c_problem: 3,
-                crit_d_objective: 3,
-                crit_e_literature: 3,
-                crit_f_methodology: 3,
-                crit_g_prelim: 3,
-                crit_h_ethics: 3,
-                crit_i_org: 3,
-                crit_j_lang: 3,
-                crit_k_ref: 3,
-                crit_l_pres: 3,
-              }),
+              totalMarks: calculateWeightedTotalMarks(stage.rubric, scores),
+              scores,
               qualitativeFeedback: makeQualitativeMap(
                 stage.rubric,
                 "The proposal is acceptable. The research direction is clear and the methodology is suitable with minor refinement.",

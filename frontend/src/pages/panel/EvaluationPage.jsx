@@ -37,6 +37,63 @@ const legacyProgressFeedback = (evaluation) => ({
   prog_3_suggest: evaluation?.overallSuggestions || "",
 });
 
+const toNumber = (value, fallback = 0) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+const formatMark = (value) =>
+  toNumber(value, 0)
+    .toFixed(2)
+    .replace(/\.?0+$/, "");
+
+const hasScoreEntries = (scoreValues = {}) =>
+  Boolean(scoreValues && Object.keys(scoreValues).length > 0);
+
+const getCriterionWeight = (criterion) =>
+  Math.max(toNumber(criterion?.weight, 0), 0);
+
+const getCriterionMaxScore = (criterion) => {
+  const maxScore = toNumber(criterion?.maxScore, 4);
+  return maxScore > 0 ? maxScore : 4;
+};
+
+const getScoreValue = (criterion, scoreValues = {}) =>
+  toNumber(scoreValues?.[criterion?.key], 0);
+
+const calculateCriterionContribution = (criterion, scoreValues = {}) => {
+  const weight = getCriterionWeight(criterion);
+  const maxScore = getCriterionMaxScore(criterion);
+  const score = clamp(getScoreValue(criterion, scoreValues), 0, maxScore);
+
+  return maxScore > 0 ? (score / maxScore) * weight : 0;
+};
+
+const calculateWeightedTotal = (evaluation, scoreValues = {}) =>
+  getQuantitativeCriteria(evaluation).reduce(
+    (total, criterion) =>
+      total + calculateCriterionContribution(criterion, scoreValues),
+    0,
+  );
+
+const getRubricWeightTotal = (evaluation) =>
+  getQuantitativeCriteria(evaluation).reduce(
+    (total, criterion) => total + getCriterionWeight(criterion),
+    0,
+  );
+
+const getEvaluationDisplayedTotal = (evaluation, scoreValues) => {
+  const scoresToUse = scoreValues || evaluation?.scores || {};
+
+  if (hasScoreEntries(scoresToUse)) {
+    return calculateWeightedTotal(evaluation, scoresToUse);
+  }
+
+  return toNumber(evaluation?.totalMarks, 0);
+};
+
 export default function EvaluationPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -171,22 +228,9 @@ export default function EvaluationPage() {
     }
   }, [urlId, evaluations]);
 
-  const calculateTotalScore = () => {
-    const quantitativeCriteria = getQuantitativeCriteria(selectedEval);
-    if (quantitativeCriteria.length === 0) return 0;
+  const getLiveTotalScore = () => calculateWeightedTotal(selectedEval, scores);
 
-    let totalEarned = 0;
-    let maxPossible = 0;
-
-    quantitativeCriteria.forEach((crit) => {
-      const rawScore = scores[crit.key] || 0;
-      const weight = crit.weight || 0;
-      totalEarned += (rawScore / (crit.maxScore || 4)) * weight;
-      maxPossible += weight;
-    });
-
-    return maxPossible > 0 ? ((totalEarned / maxPossible) * 100).toFixed(2) : 0;
-  };
+  const calculateTotalScore = () => formatMark(getLiveTotalScore());
 
   const handleScoreChange = (criteriaKey, value) => {
     setScores((prev) => ({ ...prev, [criteriaKey]: value }));
@@ -202,7 +246,12 @@ export default function EvaluationPage() {
       const isScored = quantitativeCriteria.length > 0;
 
       if (isScored) {
-        if (Object.keys(scores).length < quantitativeCriteria.length) {
+        const missingScore = quantitativeCriteria.find(
+          (criterion) =>
+            !Object.prototype.hasOwnProperty.call(scores, criterion.key),
+        );
+
+        if (missingScore) {
           alert("Please provide a score for ALL criteria before submitting.");
           setIsSubmitting(false);
           return;
@@ -216,7 +265,7 @@ export default function EvaluationPage() {
 
       if (isScored) {
         payload.scores = scores;
-        payload.totalMarks = parseFloat(calculateTotalScore());
+        payload.totalMarks = Number(getLiveTotalScore().toFixed(2));
       }
 
       payload.qualitativeFeedback = qualFeedback;
@@ -349,6 +398,8 @@ export default function EvaluationPage() {
     (selectedEval?.status === "PENDING" || (isCompleted && isUnlocked));
 
   const canDirectUnlock = isAdmin && isAuthor && isLocked;
+  const displayedTotalScore = getEvaluationDisplayedTotal(selectedEval, scores);
+  const rubricWeightTotal = getRubricWeightTotal(selectedEval);
 
   return (
     <div className="max-w-7xl mx-auto space-y-6">
@@ -445,9 +496,9 @@ export default function EvaluationPage() {
                           </span>
                         ) : ev.status === "COMPLETED" ? (
                           <div
-                            className={`inline-flex px-3 py-1.5 rounded-lg border font-bold text-sm shadow-sm ${getScoreColor(ev.totalMarks)}`}
+                            className={`inline-flex px-3 py-1.5 rounded-lg border font-bold text-sm shadow-sm ${getScoreColor(getEvaluationDisplayedTotal(ev))}`}
                           >
-                            {ev.totalMarks?.toFixed(2)}%
+                            {formatMark(getEvaluationDisplayedTotal(ev))}%
                           </div>
                         ) : (
                           <span className="text-gray-400 font-bold">--</span>
@@ -617,7 +668,7 @@ export default function EvaluationPage() {
                             Total Marks
                           </p>
                           <p className="text-2xl font-black text-green-600">
-                            {selectedEval.totalMarks}%
+                            {formatMark(displayedTotalScore)}%
                           </p>
                         </div>
                       )}
@@ -657,18 +708,31 @@ export default function EvaluationPage() {
                         </div>
 
                         <div className="space-y-6 mb-8">
-                          {getQuantitativeCriteria(selectedEval).map((crit) => (
+                          {getQuantitativeCriteria(selectedEval).map((crit) => {
+                            const criterionWeight = getCriterionWeight(crit);
+                            const criterionMaxScore = getCriterionMaxScore(crit);
+                            const selectedContribution =
+                              calculateCriterionContribution(crit, scores);
+
+                            return (
                               <div
                                 key={crit.key}
                                 className="border border-gray-300 bg-white rounded-b-lg overflow-hidden shadow-sm"
                               >
-                                <div className="bg-gray-50 px-5 py-3 border-b border-gray-300 flex justify-between items-center">
+                                <div className="bg-gray-50 px-5 py-3 border-b border-gray-300 flex flex-wrap justify-between items-center gap-3">
                                   <h3 className="font-black text-gray-900">
                                     {crit.title}
                                   </h3>
-                                  <span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded text-xs font-bold">
-                                    Weight: {crit.weight}%
-                                  </span>
+                                  <div className="flex flex-wrap items-center gap-2">
+                                    <span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded text-xs font-bold">
+                                      Weight: {formatMark(criterionWeight)}%
+                                    </span>
+                                    <span className="bg-emerald-100 text-emerald-800 px-3 py-1 rounded text-xs font-bold">
+                                      Contribution:{" "}
+                                      {formatMark(selectedContribution)} /{" "}
+                                      {formatMark(criterionWeight)}%
+                                    </span>
+                                  </div>
                                 </div>
                                 <div className="overflow-x-auto">
                                   <table className="w-full text-left text-sm table-fixed">
@@ -690,7 +754,13 @@ export default function EvaluationPage() {
                                           const scaleKey =
                                             s.label.toLowerCase();
                                           const isSelected =
-                                            scores[crit.key] === s.value;
+                                            toNumber(scores[crit.key], -1) ===
+                                            s.value;
+                                          const optionContribution =
+                                            calculateCriterionContribution(crit, {
+                                              [crit.key]: s.value,
+                                            });
+
                                           return (
                                             <td
                                               key={s.value}
@@ -719,6 +789,20 @@ export default function EvaluationPage() {
                                                   }
                                                   className="w-5 h-5 accent-indigo-600 mb-3 cursor-pointer disabled:opacity-60"
                                                 />
+                                                <span
+                                                  className={`mb-3 px-2 py-1 rounded text-[11px] font-black ${
+                                                    isSelected
+                                                      ? "bg-indigo-600 text-white"
+                                                      : "bg-gray-100 text-gray-600"
+                                                  }`}
+                                                >
+                                                  {formatMark(optionContribution)} /{" "}
+                                                  {formatMark(criterionWeight)}%
+                                                </span>
+                                                <span className="sr-only">
+                                                  Score {s.value} of{" "}
+                                                  {criterionMaxScore}
+                                                </span>
                                                 <p
                                                   className={`text-xs text-justify leading-relaxed ${isSelected ? "text-indigo-900 font-bold" : "text-gray-600 font-medium"}`}
                                                 >
@@ -734,7 +818,8 @@ export default function EvaluationPage() {
                                   </table>
                                 </div>
                               </div>
-                            ))}
+                            );
+                          })}
                         </div>
 
                         {canEdit && hasQuantitativeCriteria(selectedEval) && (
@@ -744,7 +829,8 @@ export default function EvaluationPage() {
                                 Live Calculated Mark
                               </span>
                               <span className="block text-sm text-gray-400 mt-1">
-                                Weighted average of all quantitative criteria
+                                Selected contribution out of{" "}
+                                {formatMark(rubricWeightTotal)}%
                               </span>
                             </div>
                             <span className="text-5xl font-black text-white">
