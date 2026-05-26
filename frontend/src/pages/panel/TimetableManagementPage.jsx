@@ -931,8 +931,49 @@ export default function TimetableManagementPage() {
               <input type="date" value={bulkConfig.date} disabled={isExistingBatchMode} onChange={(e) => updateBulkConfig({ date: e.target.value })} className="w-full p-2 border rounded-lg disabled:bg-gray-100" />
               <input type="time" value={bulkConfig.startTime} disabled={isExistingBatchMode} onChange={(e) => updateBulkConfig({ startTime: e.target.value })} className="w-full p-2 border rounded-lg disabled:bg-gray-100" />
               <div className="grid grid-cols-2 gap-2">
-                <input type="number" min="5" value={slotDuration} disabled={isExistingBatchMode} onChange={(e) => { const nextDuration = Number(e.target.value); setSlotDuration(nextDuration); localStorage.setItem("admin_slot_duration", e.target.value); setReviewRows((rows) => recalcRows(rows, bulkConfig, nextDuration)); }} className="w-full p-2 border rounded-lg disabled:bg-gray-100" placeholder="Duration" />
-                <input type="number" min="0" value={bulkConfig.breakBetweenSlotsMinutes} disabled={isExistingBatchMode} onChange={(e) => updateBulkConfig({ breakBetweenSlotsMinutes: Number(e.target.value) })} className="w-full p-2 border rounded-lg disabled:bg-gray-100" placeholder="Break" />
+                <label className="block">
+                  <span className="block text-[11px] font-bold uppercase tracking-wide text-gray-500 mb-1">
+                    Slot Duration
+                  </span>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="5"
+                      value={slotDuration}
+                      disabled={isExistingBatchMode}
+                      onChange={(e) => {
+                        const nextDuration = Number(e.target.value);
+                        setSlotDuration(nextDuration);
+                        localStorage.setItem("admin_slot_duration", e.target.value);
+                        setReviewRows((rows) => recalcRows(rows, bulkConfig, nextDuration));
+                      }}
+                      className="w-full p-2 pr-12 border rounded-lg disabled:bg-gray-100"
+                      placeholder="Duration"
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-500 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded">
+                      min
+                    </span>
+                  </div>
+                </label>
+                <label className="block">
+                  <span className="block text-[11px] font-bold uppercase tracking-wide text-gray-500 mb-1">
+                    Break Between Slots
+                  </span>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      min="0"
+                      value={bulkConfig.breakBetweenSlotsMinutes}
+                      disabled={isExistingBatchMode}
+                      onChange={(e) => updateBulkConfig({ breakBetweenSlotsMinutes: Number(e.target.value) })}
+                      className="w-full p-2 pr-12 border rounded-lg disabled:bg-gray-100"
+                      placeholder="Break"
+                    />
+                    <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-500 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded">
+                      min
+                    </span>
+                  </div>
+                </label>
               </div>
               <select value={bulkConfig.rubricId} disabled={isExistingBatchMode} onChange={(e) => updateBulkConfig({ rubricId: e.target.value })} className="w-full p-2 border rounded-lg disabled:bg-gray-100">
                 {rubrics.map((rubric) => <option key={rubric._id} value={rubric._id}>{rubric.name}</option>)}
@@ -1054,6 +1095,44 @@ export default function TimetableManagementPage() {
             <input value={batchForm.academicSession || ""} onChange={(e) => setBatchForm({ ...batchForm, academicSession: e.target.value })} className="w-full p-2 border rounded-lg" placeholder="Academic session" />
             <input value={batchForm.scheduleTitle || ""} onChange={(e) => setBatchForm({ ...batchForm, scheduleTitle: e.target.value })} className="w-full p-2 border rounded-lg" placeholder="Schedule title" />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><input type="date" value={batchForm.date || ""} onChange={(e) => setBatchForm({ ...batchForm, date: e.target.value })} className="p-2 border rounded-lg" /><input type="time" value={batchForm.startTime || ""} onChange={(e) => setBatchForm({ ...batchForm, startTime: e.target.value })} className="p-2 border rounded-lg" /></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <label className="block">
+                <span className="block text-[11px] font-bold uppercase tracking-wide text-gray-500 mb-1">
+                  Slot Duration
+                </span>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="5"
+                    value={batchForm.slotDurationMinutes || ""}
+                    onChange={(e) => setBatchForm({ ...batchForm, slotDurationMinutes: Number(e.target.value) })}
+                    className="w-full p-2 pr-12 border rounded-lg"
+                    placeholder="Duration"
+                  />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-500 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded">
+                    min
+                  </span>
+                </div>
+              </label>
+              <label className="block">
+                <span className="block text-[11px] font-bold uppercase tracking-wide text-gray-500 mb-1">
+                  Break Between Slots
+                </span>
+                <div className="relative">
+                  <input
+                    type="number"
+                    min="0"
+                    value={batchForm.breakBetweenSlotsMinutes ?? ""}
+                    onChange={(e) => setBatchForm({ ...batchForm, breakBetweenSlotsMinutes: Number(e.target.value) })}
+                    className="w-full p-2 pr-12 border rounded-lg"
+                    placeholder="Break"
+                  />
+                  <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-500 bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded">
+                    min
+                  </span>
+                </div>
+              </label>
+            </div>
             <input value={batchForm.googleMeetLink || ""} onChange={(e) => setBatchForm({ ...batchForm, googleMeetLink: e.target.value })} className="w-full p-2 border rounded-lg" placeholder="Meeting link" />
             <button className="w-full py-3 bg-amber-600 text-white rounded-lg font-bold">Save Batch</button>
           </form>
