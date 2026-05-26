@@ -14,7 +14,7 @@ const calculateWeightedTotalMarks = (criteria = [], scores = {}) => {
   const total = criteria.reduce((sum, criterion) => {
     const key = criterion.key;
     const weight = Math.max(toFiniteNumber(criterion.weight, 0), 0);
-    const maxScore = Math.max(toFiniteNumber(criterion.maxScore, 4), 1);
+    const maxScore = Math.max(toFiniteNumber(criterion.maxScore, 5), 1);
 
     if (!key || weight <= 0) return sum;
 

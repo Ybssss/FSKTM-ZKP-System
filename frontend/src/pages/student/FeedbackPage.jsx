@@ -150,7 +150,7 @@ export default function FeedbackPage() {
 
               if (found) {
                 criterionName = found.title || found.name || key;
-                criterionMax = found.maxScore || 4;
+                criterionMax = found.maxScore || 5;
               }
             }
 

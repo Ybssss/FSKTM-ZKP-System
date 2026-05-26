@@ -153,7 +153,7 @@ export default function StudentRubrics() {
                                 </span>
 
                                 <span className="px-2 py-1 bg-gray-50 text-gray-700 text-xs font-bold rounded border border-gray-100">
-                                  Max Score: {criterion.maxScore ?? 4}
+                                  Max Score: {criterion.maxScore ?? 5}
                                 </span>
 
                                 <span className="px-2 py-1 bg-gray-50 text-gray-700 text-xs font-bold rounded border border-gray-100">
@@ -171,12 +171,19 @@ export default function StudentRubrics() {
 
                               <div className="space-y-2">
                                 {[
+                                  ["5", "Outstanding", criterion.outstanding],
                                   ["4", "Exemplary", criterion.exemplary],
                                   ["3", "Proficient", criterion.proficient],
                                   ["2", "Satisfactory", criterion.satisfactory],
                                   ["1", "Foundational", criterion.foundational],
                                   ["0", "Novice", criterion.novice],
-                                ].map(([mark, label, text]) => (
+                                ]
+                                  .filter(
+                                    ([mark]) =>
+                                      Number(mark) <=
+                                      Number(criterion.maxScore ?? 5),
+                                  )
+                                  .map(([mark, label, text]) => (
                                   <div
                                     key={mark}
                                     className="grid grid-cols-1 md:grid-cols-[80px_140px_1fr] gap-2 p-3 bg-gray-50 rounded-lg border border-gray-100 text-sm"

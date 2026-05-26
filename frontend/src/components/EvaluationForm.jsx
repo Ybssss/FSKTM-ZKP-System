@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import api from "../services/api";
 
 const SCALE = [
+  { label: "Outstanding", value: 5 },
   { label: "Exemplary", value: 4 },
   { label: "Proficient", value: 3 },
   { label: "Satisfactory", value: 2 },
@@ -37,7 +38,7 @@ const EvaluationForm = ({ session, user }) => {
   const totalMarks = Object.values(scores).reduce((a, b) => a + b, 0);
   const percentage =
     criteria.length > 0
-      ? ((totalMarks / (criteria.length * 4)) * 100).toFixed(2)
+      ? ((totalMarks / (criteria.length * 5)) * 100).toFixed(2)
       : 0;
 
   const handleSubmit = async (e) => {

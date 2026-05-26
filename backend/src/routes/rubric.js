@@ -14,6 +14,15 @@ const cleanText = (value = "", max = 1000) =>
 
 const allowedCriterionTypes = ["quantitative", "qualitative"];
 
+const normalizeMaxScore = (value, type) => {
+  if (type === "qualitative") return 0;
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 5;
+
+  return Math.min(Math.max(Math.round(parsed), 1), 5);
+};
+
 const buildRubricPayload = (body) => {
   const name = cleanText(body.name, 150);
   const sessionType = toSessionTypeCode(body.sessionType || name);
@@ -27,21 +36,26 @@ const buildRubricPayload = (body) => {
   }
 
   const criteria = Array.isArray(body.criteria)
-    ? body.criteria.map((criterion, index) => ({
-        key: cleanText(criterion.key || `criterion_${index + 1}`, 80),
-        title: cleanText(criterion.title, 250),
-        type: allowedCriterionTypes.includes(criterion.type)
+    ? body.criteria.map((criterion, index) => {
+        const type = allowedCriterionTypes.includes(criterion.type)
           ? criterion.type
-          : "quantitative",
-        weight: Number(criterion.weight || 0),
-        maxScore: Number(criterion.maxScore || 4),
-        description: cleanText(criterion.description || "", 1000),
-        exemplary: cleanText(criterion.exemplary || "", 2000),
-        proficient: cleanText(criterion.proficient || "", 2000),
-        satisfactory: cleanText(criterion.satisfactory || "", 2000),
-        foundational: cleanText(criterion.foundational || "", 2000),
-        novice: cleanText(criterion.novice || "", 2000),
-      }))
+          : "quantitative";
+
+        return {
+          key: cleanText(criterion.key || `criterion_${index + 1}`, 80),
+          title: cleanText(criterion.title, 250),
+          type,
+          weight: Number(criterion.weight || 0),
+          maxScore: normalizeMaxScore(criterion.maxScore, type),
+          description: cleanText(criterion.description || "", 1000),
+          outstanding: cleanText(criterion.outstanding || "", 2000),
+          exemplary: cleanText(criterion.exemplary || "", 2000),
+          proficient: cleanText(criterion.proficient || "", 2000),
+          satisfactory: cleanText(criterion.satisfactory || "", 2000),
+          foundational: cleanText(criterion.foundational || "", 2000),
+          novice: cleanText(criterion.novice || "", 2000),
+        };
+      })
     : [];
 
   return {

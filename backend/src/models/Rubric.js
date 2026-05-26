@@ -15,12 +15,13 @@ const criterionSchema = new mongoose.Schema(
 
     // Quantitative specific fields
     weight: { type: Number, default: 0 },
-    maxScore: { type: Number, default: 4 },
+    maxScore: { type: Number, default: 5 },
 
     // Qualitative specific field (Instructions)
     description: { type: String, default: "" },
 
     // Grading Scale Text
+    outstanding: { type: String, default: "" }, // 5 Marks
     exemplary: { type: String, default: "" }, // 4 Marks
     proficient: { type: String, default: "" }, // 3 Marks
     satisfactory: { type: String, default: "" }, // 2 Marks

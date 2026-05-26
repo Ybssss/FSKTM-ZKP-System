@@ -39,8 +39,9 @@ export default function RubricPage() {
     title: "",
     type: "quantitative",
     weight: 0,
-    maxScore: 4,
+    maxScore: 5,
     description: "",
+    outstanding: "",
     exemplary: "",
     proficient: "",
     satisfactory: "",
@@ -85,12 +86,17 @@ export default function RubricPage() {
 
   const handleCriterionChange = (index, field, value) => {
     const newCriteria = [...formData.criteria];
+    let nextValue = value;
+
+    if (field === "weight") {
+      nextValue = parseFloat(value) || 0;
+    } else if (field === "maxScore") {
+      nextValue = Math.min(Math.max(parseInt(value, 10) || 5, 1), 5);
+    }
+
     newCriteria[index] = {
       ...newCriteria[index],
-      [field]:
-        field === "weight" || field === "maxScore"
-          ? parseFloat(value) || 0
-          : value,
+      [field]: nextValue,
     };
     setFormData({ ...formData, criteria: newCriteria });
   };
@@ -128,6 +134,15 @@ export default function RubricPage() {
       const c = formData.criteria[i];
       if (!c.title.trim()) {
         alert(`Please enter a title for Criterion ${i + 1}`);
+        return false;
+      }
+      if (
+        c.type === "quantitative" &&
+        (!Number.isInteger(Number(c.maxScore)) ||
+          Number(c.maxScore) < 1 ||
+          Number(c.maxScore) > 5)
+      ) {
+        alert(`Criterion ${i + 1} max score must be a whole number from 1 to 5.`);
         return false;
       }
     }
@@ -466,16 +481,44 @@ export default function RubricPage() {
                             <input
                               type="number"
                               value={criterion.maxScore}
-                              disabled
-                              className="w-full p-2 border rounded bg-gray-200 text-gray-500 cursor-not-allowed"
+                              onChange={(e) =>
+                                handleCriterionChange(
+                                  index,
+                                  "maxScore",
+                                  e.target.value,
+                                )
+                              }
+                              className="w-full p-2 border rounded"
+                              min="1"
+                              max="5"
+                              step="1"
+                              required
                             />
                           </div>
                         </div>
 
                         <label className="block text-xs font-bold text-indigo-500 uppercase mb-3">
-                          5-Tier Grading Scale Descriptions (Optional)
+                          Grading Scale Descriptions (Optional)
                         </label>
-                        <div className="grid grid-cols-5 gap-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2">
+                          <div>
+                            <p className="text-[10px] font-bold text-gray-500 uppercase mb-1 text-center">
+                              Outstanding (5)
+                            </p>
+                            <textarea
+                              className="w-full text-xs p-2 border rounded"
+                              rows="4"
+                              value={criterion.outstanding || ""}
+                              onChange={(e) =>
+                                handleCriterionChange(
+                                  index,
+                                  "outstanding",
+                                  e.target.value,
+                                )
+                              }
+                              placeholder="Definition..."
+                            />
+                          </div>
                           <div>
                             <p className="text-[10px] font-bold text-gray-500 uppercase mb-1 text-center">
                               Exemplary (4)
@@ -671,7 +714,17 @@ export default function RubricPage() {
                               {criterion.weight}%
                             </span>
                           </p>
-                          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
+                            {Number(criterion.maxScore ?? 5) >= 5 && (
+                              <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-lg">
+                                <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest mb-2 border-b border-emerald-200 pb-1">
+                                  Outstanding (5)
+                                </p>
+                                <p className="text-xs text-gray-700">
+                                  {criterion.outstanding}
+                                </p>
+                              </div>
+                            )}
                             <div className="bg-green-50 border border-green-200 p-3 rounded-lg">
                               <p className="text-[10px] font-bold text-green-700 uppercase tracking-widest mb-2 border-b border-green-200 pb-1">
                                 Exemplary (4)

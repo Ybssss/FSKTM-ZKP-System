@@ -35,7 +35,7 @@ const rubricsData = [
         title: "CRITERIA A: PROPOSED RESEARCH TITLE",
         type: "quantitative",
         weight: 5,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "The candidate presents a thesis title that is concise, precise, and directly aligned with the core focus of the research. The title reflects comprehensive subject knowledge and a clear grasp of key relationships within the field. It is articulated with clarity and academic rigour.",
         proficient:
@@ -52,7 +52,7 @@ const rubricsData = [
         title: "CRITERIA B: EXECUTIVE SUMMARY",
         type: "quantitative",
         weight: 10,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "The candidate's executive summary presents a clear, coherent overview of the research proposal. The problem, purpose/objectives, and rationale are logically structured and well integrated. High-level cognitive skills are demonstrated through critical synthesis.",
         proficient:
@@ -69,7 +69,7 @@ const rubricsData = [
         title: "CRITERIA C: PROBLEM STATEMENT & SIGNIFICANCE",
         type: "quantitative",
         weight: 15,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "The problem statement is well-defined, contextually grounded, and critically justified with relevant literature. High-level cognitive and critical thinking skills are evident.",
         proficient:
@@ -86,7 +86,7 @@ const rubricsData = [
         title: "CRITERIA D: OBJECTIVE OF STUDY & RESEARCH QUESTIONS",
         type: "quantitative",
         weight: 10,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "The research objectives are clearly defined, focused, and aligned with the research problem, structured to be measurable, achievable, and academically pertinent.",
         proficient:
@@ -103,7 +103,7 @@ const rubricsData = [
         title: "CRITERIA E: LITERATURE REVIEW",
         type: "quantitative",
         weight: 15,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "The literature review demonstrates critical engagement with a wide range of relevant and credible sources, clearly identifying key debates and gaps.",
         proficient:
@@ -120,7 +120,7 @@ const rubricsData = [
         title: "CRITERIA F: METHODOLOGY",
         type: "quantitative",
         weight: 15,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "The methodology is comprehensive, clearly aligned with the research objectives, and well justified. The research design, data collection, and analysis methods are methodologically sound.",
         proficient:
@@ -137,7 +137,7 @@ const rubricsData = [
         title: "CRITERIA G: PRELIMINARY RESULTS / EXPECTED OUTCOME",
         type: "quantitative",
         weight: 5,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "Preliminary findings (where applicable) are presented clearly and supported by rigorous analysis using appropriate digital or analytical tools. Expected outcomes are precisely formulated.",
         proficient:
@@ -154,7 +154,7 @@ const rubricsData = [
         title: "CRITERIA H: METHOD RELIABILITY, VALIDITY AND ETHICS",
         type: "quantitative",
         weight: 5,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "Methodological reliability and validity are comprehensively addressed with well-reasoned justification and supported by appropriate references. Ethical considerations are thoroughly integrated.",
         proficient:
@@ -171,7 +171,7 @@ const rubricsData = [
         title: "CRITERIA I: ORGANIZATION OF IDEAS",
         type: "quantitative",
         weight: 5,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "The proposal was written with exceptional clarity and coherence, demonstrating a logical and purposeful sequence of ideas. Transitions were seamless.",
         proficient:
@@ -188,7 +188,7 @@ const rubricsData = [
         title: "CRITERIA J: LANGUAGE AND WRITING STYLE",
         type: "quantitative",
         weight: 5,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "The proposal was written using precise, formal, and discipline-appropriate language throughout. Sentence structure and grammar consistently accurate.",
         proficient:
@@ -205,7 +205,7 @@ const rubricsData = [
         title: "CRITERIA K: REFERENCES AND CITATION",
         type: "quantitative",
         weight: 5,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "Demonstrates precise and consistent use of the required referencing style throughout. All citations are accurate and correctly formatted.",
         proficient:
@@ -222,7 +222,7 @@ const rubricsData = [
         title: "CRITERIA L: ORAL PRESENTATION SKILLS",
         type: "quantitative",
         weight: 5,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "Presentation delivered with clarity, confidence, and a strong academic presence. Ideas communicated logically and fluently.",
         proficient:
@@ -254,7 +254,7 @@ const rubricsData = [
         title: "CRITERIA A: THESIS TITLE",
         type: "quantitative",
         weight: 5,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "Title is concise, precise, and directly aligned with the core focus of the research. Articulated with clarity and academic rigour.",
         proficient:
@@ -270,7 +270,7 @@ const rubricsData = [
         title: "CRITERIA B: ABSTRACT",
         type: "quantitative",
         weight: 5,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "Demonstrates high scholarly competence. Offers a precise, coherent, and methodologically sound synthesis.",
         proficient:
@@ -286,7 +286,7 @@ const rubricsData = [
         title: "CRITERIA C: PROBLEM STATEMENT",
         type: "quantitative",
         weight: 10,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "Well-defined, contextually grounded, and critically justified with relevant literature. Strong critical thinking.",
         proficient:
@@ -303,7 +303,7 @@ const rubricsData = [
         title: "CRITERIA D: OBJECTIVE OF STUDY",
         type: "quantitative",
         weight: 5,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "Articulates objectives with exceptional clarity and precision. Measurable and strong strategic focus.",
         proficient: "Objectives are clear, relevant, and appropriately scoped.",
@@ -317,7 +317,7 @@ const rubricsData = [
         title: "CRITERIA E: LITERATURE REVIEW",
         type: "quantitative",
         weight: 10,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "Shows critical engagement and synthesis of credible sources. Key debates articulated.",
         proficient:
@@ -332,7 +332,7 @@ const rubricsData = [
         title: "CRITERIA F: METHODOLOGY",
         type: "quantitative",
         weight: 10,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "Methodology is clearly articulated, rigorously justified, and highly appropriate.",
         proficient:
@@ -348,7 +348,7 @@ const rubricsData = [
         title: "CRITERIA G: RESULTS AND DISCUSSION / DATA ANALYSIS",
         type: "quantitative",
         weight: 10,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "Demonstrates critical analysis, with findings well-integrated and justified. Results synthesized insightfully.",
         proficient:
@@ -364,7 +364,7 @@ const rubricsData = [
         title: "CRITERIA H: PRESENTATION OF FINDINGS",
         type: "quantitative",
         weight: 5,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "Presented with clarity and logical flow, supported by accurate and well-designed visualisations.",
         proficient:
@@ -380,7 +380,7 @@ const rubricsData = [
         title: "CRITERIA I: DATA RELIABILITY, VALIDITY AND ETHICS",
         type: "quantitative",
         weight: 5,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "Demonstrates strong critical thinking in data analysis using well-justified methods. Rigorous ethical compliance.",
         proficient:
@@ -397,7 +397,7 @@ const rubricsData = [
         title: "CRITERIA J: CONTRIBUTION TO THE BODY OF KNOWLEDGE",
         type: "quantitative",
         weight: 10,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "Substantive and original contribution yielding novel theoretical constructs or innovations.",
         proficient:
@@ -413,7 +413,7 @@ const rubricsData = [
         title: "CRITERIA K: CONCLUSION AND RECOMMENDATIONS",
         type: "quantitative",
         weight: 5,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "Formulated conclusions reflecting a high level of synthesis. Original and analytically grounded.",
         proficient: "Presented coherent conclusions aligned with objectives.",
@@ -427,7 +427,7 @@ const rubricsData = [
         title: "CRITERIA L: ORGANIZATION OF IDEAS",
         type: "quantitative",
         weight: 5,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "Exceptional clarity and coherence. Logical progression of ideas.",
         proficient:
@@ -443,7 +443,7 @@ const rubricsData = [
         title: "CRITERIA M: LANGUAGE AND WRITING STYLE",
         type: "quantitative",
         weight: 5,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "Language consistently precise, scholarly, and aligned with disciplinary norms.",
         proficient:
@@ -459,7 +459,7 @@ const rubricsData = [
         title: "CRITERIA N: REFERENCES AND CITATION",
         type: "quantitative",
         weight: 5,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "Precise and consistent use of required referencing style. All citations accurate.",
         proficient:
@@ -475,7 +475,7 @@ const rubricsData = [
         title: "CRITERIA O: ORAL PRESENTATION SKILLS",
         type: "quantitative",
         weight: 2.5,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "Delivered a well-structured and analytically rigorous presentation.",
         proficient:
@@ -492,7 +492,7 @@ const rubricsData = [
         title: "CRITERIA P: DELIBERATIVE ORAL EVALUATION",
         type: "quantitative",
         weight: 2.5,
-        maxScore: 4,
+        maxScore: 5,
         exemplary:
           "Exceptional academic leadership, full autonomy, and deep sense of responsibility in defending the thesis.",
         proficient:
@@ -1557,7 +1557,7 @@ const seedDatabase = async () => {
       rubric.criteria
         .filter((criterion) => criterion.type === "quantitative")
         .forEach((criterion) => {
-          map[criterion.key] = values[criterion.key] ?? 3;
+          map[criterion.key] = values[criterion.key] ?? 4;
         });
 
       return map;
@@ -1569,7 +1569,7 @@ const seedDatabase = async () => {
           .filter((criterion) => criterion.type === "quantitative")
           .reduce((sum, criterion) => {
             const score = Number(scores[criterion.key] || 0);
-            const maxScore = Number(criterion.maxScore || 4);
+            const maxScore = Number(criterion.maxScore || 5);
             const weight = Number(criterion.weight || 0);
 
             return maxScore > 0 ? sum + (score / maxScore) * weight : sum;
@@ -1628,22 +1628,22 @@ const seedDatabase = async () => {
             });
           } else if (stage.sessionType === "PRE_VIVA") {
             const scores = makeScoreMapFromValues(stage.rubric, {
-              crit_a_title: 3,
-              crit_b_abs: 3,
-              crit_c_prob: 3,
-              crit_d_obj: 3,
-              crit_e_lit: 3,
-              crit_f_meth: 3,
-              crit_g_res: 3,
-              crit_h_find: 3,
-              crit_i_eth: 3,
-              crit_j_contrib: 3,
-              crit_k_conc: 3,
-              crit_l_org2: 3,
-              crit_m_lang2: 3,
-              crit_n_ref2: 3,
-              crit_o_pres2: 3,
-              crit_p_delib: 3,
+              crit_a_title: 4,
+              crit_b_abs: 4,
+              crit_c_prob: 4,
+              crit_d_obj: 4,
+              crit_e_lit: 4,
+              crit_f_meth: 4,
+              crit_g_res: 4,
+              crit_h_find: 4,
+              crit_i_eth: 4,
+              crit_j_contrib: 4,
+              crit_k_conc: 4,
+              crit_l_org2: 4,
+              crit_m_lang2: 4,
+              crit_n_ref2: 4,
+              crit_o_pres2: 4,
+              crit_p_delib: 4,
             });
 
             evaluationsData.push({
@@ -1659,18 +1659,18 @@ const seedDatabase = async () => {
             });
           } else {
             const scores = makeScoreMapFromValues(stage.rubric, {
-              crit_a_title: 3,
-              crit_b_exec_summary: 3,
-              crit_c_problem: 3,
-              crit_d_objective: 3,
-              crit_e_literature: 3,
-              crit_f_methodology: 3,
-              crit_g_prelim: 3,
-              crit_h_ethics: 3,
-              crit_i_org: 3,
-              crit_j_lang: 3,
-              crit_k_ref: 3,
-              crit_l_pres: 3,
+              crit_a_title: 4,
+              crit_b_exec_summary: 4,
+              crit_c_problem: 4,
+              crit_d_objective: 4,
+              crit_e_literature: 4,
+              crit_f_methodology: 4,
+              crit_g_prelim: 4,
+              crit_h_ethics: 4,
+              crit_i_org: 4,
+              crit_j_lang: 4,
+              crit_k_ref: 4,
+              crit_l_pres: 4,
             });
 
             evaluationsData.push({

@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import axios from "axios";
 
-// The 5-tier scale from the UTHM forms
 const SCALE = [
+  { label: "Outstanding", value: 5 },
   { label: "Exemplary", value: 4 },
   { label: "Proficient", value: 3 },
   { label: "Satisfactory", value: 2 },
@@ -25,7 +25,7 @@ const EvaluationRubric = ({ sessionId, studentName, sessionType }) => {
 
   // Auto-calculate totals
   const totalMarks = Object.values(scores).reduce((a, b) => a + b, 0);
-  const maxMarks = CRITERIA.length * 4;
+  const maxMarks = CRITERIA.length * 5;
   const percentage =
     maxMarks > 0 ? ((totalMarks / maxMarks) * 100).toFixed(2) : 0;
 

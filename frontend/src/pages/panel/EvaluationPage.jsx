@@ -15,13 +15,15 @@ import {
 import api from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
 
-const SCALE = [
-  { label: "Exemplary", value: 4 },
-  { label: "Proficient", value: 3 },
-  { label: "Satisfactory", value: 2 },
-  { label: "Foundational", value: 1 },
-  { label: "Novice", value: 0 },
-];
+const DEFAULT_MAX_SCORE = 5;
+const SCORE_LABELS = {
+  5: { label: "Outstanding", descriptionKey: "outstanding" },
+  4: { label: "Exemplary", descriptionKey: "exemplary" },
+  3: { label: "Proficient", descriptionKey: "proficient" },
+  2: { label: "Satisfactory", descriptionKey: "satisfactory" },
+  1: { label: "Foundational", descriptionKey: "foundational" },
+  0: { label: "Novice", descriptionKey: "novice" },
+};
 
 const getCriteria = (evaluation) => evaluation?.rubricId?.criteria || [];
 const getQuantitativeCriteria = (evaluation) =>
@@ -56,8 +58,31 @@ const getCriterionWeight = (criterion) =>
   Math.max(toNumber(criterion?.weight, 0), 0);
 
 const getCriterionMaxScore = (criterion) => {
-  const maxScore = toNumber(criterion?.maxScore, 4);
-  return maxScore > 0 ? maxScore : 4;
+  const maxScore = Math.floor(toNumber(criterion?.maxScore, DEFAULT_MAX_SCORE));
+  return maxScore > 0 ? maxScore : DEFAULT_MAX_SCORE;
+};
+
+const getScoreScale = (criterion) =>
+  Array.from({ length: getCriterionMaxScore(criterion) + 1 }, (_, index) => {
+    const value = getCriterionMaxScore(criterion) - index;
+    const scoreLabel = SCORE_LABELS[value] || {
+      label: `Score ${value}`,
+      descriptionKey: "",
+    };
+
+    return { value, ...scoreLabel };
+  });
+
+const getScoreDescription = (criterion, score) => {
+  if (score.descriptionKey && criterion?.[score.descriptionKey]) {
+    return criterion[score.descriptionKey];
+  }
+
+  if (score.value === getCriterionMaxScore(criterion) && criterion?.exemplary) {
+    return criterion.exemplary;
+  }
+
+  return "No description provided.";
 };
 
 const getScoreValue = (criterion, scoreValues = {}) =>
@@ -727,6 +752,7 @@ export default function EvaluationPage() {
                           {getQuantitativeCriteria(selectedEval).map((crit) => {
                             const criterionWeight = getCriterionWeight(crit);
                             const criterionMaxScore = getCriterionMaxScore(crit);
+                            const criterionScale = getScoreScale(crit);
                             const selectedContribution =
                               calculateCriterionContribution(crit, scores);
 
@@ -754,10 +780,10 @@ export default function EvaluationPage() {
                                   <table className="w-full text-left text-sm table-fixed">
                                     <thead>
                                       <tr className="bg-white border-b border-gray-200">
-                                        {SCALE.map((s) => (
+                                        {criterionScale.map((s) => (
                                           <th
                                             key={s.value}
-                                            className="p-3 border-r last:border-r-0 border-gray-200 text-center font-bold text-gray-500 text-xs uppercase tracking-wider w-1/5"
+                                            className="p-3 border-r last:border-r-0 border-gray-200 text-center font-bold text-gray-500 text-xs uppercase tracking-wider min-w-[150px]"
                                           >
                                             {s.label} ({s.value})
                                           </th>
@@ -766,9 +792,7 @@ export default function EvaluationPage() {
                                     </thead>
                                     <tbody className="divide-x divide-gray-200">
                                       <tr>
-                                        {SCALE.map((s) => {
-                                          const scaleKey =
-                                            s.label.toLowerCase();
+                                        {criterionScale.map((s) => {
                                           const isSelected =
                                             toNumber(scores[crit.key], -1) ===
                                             s.value;
@@ -822,8 +846,7 @@ export default function EvaluationPage() {
                                                 <p
                                                   className={`text-xs text-justify leading-relaxed ${isSelected ? "text-indigo-900 font-bold" : "text-gray-600 font-medium"}`}
                                                 >
-                                                  {crit[scaleKey] ||
-                                                    "No description provided."}
+                                                  {getScoreDescription(crit, s)}
                                                 </p>
                                               </div>
                                             </td>

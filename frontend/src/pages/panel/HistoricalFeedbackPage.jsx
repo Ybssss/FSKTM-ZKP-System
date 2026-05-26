@@ -643,7 +643,7 @@ export default function HistoricalFeedbackPage() {
                             <div key={criterion.key} className="p-4 grid grid-cols-1 lg:grid-cols-[1fr_130px_120px] gap-3 items-start">
                               <div>
                                 <p className="font-bold text-gray-900">{criterion.title}</p>
-                                <p className="text-xs text-gray-500 mt-1">Weight: {criterion.weight || 0}% • Max: {criterion.maxScore || 4}</p>
+                                <p className="text-xs text-gray-500 mt-1">Weight: {criterion.weight || 0}% • Max: {criterion.maxScore || 5}</p>
                               </div>
                               <div className="rounded-lg bg-indigo-50 border border-indigo-100 p-3 text-center">
                                 <p className="text-[10px] font-black text-indigo-500 uppercase">Score</p>
