@@ -6,6 +6,8 @@ const userController = require("../controllers/userController");
 
 const STAFF_STUDENT_SELECT =
   "name userId email matricNumber program researchTitle researchAbstract supervisorId";
+const SAFE_USER_SELECT =
+  "name userId email role matricNumber program yearOfStudy profession researchTitle researchAbstract supervisorId assignedStudents assignedPanels expertiseTags zkpRegistered createdAt updatedAt";
 
 const idString = (value) => String(value?._id || value || "");
 
@@ -92,7 +94,7 @@ router.get("/", async (req, res) => {
         .json({ success: false, message: "Access denied." });
     }
     const users = await User.find()
-      .select("-passwordHash")
+      .select(SAFE_USER_SELECT)
       .populate("supervisorId", "name email userId")
       .populate("assignedPanels.panelId", "name email userId expertiseTags")
       .sort({ createdAt: -1 });
@@ -305,7 +307,7 @@ router.patch("/me/research-title", async (req, res) => {
 
 router.get("/:id", async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select("-passwordHash");
+    const user = await User.findById(req.params.id).select(SAFE_USER_SELECT);
     if (!user)
       return res
         .status(404)

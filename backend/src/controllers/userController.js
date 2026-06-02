@@ -1,4 +1,7 @@
 const User = require("../models/User");
+
+const SAFE_USER_SELECT =
+  "name userId email role matricNumber program yearOfStudy profession researchTitle researchAbstract supervisorId assignedStudents assignedPanels expertiseTags zkpRegistered createdAt updatedAt";
 const { logActivity } = require("../utils/logger");
 const {
   getEmailConfigStatus,
@@ -50,16 +53,13 @@ const queueRegistrationEmail = ({
       );
     })
     .catch((emailError) => {
-      console.error(
-        `${isReset ? "Reset" : "Registration"} email failed:`,
-        {
-          message: emailError.message || String(emailError),
-          code: emailError.code,
-          responseCode: emailError.responseCode,
-          command: emailError.command,
-          response: emailError.response,
-        },
-      );
+      console.error(`${isReset ? "Reset" : "Registration"} email failed:`, {
+        message: emailError.message || String(emailError),
+        code: emailError.code,
+        responseCode: emailError.responseCode,
+        command: emailError.command,
+        response: emailError.response,
+      });
     });
 
   return status;
@@ -68,6 +68,7 @@ const queueRegistrationEmail = ({
 exports.getAllUsers = async (req, res) => {
   try {
     const users = await User.find()
+      .select(SAFE_USER_SELECT)
       .populate({ path: "supervisorId", select: "name email userId" }) // 👈 Explicitly populate SV
       .lean()
       .sort({ createdAt: -1 });
@@ -301,7 +302,7 @@ exports.updateUser = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // 🔴 Added expertiseTags so the array can be saved
+    // Added expertiseTags so the array can be saved
     const {
       name,
       email,
