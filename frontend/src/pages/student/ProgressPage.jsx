@@ -1,7 +1,16 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import api from "../../services/api";
 import { TrendingUp, BookOpen, BarChart3, Calendar } from "lucide-react";
+
+const getResultBadgeClass = (status) =>
+  status === "PASS"
+    ? "bg-green-100 text-green-700 border-green-200"
+    : status === "FAIL"
+      ? "bg-red-100 text-red-700 border-red-200"
+      : status === "COMPLETED"
+        ? "bg-blue-100 text-blue-700 border-blue-200"
+      : "bg-orange-100 text-orange-700 border-orange-200";
 
 export default function ProgressPage() {
   const { user } = useAuth();
@@ -9,22 +18,16 @@ export default function ProgressPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  useEffect(() => {
-    fetchProgressData();
-  }, []);
-
-  const fetchProgressData = async () => {
+  const fetchProgressData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
 
-      // Fetch all raw evaluations for this student
       const res = await api.get(
         `/evaluations/student/${user.id || user.userId || user._id}`,
       );
       const rawEvals = res.data.evaluations || [];
 
-      // 1. 🚀 FIXED: Group raw evaluations strictly by Session Type AND Semester
       const grouped = {};
       rawEvals.forEach((ev) => {
         const groupKey = `${ev.sessionType}_${ev.semester}`;
@@ -32,39 +35,45 @@ export default function ProgressPage() {
         if (!grouped[groupKey]) {
           grouped[groupKey] = {
             sessionName: `${ev.sessionType} (${ev.semester || "Unknown Sem"})`,
-            date: ev.createdAt, // Store date for sorting
-            evalCount: 0,
-            totalSum: 0,
+            date: ev.createdAt,
+            result: ev.result || {
+              status: ev.resultStatus || "PENDING",
+              isPublished: ev.resultPublished === true,
+            },
           };
         }
-        // Add up the scores
-        grouped[groupKey].totalSum +=
-          ev.totalMarks ?? ev.totalScore ?? ev.overallScore ?? 0;
-        grouped[groupKey].evalCount += 1;
+
+        const result = ev.result || {
+          status: ev.resultStatus || "PENDING",
+          isPublished: ev.resultPublished === true,
+        };
+        if (result.isPublished) grouped[groupKey].result = result;
       });
 
-      // 2. Filter ONLY fully graded sessions (2 panels)
       const processedData = [];
       Object.values(grouped).forEach((group) => {
-        if (group.evalCount >= 2 && group.totalSum > 0) {
+        if (group.result?.isPublished) {
           processedData.push({
             name: group.sessionName,
-            score: parseFloat((group.totalSum / group.evalCount).toFixed(1)),
+            status: group.result.status,
             date: new Date(group.date),
           });
         }
       });
 
-      // Sort by date ascending for the timeline progression
       processedData.sort((a, b) => a.date - b.date);
       setChartData(processedData);
     } catch (error) {
-      console.error("❌ Error fetching progress:", error);
+      console.error("Error fetching progress:", error);
       setError(error.message);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user?.id, user?._id, user?.userId]);
+
+  useEffect(() => {
+    fetchProgressData();
+  }, [fetchProgressData]);
 
   if (loading) {
     return (
@@ -116,35 +125,21 @@ export default function ProgressPage() {
               No Finalized Data Yet
             </h3>
             <p className="text-gray-500 mt-1">
-              Your progress chart will generate once panels submit their
-              evaluations.
+              Your result timeline will generate once all required evaluations
+              are submitted.
             </p>
           </div>
         ) : (
           <div className="space-y-8">
             {chartData.map((dataPoint, index) => {
-              const score = dataPoint.score;
-              const colorClass =
-                score >= 80
-                  ? "bg-green-500"
-                  : score >= 60
-                    ? "bg-indigo-500"
-                    : score >= 40
-                      ? "bg-orange-500"
-                      : "bg-red-500";
-
-              const textClass =
-                score >= 80
-                  ? "text-green-600"
-                  : score >= 60
-                    ? "text-indigo-600"
-                    : score >= 40
-                      ? "text-orange-600"
-                      : "text-red-600";
+              const status = dataPoint.status || "PENDING";
 
               return (
-                <div key={index} className="relative">
-                  <div className="flex justify-between items-end mb-2">
+                <div
+                  key={index}
+                  className="relative rounded-xl border border-gray-200 bg-white p-4"
+                >
+                  <div className="flex justify-between items-center gap-4">
                     <div>
                       <span className="font-bold text-gray-900">
                         {dataPoint.name}
@@ -154,17 +149,11 @@ export default function ProgressPage() {
                         {dataPoint.date.toLocaleDateString()}
                       </div>
                     </div>
-                    <span className={`text-2xl font-black ${textClass}`}>
-                      {score}%
+                    <span
+                      className={`inline-flex px-4 py-2 rounded-lg border text-lg font-black ${getResultBadgeClass(status)}`}
+                    >
+                      {status}
                     </span>
-                  </div>
-
-                  {/* Tailwind Progress Bar */}
-                  <div className="w-full bg-gray-100 rounded-full h-4 overflow-hidden">
-                    <div
-                      className={`h-full rounded-full transition-all duration-1000 ${colorClass}`}
-                      style={{ width: `${score}%` }}
-                    />
                   </div>
                 </div>
               );

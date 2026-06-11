@@ -31,18 +31,15 @@ class ZKPAuth {
    */
   async generateKeyPair() {
     try {
-      console.log('🔐 Generating RSA key pair...');
-      
       const keyPair = await window.crypto.subtle.generateKey(
         ZKP_CONFIG.algorithm,
         true,
         ZKP_CONFIG.keyUsages
       );
 
-      console.log('✅ Key pair generated');
       return keyPair;
     } catch (error) {
-      console.error('❌ Key generation failed:', error);
+      console.error('Key generation failed:', error);
       throw new Error('Failed to generate cryptographic keys');
     }
   }
@@ -52,8 +49,6 @@ class ZKPAuth {
    */
   async storePrivateKey(userId, privateKey) {
     try {
-      console.log('💾 Storing private key for:', userId);
-
       const privateKeyJwk = await window.crypto.subtle.exportKey('jwk', privateKey);
 
       // Validate JWK format
@@ -61,13 +56,6 @@ class ZKPAuth {
         throw new Error('Invalid JWK: missing key type (kty)');
       }
       
-      console.log('✅ JWK validated:', {
-        kty: privateKeyJwk.kty,
-        hasModulus: !!privateKeyJwk.n,
-        hasExponent: !!privateKeyJwk.e,
-        hasPrivateExponent: !!privateKeyJwk.d
-      });
-
       localStorage.setItem(
         `${ZKP_CONFIG.storageKeys.privateKey}_${userId}`,
         JSON.stringify(privateKeyJwk)
@@ -75,10 +63,9 @@ class ZKPAuth {
 
       localStorage.setItem(ZKP_CONFIG.storageKeys.userId, userId);
 
-      console.log('✅ Private key stored permanently');
       return true;
     } catch (error) {
-      console.error('❌ Failed to store private key:', error);
+      console.error('Failed to store private key:', error);
       throw new Error('Failed to store private key: ' + error.message);
     }
   }
@@ -88,8 +75,6 @@ class ZKPAuth {
    */
   importTemporaryKey(userId, keyData) {
     try {
-      console.log('⚠️ Importing temporary key for:', userId);
-      
       if (!window.zkpTempKeys) {
         window.zkpTempKeys = {};
       }
@@ -98,7 +83,6 @@ class ZKPAuth {
       
       // If keyData is an object with privateKey field (backup file format)
       if (keyData.privateKey && typeof keyData.privateKey === 'string') {
-        console.log('📦 Detected backup file format, extracting JWK...');
         jwkToStore = JSON.parse(keyData.privateKey);
       }
       
@@ -109,10 +93,9 @@ class ZKPAuth {
       
       window.zkpTempKeys[userId] = jwkToStore;
       
-      console.log('✅ Temporary key imported (session only)');
       return true;
     } catch (error) {
-      console.error('❌ Failed to import temporary key:', error);
+      console.error('Failed to import temporary key:', error);
       throw new Error('Failed to import temporary key: ' + error.message);
     }
   }
@@ -126,7 +109,7 @@ class ZKPAuth {
       const publicKeyString = JSON.stringify(publicKeyJwk);
       return btoa(publicKeyString);
     } catch (error) {
-      console.error('❌ Failed to export public key:', error);
+      console.error('Failed to export public key:', error);
       throw new Error('Failed to export public key');
     }
   }
@@ -147,7 +130,7 @@ class ZKPAuth {
         ['verify']
       );
     } catch (error) {
-      console.error('❌ Failed to import public key:', error);
+      console.error('Failed to import public key:', error);
       throw new Error('Failed to import public key');
     }
   }
@@ -157,11 +140,7 @@ class ZKPAuth {
    */
   async getPrivateKey(userId) {
     try {
-      console.log('🔍 Retrieving private key for:', userId);
-
-      // Check temporary storage first
       if (window.zkpTempKeys && window.zkpTempKeys[userId]) {
-        console.log('⚠️ Using temporary key (session only)');
         const privateKeyJwk = window.zkpTempKeys[userId];
         
         return await window.crypto.subtle.importKey(
@@ -173,28 +152,22 @@ class ZKPAuth {
         );
       }
 
-      // Check localStorage
       const privateKeyJwkString = localStorage.getItem(
         `${ZKP_CONFIG.storageKeys.privateKey}_${userId}`
       );
 
       if (!privateKeyJwkString) {
-        console.log('❌ No private key found');
         return null;
       }
 
-      console.log('✅ Using stored key');
       let privateKeyJwk = JSON.parse(privateKeyJwkString);
 
-      // Check if this is a backup file format (has metadata wrapper)
       if (privateKeyJwk.privateKey && typeof privateKeyJwk.privateKey === 'string') {
-        console.log('📦 Detected backup file format, extracting JWK...');
         privateKeyJwk = JSON.parse(privateKeyJwk.privateKey);
       }
 
-      // Validate JWK format before importing
       if (!privateKeyJwk || !privateKeyJwk.kty) {
-        console.error('❌ Invalid JWK format:', privateKeyJwk);
+        console.error('Invalid JWK format:', privateKeyJwk);
         throw new Error('Corrupted key data - missing required JWK fields. Please re-register or import a valid backup.');
       }
 
@@ -206,10 +179,9 @@ class ZKPAuth {
         ['sign']
       );
 
-      console.log('✅ Private key retrieved');
       return privateKey;
     } catch (error) {
-      console.error('❌ Failed to retrieve private key:', error);
+      console.error('Failed to retrieve private key:', error);
       return null;
     }
   }
@@ -218,23 +190,18 @@ class ZKPAuth {
    * Check if user has keys on this device
    */
   hasKeysForUser(userId) {
-    // Check temporary storage
     if (window.zkpTempKeys && window.zkpTempKeys[userId]) {
-      console.log('✅ Found temporary key');
       return true;
     }
-    
-    // Check localStorage
+
     const keyExists = localStorage.getItem(
       `${ZKP_CONFIG.storageKeys.privateKey}_${userId}`
     );
     
     if (keyExists) {
-      console.log('✅ Found stored key');
       return true;
     }
-    
-    console.log('❌ No keys found');
+
     return false;
   }
 
@@ -243,8 +210,6 @@ class ZKPAuth {
    */
   async generateProof(userId, challenge) {
     try {
-      console.log('🔐 Generating proof for challenge...');
-
       const privateKey = await this.getPrivateKey(userId);
       
       if (!privateKey) {
@@ -264,10 +229,9 @@ class ZKPAuth {
       const signatureArray = Array.from(new Uint8Array(signature));
       const signatureBase64 = btoa(String.fromCharCode(...signatureArray));
 
-      console.log('✅ Proof generated');
       return signatureBase64;
     } catch (error) {
-      console.error('❌ Proof generation failed:', error);
+      console.error('Proof generation failed:', error);
       throw new Error('Failed to generate proof: ' + error.message);
     }
   }
@@ -287,7 +251,7 @@ class ZKPAuth {
 
       return privateKeyJwkString;
     } catch (error) {
-      console.error('❌ Export failed:', error);
+      console.error('Export failed:', error);
       throw new Error('Failed to export private key');
     }
   }
@@ -297,27 +261,18 @@ class ZKPAuth {
    */
   async importPrivateKey(userId, privateKeyJwkString) {
     try {
-      console.log('📥 Importing private key...');
-      
       let dataToStore = privateKeyJwkString;
       let parsedData = JSON.parse(privateKeyJwkString);
       
-      // Check if this is a backup file format (has metadata wrapper)
       if (parsedData.privateKey && typeof parsedData.privateKey === 'string') {
-        console.log('📦 Detected backup file format, extracting JWK...');
-        // Extract the actual JWK from the wrapper
         const actualJwk = JSON.parse(parsedData.privateKey);
         
-        // Validate it's a proper JWK
         if (!actualJwk.kty) {
           throw new Error('Invalid JWK in backup file');
         }
         
-        // Store just the JWK (without metadata wrapper)
         dataToStore = JSON.stringify(actualJwk);
-        console.log('✅ JWK extracted from backup file');
       } else if (!parsedData.kty) {
-        // If it doesn't have kty and isn't a backup file, it's invalid
         throw new Error('Invalid key format - not a valid JWK or backup file');
       }
 
@@ -326,36 +281,13 @@ class ZKPAuth {
         dataToStore
       );
 
-      console.log('✅ Private key imported permanently');
       return true;
     } catch (error) {
-      console.error('❌ Import failed:', error);
+      console.error('Import failed:', error);
       throw new Error('Failed to import private key: ' + error.message);
     }
   }
 
-  /**
-   * Import private key temporarily (session only, not saved to localStorage)
-   */
-  importTemporaryKey(userId, keyData) {
-    try {
-      console.log('⚠️ Importing key temporarily (session only)...');
-      
-      // Ensure zkpTempKeys exists
-      if (!window.zkpTempKeys) {
-        window.zkpTempKeys = {};
-      }
-      
-      // Store in memory only
-      window.zkpTempKeys[userId] = keyData;
-      
-      console.log('✅ Temporary key imported for:', userId);
-      return true;
-    } catch (error) {
-      console.error('❌ Temporary import failed:', error);
-      throw new Error('Failed to import temporary key');
-    }
-  }
 
   /**
    * Delete keys for user
@@ -369,10 +301,9 @@ class ZKPAuth {
         delete window.zkpTempKeys[userId];
       }
       
-      console.log('✅ Keys deleted for:', userId);
       return true;
     } catch (error) {
-      console.error('❌ Failed to delete keys:', error);
+      console.error('Failed to delete keys:', error);
       return false;
     }
   }
@@ -384,11 +315,10 @@ class ZKPAuth {
     try {
       if (window.zkpTempKeys) {
         window.zkpTempKeys = {};
-        console.log('✅ All temporary keys cleared');
       }
       return true;
     } catch (error) {
-      console.error('❌ Failed to clear temporary keys:', error);
+      console.error('Failed to clear temporary keys:', error);
       return false;
     }
   }

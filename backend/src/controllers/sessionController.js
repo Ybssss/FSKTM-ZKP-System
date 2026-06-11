@@ -1,4 +1,3 @@
-// src/controllers/sessionController.js
 const Session = require("../models/Session");
 const Evaluation = require("../models/Evaluation");
 const User = require("../models/User");
@@ -33,11 +32,9 @@ exports.createSession = async (req, res) => {
       panel2Id,
     });
 
-    // EVERY session must have a rubric now
     const rubric = await Rubric.findOne({ sessionType });
     const rubricId = rubric ? rubric._id : null;
 
-    // Auto-create Pending Evaluations
     const eval1 = new Evaluation({
       sessionId: newSession._id,
       studentId,
@@ -84,21 +81,17 @@ exports.getMySessions = async (req, res) => {
     }
     // Admins see all (query remains {})
 
-    // 🔴 DEEP POPULATION: Get Session -> Student -> Supervisor
     const sessions = await Session.find(query)
       .populate({
         path: "studentId",
-        select: "name matricNumber program researchTitle supervisorId",
         select: "name matricNumber program researchTitle supervisorId email",
-        populate: { path: "supervisorId", select: "name" }, // 👈 Gets the SV!
+        populate: { path: "supervisorId", select: "name" },
       })
       .populate("panel1Id", "name expertiseTags")
       .populate("panel2Id", "name expertiseTags")
-      .sort({ date: 1, time: 1 }); // Sort by upcoming schedule
+      .sort({ date: 1, time: 1 });
 
-    // Format the data perfectly for your React Table
     const formattedSessions = sessions.map((session) => {
-      // Safely extract names (in case a user was deleted from DB)
       const studentName = session.studentId
         ? session.studentId.name
         : "Unknown Student";
@@ -109,7 +102,6 @@ exports.getMySessions = async (req, res) => {
       const panel1Name = session.panel1Id ? session.panel1Id.name : "TBD";
       const panel2Name = session.panel2Id ? session.panel2Id.name : "TBD";
 
-      // Format the rubric/session type nicely (e.g., "PROPOSAL_DEFENSE" -> "Proposal Defense")
       const rubricName = session.sessionType
         .replace("_", " ")
         .toLowerCase()
@@ -118,7 +110,7 @@ exports.getMySessions = async (req, res) => {
       return {
         id: session._id,
         sessionType: session.sessionType,
-        rubric: rubricName, // 👈 Beautifully formatted Rubric Name
+        rubric: rubricName,
         semester: session.semester,
         schedule: {
           date: session.date,
@@ -131,9 +123,9 @@ exports.getMySessions = async (req, res) => {
           matricNumber: session.studentId?.matricNumber,
           program: session.studentId?.program,
           researchTitle: session.studentId?.researchTitle,
-          svName: svName, // 👈 The Supervisor's Name!
+          svName: svName,
         },
-        panels: [panel1Name, panel2Name], // 👈 Array of Panel Names
+        panels: [panel1Name, panel2Name],
       };
     });
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CheckCircle,
   Eye,
@@ -16,6 +16,51 @@ import {
   getDocumentFileName,
   openAuthenticatedFile,
 } from "../../utils/authenticatedFile";
+import UserProfileLink from "../../components/UserProfileLink";
+import {
+  getReportCriteria,
+  getReportQualitativeCriteria,
+  getScoreBadgeClass,
+  getScoreBadgeLabel,
+  readMapValue,
+  scoreLabel,
+} from "../../utils/historicalFeedback";
+
+const getId = (value) => (typeof value === "object" ? value?._id : value);
+
+const getPersonName = (value, fallback = "-") => {
+  if (!value) return fallback;
+  if (typeof value === "string") return value;
+  return value.name || value.userId || value.email || fallback;
+};
+
+const getEvaluation = (item) => item?.targetEvaluationId || item;
+
+const getSession = (item) => {
+  const evaluation = getEvaluation(item);
+  return (
+    evaluation?.sessionInfo ||
+    evaluation?.sessionId ||
+    item?.sessionInfo ||
+    item?.currentSessionId ||
+    item?.sessionId ||
+    null
+  );
+};
+
+const getStudent = (item) => {
+  const evaluation = getEvaluation(item);
+  const session = evaluation?.sessionInfo || evaluation?.sessionId || item?.sessionInfo || item?.sessionId;
+  return (
+    evaluation?.studentId ||
+    item?.studentId ||
+    item?.targetEvaluationId?.studentId ||
+    session?.students?.[0] ||
+    null
+  );
+};
+
+const getRubric = (item) => getEvaluation(item)?.rubricId;
 
 export default function HistoricalFeedbackPage() {
   const { user } = useAuth();
@@ -35,11 +80,7 @@ export default function HistoricalFeedbackPage() {
   const [requestReason, setRequestReason] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -81,9 +122,11 @@ export default function HistoricalFeedbackPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [canManagePermissions]);
 
-  const getId = (value) => (typeof value === "object" ? value?._id : value);
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
   const handleOpenMaterial = async (document) => {
     try {
@@ -102,40 +145,6 @@ export default function HistoricalFeedbackPage() {
     return fileName && fileName !== document?.title ? fileName : "";
   };
 
-  const getPersonName = (value, fallback = "-") => {
-    if (!value) return fallback;
-    if (typeof value === "string") return value;
-    return value.name || value.userId || value.email || fallback;
-  };
-
-  const getStudent = (item) => {
-    const evaluation = getEvaluation(item);
-    const session = evaluation?.sessionInfo || evaluation?.sessionId || item?.sessionInfo || item?.sessionId;
-    return (
-      evaluation?.studentId ||
-      item?.studentId ||
-      item?.targetEvaluationId?.studentId ||
-      session?.students?.[0] ||
-      null
-    );
-  };
-
-  const getEvaluation = (item) => item?.targetEvaluationId || item;
-
-  const getSession = (item) => {
-    const evaluation = getEvaluation(item);
-    return (
-      evaluation?.sessionInfo ||
-      evaluation?.sessionId ||
-      item?.sessionInfo ||
-      item?.currentSessionId ||
-      item?.sessionId ||
-      null
-    );
-  };
-
-  const getRubric = (item) => getEvaluation(item)?.rubricId;
-
   const formatDate = (value) => {
     if (!value) return "-";
     const date = new Date(value);
@@ -147,7 +156,7 @@ export default function HistoricalFeedbackPage() {
     });
   };
 
-  const buildSearchText = (item) => {
+  const buildSearchText = useCallback((item) => {
     const evaluation = getEvaluation(item);
     const session = getSession(item);
     const student = getStudent(item);
@@ -177,33 +186,33 @@ export default function HistoricalFeedbackPage() {
       .filter(Boolean)
       .join(" ")
       .toLowerCase();
-  };
+  }, []);
 
-  const filterItems = (items) => {
+  const filterItems = useCallback((items) => {
     const term = searchTerm.trim().toLowerCase();
     if (!term) return items;
     return items.filter((item) => buildSearchText(item).includes(term));
-  };
+  }, [buildSearchText, searchTerm]);
 
   const visibleEvaluations = useMemo(
     () => filterItems(evaluations),
-    [evaluations, searchTerm],
+    [evaluations, filterItems],
   );
   const visibleLocked = useMemo(
     () => filterItems(lockedEvals),
-    [lockedEvals, searchTerm],
+    [lockedEvals, filterItems],
   );
   const visiblePending = useMemo(
     () => filterItems(incomingRequests),
-    [incomingRequests, searchTerm],
+    [incomingRequests, filterItems],
   );
   const visibleApproved = useMemo(
     () => filterItems(approvedRequests),
-    [approvedRequests, searchTerm],
+    [approvedRequests, filterItems],
   );
   const visibleMyRequests = useMemo(
     () => filterItems(myRequests),
-    [myRequests, searchTerm],
+    [myRequests, filterItems],
   );
 
   const getPermissionTargetId = (permission) =>
@@ -215,13 +224,6 @@ export default function HistoricalFeedbackPage() {
         String(getPermissionTargetId(request)) === String(getId(evaluationId)) &&
         request.status !== "WITHDRAWN",
     );
-
-  const getScoreColor = (score) => {
-    if (!score && score !== 0) return "text-gray-600 bg-gray-100";
-    if (score >= 80) return "text-green-700 bg-green-100";
-    if (score >= 65) return "text-yellow-700 bg-yellow-100";
-    return "text-red-700 bg-red-100";
-  };
 
   const handleRequestAccess = async (event) => {
     event.preventDefault();
@@ -262,7 +264,6 @@ export default function HistoricalFeedbackPage() {
   };
 
   const handleWithdrawPermission = async (request) => {
-    const evaluation = getEvaluation(request);
     const session = getSession(request);
     const student = getStudent(request);
 
@@ -280,34 +281,6 @@ export default function HistoricalFeedbackPage() {
       alert(error.response?.data?.message || "Failed to withdraw permission.");
     }
   };
-
-
-  const readMapValue = (value, key) => {
-    if (!value || !key) return "";
-    if (value instanceof Map) return value.get(key);
-    return value[key];
-  };
-
-  const scoreLabel = (score) => {
-    const numeric = Number(score);
-    if (numeric === 4) return "Exemplary";
-    if (numeric === 3) return "Proficient";
-    if (numeric === 2) return "Satisfactory";
-    if (numeric === 1) return "Foundational";
-    if (numeric === 0) return "Novice";
-    return "-";
-  };
-
-  const getReportCriteria = (evaluation) =>
-    (getRubric(evaluation)?.criteria || []).filter(
-      (criterion) => criterion.type === "quantitative",
-    );
-
-  const getReportQualitativeCriteria = (evaluation) =>
-    (getRubric(evaluation)?.criteria || []).filter(
-      (criterion) => criterion.type === "qualitative",
-    );
-
   const InfoLine = ({ label, value }) => (
     <div>
       <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">{label}</p>
@@ -372,7 +345,11 @@ export default function HistoricalFeedbackPage() {
 
             <div>
               <h3 className="font-bold text-gray-900 text-base sm:text-lg break-words">
-                {student?.name || "Unknown Student"}
+                <UserProfileLink
+                  user={student}
+                  fallback="Unknown Student"
+                  className="font-bold text-base sm:text-lg"
+                />
               </h3>
               <p className="text-xs text-gray-500 font-mono font-bold">
                 {student?.matricNumber || student?.userId || "-"}
@@ -402,8 +379,8 @@ export default function HistoricalFeedbackPage() {
 
           <div className="flex flex-row xl:flex-col items-center xl:items-end gap-2 shrink-0">
             {!locked && (
-              <span className={`px-3 py-1 rounded-full text-sm font-bold ${getScoreColor(evaluation.totalMarks)}`}>
-                {evaluation.totalMarks || evaluation.totalMarks === 0 ? `${evaluation.totalMarks}%` : "Completed"}
+              <span className={`px-3 py-1 rounded-full text-sm font-bold ${getScoreBadgeClass(evaluation)}`}>
+                {getScoreBadgeLabel(evaluation)}
               </span>
             )}
             <button
@@ -693,8 +670,8 @@ export default function HistoricalFeedbackPage() {
                   <div className="rounded-xl border overflow-hidden">
                     <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
                       <p className="font-black text-gray-900">Scored Criteria</p>
-                      <span className={`px-3 py-1 rounded-full text-sm font-black ${getScoreColor(selectedEvaluation.totalMarks)}`}>
-                        Final Score: {selectedEvaluation.totalMarks || selectedEvaluation.totalMarks === 0 ? `${Number(selectedEvaluation.totalMarks).toFixed(2)}%` : "-"}
+                      <span className={`px-3 py-1 rounded-full text-sm font-black ${getScoreBadgeClass(selectedEvaluation)}`}>
+                        Final Score: {getScoreBadgeLabel(selectedEvaluation)}
                       </span>
                     </div>
                     <div className="divide-y max-h-[45vh] overflow-y-auto">

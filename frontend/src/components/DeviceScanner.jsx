@@ -12,12 +12,11 @@ import zkp from "../utils/zkp";
 import { useAuth } from "../contexts/AuthContext";
 
 const DeviceScanner = ({ onClose, onDeviceRegistered }) => {
-  const { user } = useAuth(); // Get currently logged in user
-  const [step, setStep] = useState("scanning"); // scanning, processing, success, error
+  const { user } = useAuth();
+  const [step, setStep] = useState("scanning");
   const [errorMessage, setErrorMessage] = useState("");
 
   const handleScan = async (result) => {
-    // Prevent multiple scans while processing
     if (step !== "scanning" || !result || result.length === 0) return;
 
     const qrText = result[0].rawValue;
@@ -26,7 +25,6 @@ const DeviceScanner = ({ onClose, onDeviceRegistered }) => {
       setStep("processing");
       setErrorMessage("");
 
-      // 1. Parse the QR code payload
       const payload = JSON.parse(qrText);
       const {
         userId: scannedUserId,
@@ -38,33 +36,27 @@ const DeviceScanner = ({ onClose, onDeviceRegistered }) => {
         throw new Error("Invalid QR code format.");
       }
 
-      // 2. Security Check: Ensure they are scanning a QR code meant for THEIR account
       if (scannedUserId !== user.userId) {
         throw new Error(
           `Account mismatch! This QR code is for ${scannedUserId}, but you are logged in as ${user.userId}.`,
         );
       }
 
-      // 3. Get the raw ZKP private key string from this device's localStorage
       const rawPrivateKey = zkp.getRawPrivateKeyString(user.userId);
 
-      // 4. Encrypt the private key using the Lab PC's temporary public key
       const encryptedPayloadBase64 = await zkp.encryptKeyForSync(
         rawPrivateKey,
         tempPublicKeyBase64,
       );
 
-      // 5. Submit the encrypted key to the backend bridge
       await authAPI.submitEncryptedKey(pairingCode, encryptedPayloadBase64);
 
       if (typeof onDeviceRegistered === "function") {
         await onDeviceRegistered();
       }
 
-      // 6. Success!
       setStep("success");
 
-      // Auto-close after 2.5 seconds
       setTimeout(() => {
         onClose();
       }, 2500);
@@ -83,7 +75,6 @@ const DeviceScanner = ({ onClose, onDeviceRegistered }) => {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 p-4 backdrop-blur-sm">
       <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden relative">
-        {/* Header */}
         <div className="bg-indigo-600 p-4 text-white flex justify-between items-center">
           <div className="flex items-center gap-2">
             <Camera className="w-5 h-5" />
@@ -107,7 +98,7 @@ const DeviceScanner = ({ onClose, onDeviceRegistered }) => {
               <div className="rounded-xl overflow-hidden border-2 border-indigo-100 shadow-inner bg-black aspect-square">
                 <Scanner
                   onScan={handleScan}
-                  onError={(error) => console.log("Scanner error:", error)}
+                  onError={(error) => console.error("Scanner error:", error)}
                   components={{ tracker: true, audio: false }}
                 />
               </div>

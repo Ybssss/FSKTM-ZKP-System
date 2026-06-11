@@ -118,18 +118,12 @@ const canRequesterAccessStudent = async ({
   return Boolean(matchingCurrentSession);
 };
 
-// @desc    Search feedback/evaluations
-// @route   GET /api/feedback/search
-// @access  Private
 exports.searchFeedback = async (req, res) => {
   try {
     const { query, semester, studentId } = req.query;
 
-    console.log("🔍 Searching feedback:", { query, semester, studentId });
-
     const filter = {};
 
-    // Search by student name or matric number
     if (query && query.trim() !== "") {
       const safeQuery = escapeRegex(cleanText(query)).slice(0, 80);
 
@@ -145,8 +139,6 @@ exports.searchFeedback = async (req, res) => {
       if (students.length > 0) {
         filter.studentId = { $in: students.map((s) => s._id) };
       } else {
-        // No students found matching query
-        console.log("⚠️  No students found matching query");
         return res.json({
           success: true,
           count: 0,
@@ -164,8 +156,6 @@ exports.searchFeedback = async (req, res) => {
     if (studentId && studentId.trim() !== "") {
       filter.studentId = studentId;
     }
-
-    console.log("📊 Search filter:", JSON.stringify(filter, null, 2));
 
     const evaluations = await Evaluation.find(filter)
       .populate("studentId", STUDENT_SELECT)
@@ -233,12 +223,13 @@ exports.searchFeedback = async (req, res) => {
         if (ev.sessionId) {
           ev.sessionId.studentDocuments = [];
         }
+      } else if (viewerRole === "student") {
+        ev.scores = undefined;
+        ev.totalMarks = undefined;
       }
 
       return ev;
     });
-
-    console.log(`✅ Found ${protectedEvaluations.length} evaluations`);
 
     res.json({
       success: true,
@@ -246,7 +237,7 @@ exports.searchFeedback = async (req, res) => {
       evaluations: protectedEvaluations,
     });
   } catch (error) {
-    console.error("❌ Search feedback error:", error);
+    console.error("Search feedback error:", error);
     res.status(500).json({
       success: false,
       message: "Error searching feedback",
@@ -255,16 +246,9 @@ exports.searchFeedback = async (req, res) => {
   }
 };
 
-// @desc    Get all unique semesters
-// @route   GET /api/feedback/semesters
-// @access  Private
 exports.getSemesters = async (req, res) => {
   try {
-    console.log("📅 Fetching all semesters");
-
     const semesters = await Evaluation.distinct("semester");
-
-    console.log(`✅ Found ${semesters.length} semesters`);
 
     res.json({
       success: true,
@@ -272,7 +256,7 @@ exports.getSemesters = async (req, res) => {
       semesters: semesters.sort(),
     });
   } catch (error) {
-    console.error("❌ Get semesters error:", error);
+    console.error("Get semesters error:", error);
     res.status(500).json({
       success: false,
       message: "Error fetching semesters",
@@ -281,20 +265,24 @@ exports.getSemesters = async (req, res) => {
   }
 };
 
-// @desc    Get feedback statistics
-// @route   GET /api/feedback/stats
-// @access  Private
 exports.getFeedbackStats = async (req, res) => {
   try {
     const { studentId, semester } = req.query;
-
-    console.log("📊 Calculating feedback statistics");
 
     const filter = {};
     if (studentId) filter.studentId = studentId;
     if (semester) filter.semester = semester;
 
     const total = await Evaluation.countDocuments(filter);
+
+    if (req.user.role === "student") {
+      return res.json({
+        success: true,
+        stats: {
+          total,
+        },
+      });
+    }
 
     const avgScoreResult = await Evaluation.aggregate([
       { $match: filter },
@@ -318,14 +306,12 @@ exports.getFeedbackStats = async (req, res) => {
       maxScore: avgScoreResult.length > 0 ? avgScoreResult[0].maxScore : 0,
     };
 
-    console.log("✅ Statistics calculated:", stats);
-
     res.json({
       success: true,
       stats,
     });
   } catch (error) {
-    console.error("❌ Get stats error:", error);
+    console.error("Get feedback stats error:", error);
     res.status(500).json({
       success: false,
       message: "Error calculating statistics",
@@ -334,14 +320,9 @@ exports.getFeedbackStats = async (req, res) => {
   }
 };
 
-// @desc    Get recent feedback
-// @route   GET /api/feedback/recent
-// @access  Private
 exports.getRecentFeedback = async (req, res) => {
   try {
     const { limit = 10 } = req.query;
-
-    console.log("🔍 Fetching recent feedback");
 
     const evaluations = await Evaluation.find()
       .populate("studentId", "name matricNumber")
@@ -350,15 +331,13 @@ exports.getRecentFeedback = async (req, res) => {
       .sort({ date: -1 })
       .limit(parseInt(limit));
 
-    console.log(`✅ Found ${evaluations.length} recent evaluations`);
-
     res.json({
       success: true,
       count: evaluations.length,
       evaluations,
     });
   } catch (error) {
-    console.error("❌ Get recent feedback error:", error);
+    console.error("Get recent feedback error:", error);
     res.status(500).json({
       success: false,
       message: "Error fetching recent feedback",
@@ -467,7 +446,7 @@ exports.requestAccess = async (req, res) => {
       permission,
     });
   } catch (error) {
-    console.error("Request Access Error:", error);
+    console.error("Request access error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to request access.",
@@ -603,7 +582,7 @@ exports.requestStudentHistoryAccess = async (req, res) => {
       permissions,
     });
   } catch (error) {
-    console.error("Request Student History Access Error:", error);
+    console.error("Request student history access error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to request student history access.",
@@ -695,7 +674,7 @@ exports.requestUnlockEvaluation = async (req, res) => {
       permission,
     });
   } catch (error) {
-    console.error("Request Unlock Error:", error);
+    console.error("Request unlock error:", error);
     res.status(500).json({
       success: false,
       message: "Failed to request unlock.",

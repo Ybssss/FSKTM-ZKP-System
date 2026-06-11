@@ -1,0 +1,7 @@
+At line:1 char:75
++ ... _URL=http://localhost:5105/api; $env:VITE_RECAPTCHA_SITE_KEY=; Set-Lo ...
++                                                                  ~
+You must provide a value expression following the '=' operator.
+    + CategoryInfo          : ParserError: (:) [], ParentContainsErrorRecordException
+    + FullyQualifiedErrorId : ExpectedValueExpression
+ 

@@ -1,4 +1,3 @@
-// src/models/Rubric.js
 const mongoose = require("mongoose");
 
 const criterionSchema = new mongoose.Schema(
@@ -6,27 +5,23 @@ const criterionSchema = new mongoose.Schema(
     key: { type: String, required: true },
     title: { type: String, required: true },
 
-    // 🔴 ADDED: Support for Quantitative vs Qualitative
     type: {
       type: String,
       enum: ["quantitative", "qualitative"],
       default: "quantitative",
     },
 
-    // Quantitative specific fields
     weight: { type: Number, default: 0 },
     maxScore: { type: Number, default: 5 },
 
-    // Qualitative specific field (Instructions)
     description: { type: String, default: "" },
 
-    // Grading Scale Text
-    outstanding: { type: String, default: "" }, // 5 Marks
-    exemplary: { type: String, default: "" }, // 4 Marks
-    proficient: { type: String, default: "" }, // 3 Marks
-    satisfactory: { type: String, default: "" }, // 2 Marks
-    foundational: { type: String, default: "" }, // 1 Mark
-    novice: { type: String, default: "" }, // 0 Marks
+    outstanding: { type: String, default: "" },
+    exemplary: { type: String, default: "" },
+    proficient: { type: String, default: "" },
+    satisfactory: { type: String, default: "" },
+    foundational: { type: String, default: "" },
+    novice: { type: String, default: "" },
   },
   { _id: false },
 );

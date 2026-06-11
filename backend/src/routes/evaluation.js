@@ -1,21 +1,23 @@
-// backend/src/routes/evaluation.js
 const express = require("express");
 const router = express.Router();
 const evaluationController = require("../controllers/evaluationController");
 const { authenticateToken } = require("../middleware/auth");
-const Evaluation = require("../models/Evaluation"); // 🔴 REQUIRED for the student route
+const Evaluation = require("../models/Evaluation");
+const {
+  buildEvaluationOutcomeMap,
+  ensureSupervisorEvaluations,
+  getEvaluationGroupKey,
+  sanitizeEvaluationForStudent,
+} = require("../utils/evaluationWorkflow");
 
-// 1. Get all evaluations (For the EvaluationPage dashboard)
 router.get("/", authenticateToken, evaluationController.getAllEvaluations);
 
-// 2. Submit an evaluation (Scored or Qualitative)
 router.post(
   "/submit",
   authenticateToken,
   evaluationController.submitEvaluation,
 );
 
-// 3. Search old comments (For the Admin Dashboard)
 router.get(
   "/search",
   authenticateToken,
@@ -28,17 +30,16 @@ router.get(
   evaluationController.getSessionEvaluations,
 );
 
-// 🔴 NEW: Get evaluations strictly by student ID (Fixes 404 on Student Progress/Reports page)
+// Students can only see their own published outcomes from this route.
 router.get("/student/:studentId", authenticateToken, async (req, res) => {
   try {
     const studentId = req.params.studentId;
+    const isStudentRequester = req.user.role === "student";
 
-    // Ensure panels can only see their own students' evals, and students can only see their own
-    if (req.user.role === "student") {
+    if (isStudentRequester) {
       const loggedInId = (req.user.id || req.user._id).toString();
       const requestedId = studentId.toString();
 
-      // Allow if either the MongoDB ID matches or the UTHM Matric Number (userId) matches
       if (loggedInId !== requestedId && req.user.userId !== requestedId) {
         return res.status(403).json({
           success: false,
@@ -47,11 +48,26 @@ router.get("/student/:studentId", authenticateToken, async (req, res) => {
       }
     }
 
+    await ensureSupervisorEvaluations({ studentIds: [studentId] });
+
     const evaluations = await Evaluation.find({ studentId })
-      .populate("evaluatorId", "name email")
+      .populate("evaluatorId", "name email userId role")
       .populate("rubricId", "name criteria")
       .populate("studentId", "name matricNumber researchTitle")
+      .populate("sessionId", "title date sessionType academicSession batchName")
       .sort({ createdAt: -1 });
+
+    if (isStudentRequester) {
+      const outcomes = buildEvaluationOutcomeMap(evaluations);
+      const sanitizedEvaluations = evaluations.map((evaluation) =>
+        sanitizeEvaluationForStudent(
+          evaluation,
+          outcomes.get(getEvaluationGroupKey(evaluation)),
+        ),
+      );
+
+      return res.json({ success: true, evaluations: sanitizedEvaluations });
+    }
 
     res.json({ success: true, evaluations });
   } catch (error) {

@@ -81,6 +81,7 @@ function App() {
             <Route path="sessions/:id" element={<SessionDetailPage />} />
             <Route path="attendance" element={<PanelAttendancePage />} />
             <Route path="users" element={<UsersPage />} />
+            <Route path="users/:id" element={<StudentProfile />} />
             <Route path="assignments" element={<PanelAssignmentPage />} />
             {/* Shared Tools for Staff */}
             <Route path="devices" element={<DeviceManagementPage />} />
@@ -121,6 +122,7 @@ function App() {
             <Route path="sessions" element={<SchedulePage />} />
             <Route path="attendance" element={<AttendancePage />} />
             <Route path="profile" element={<StudentProfile />} />
+            <Route path="users/:id" element={<StudentProfile />} />
             <Route path="devices" element={<DeviceManagementPage />} />
           </Route>
 

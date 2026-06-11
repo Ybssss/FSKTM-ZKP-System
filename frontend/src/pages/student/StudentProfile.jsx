@@ -1,6 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useParams } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import { userAPI } from "../../services/api";
+import UserProfileLink from "../../components/UserProfileLink";
+import { getUserProfileId } from "../../utils/userProfile";
 import {
   User,
   Mail,
@@ -15,6 +18,8 @@ import {
   Edit3,
   Save,
   X,
+  Camera,
+  ImageOff,
 } from "lucide-react";
 
 const normalizeText = (value = "") =>
@@ -24,6 +29,9 @@ const shortText = (value = "", max = 260) => {
   const text = normalizeText(value);
   return text.length > max ? `${text.slice(0, max)}...` : text;
 };
+
+const MAX_PROFILE_IMAGE_BYTES = 1.5 * 1024 * 1024;
+const PROFILE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 
 const formatDateTime = (value) => {
   if (!value) return "-";
@@ -36,6 +44,7 @@ const formatDateTime = (value) => {
 };
 
 export default function StudentProfile() {
+  const { id: viewedUserId } = useParams();
   const { user } = useAuth();
 
   const [profileData, setProfileData] = useState(null);
@@ -46,23 +55,27 @@ export default function StudentProfile() {
   const [researchTitle, setResearchTitle] = useState("");
   const [researchAbstract, setResearchAbstract] = useState("");
   const [savingResearch, setSavingResearch] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     fetchProfile();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [viewedUserId]);
 
   const fetchProfile = async () => {
     try {
       setLoading(true);
       setMessage({ type: "", text: "" });
 
-      const res = await userAPI.getMyProfile();
+      const res = viewedUserId
+        ? await userAPI.getById(viewedUserId)
+        : await userAPI.getMyProfile();
       const freshUser = res.user || {};
 
       setProfileData(freshUser);
       setResearchTitle(freshUser.researchTitle || "");
       setResearchAbstract(freshUser.researchAbstract || "");
+      setIsEditingResearch(false);
     } catch (error) {
       console.error("Failed to load profile", error);
       setMessage({
@@ -77,6 +90,14 @@ export default function StudentProfile() {
   };
 
   const displayUser = profileData || user || {};
+  const displayUserId = getUserProfileId(displayUser);
+  const currentUserId = user?.id || user?._id || "";
+  const isOwnProfile =
+    !viewedUserId ||
+    (displayUserId && currentUserId && String(displayUserId) === String(currentUserId)) ||
+    (displayUser.userId && user?.userId && displayUser.userId === user.userId);
+  const canEditOwnStudentResearch = isOwnProfile && displayUser.role === "student";
+  const canManageProfileImage = user?.role === "admin" && Boolean(displayUserId);
 
   const originalTitle = useMemo(
     () => normalizeText(displayUser.researchTitle || ""),
@@ -99,6 +120,7 @@ export default function StudentProfile() {
     cleanTitle !== originalTitle || cleanAbstract !== originalAbstract;
 
   const canSaveResearch =
+    canEditOwnStudentResearch &&
     isEditingResearch &&
     cleanTitle.length >= 5 &&
     cleanTitle.length <= 300 &&
@@ -115,6 +137,10 @@ export default function StudentProfile() {
     if (typeof supervisor === "object" && supervisor.name) return supervisor.name;
     return "Pending System Link";
   })();
+  const supervisorUser =
+    displayUser.supervisorId && typeof displayUser.supervisorId === "object"
+      ? displayUser.supervisorId
+      : null;
 
   const assignedPanels = Array.isArray(displayUser.assignedPanels)
     ? displayUser.assignedPanels
@@ -218,6 +244,59 @@ export default function StudentProfile() {
     }
   };
 
+  const updateProfileImage = async (profileImageUrl) => {
+    try {
+      setUploadingImage(true);
+      setMessage({ type: "", text: "" });
+      const res = await userAPI.updateProfileImage(displayUserId, profileImageUrl);
+      setProfileData(res.user || displayUser);
+      setMessage({
+        type: "success",
+        text: res.message || "Profile image updated successfully.",
+      });
+    } catch (error) {
+      setMessage({
+        type: "error",
+        text:
+          error.response?.data?.message ||
+          "Failed to update profile image. Please try another image.",
+      });
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleProfileImageUpload = (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    if (!PROFILE_IMAGE_TYPES.has(file.type)) {
+      setMessage({
+        type: "error",
+        text: "Profile image must be PNG, JPG, JPEG, or WebP.",
+      });
+      return;
+    }
+
+    if (file.size > MAX_PROFILE_IMAGE_BYTES) {
+      setMessage({
+        type: "error",
+        text: "Profile image must be smaller than 1.5 MB.",
+      });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => updateProfileImage(String(reader.result || ""));
+    reader.onerror = () =>
+      setMessage({
+        type: "error",
+        text: "Failed to read image file. Please try another image.",
+      });
+    reader.readAsDataURL(file);
+  };
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -230,10 +309,13 @@ export default function StudentProfile() {
     <div className="max-w-5xl mx-auto space-y-8">
       <div>
         <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-2">
-          <User className="w-8 h-8 text-indigo-600" /> My Profile
+          <User className="w-8 h-8 text-indigo-600" />{" "}
+          {isOwnProfile ? "My Profile" : "User Profile"}
         </h1>
         <p className="text-gray-600 mt-2">
-          {displayUser.role === "student"
+          {!isOwnProfile
+            ? "View role-specific details for the selected user."
+            : displayUser.role === "student"
             ? "View your personal details and update your research information."
             : "View your staff identity, expertise profile, and account security status."}
         </p>
@@ -257,9 +339,17 @@ export default function StudentProfile() {
             <div className="bg-indigo-600 h-24" />
             <div className="px-6 pb-6 relative">
               <div className="w-20 h-20 bg-white rounded-full p-1 absolute -top-10 left-6 shadow-md">
-                <div className="w-full h-full bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 text-3xl font-bold">
-                  {displayUser.name?.charAt(0) || "U"}
-                </div>
+                {displayUser.profileImageUrl ? (
+                  <img
+                    src={displayUser.profileImageUrl}
+                    alt={`${displayUser.name || "User"} profile`}
+                    className="w-full h-full rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-full h-full bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 text-3xl font-bold">
+                    {displayUser.name?.charAt(0) || "U"}
+                  </div>
+                )}
               </div>
 
               <div className="pt-12">
@@ -282,6 +372,45 @@ export default function StudentProfile() {
                     </span>
                   </div>
                 </div>
+
+                {canManageProfileImage && (
+                  <div className="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-2">
+                    <input
+                      id={`profile-image-upload-${displayUserId}`}
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      onChange={handleProfileImageUpload}
+                      className="hidden"
+                      disabled={uploadingImage}
+                    />
+                    <label
+                      htmlFor={
+                        uploadingImage
+                          ? undefined
+                          : `profile-image-upload-${displayUserId}`
+                      }
+                      className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold border ${
+                        uploadingImage
+                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
+                          : "bg-indigo-50 text-indigo-700 border-indigo-100 hover:bg-indigo-100 cursor-pointer"
+                      }`}
+                    >
+                      <Camera className="w-4 h-4" />
+                      {uploadingImage ? "Uploading..." : "Upload Image"}
+                    </label>
+                    {displayUser.profileImageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => updateProfileImage("")}
+                        disabled={uploadingImage}
+                        className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-bold bg-red-50 text-red-700 border border-red-100 hover:bg-red-100 disabled:opacity-50"
+                      >
+                        <ImageOff className="w-4 h-4" />
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -296,7 +425,7 @@ export default function StudentProfile() {
                   Academic Details
                 </h3>
 
-                {!isEditingResearch ? (
+                {canEditOwnStudentResearch && !isEditingResearch ? (
                   <button
                     type="button"
                     onClick={() => {
@@ -307,7 +436,7 @@ export default function StudentProfile() {
                   >
                     <Edit3 className="w-4 h-4" /> Edit Title & Abstract
                   </button>
-                ) : (
+                ) : canEditOwnStudentResearch ? (
                   <button
                     type="button"
                     onClick={cancelResearchEdit}
@@ -315,7 +444,7 @@ export default function StudentProfile() {
                   >
                     <X className="w-4 h-4" /> Cancel
                   </button>
-                )}
+                ) : null}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-6">
@@ -343,7 +472,7 @@ export default function StudentProfile() {
                   <BookOpen className="w-4 h-4" /> Research Project Title
                 </p>
 
-                {isEditingResearch ? (
+                {canEditOwnStudentResearch && isEditingResearch ? (
                   <>
                     <textarea
                       value={researchTitle}
@@ -382,7 +511,7 @@ export default function StudentProfile() {
                   Research Abstract / Summary
                 </p>
 
-                {isEditingResearch ? (
+                {canEditOwnStudentResearch && isEditingResearch ? (
                   <>
                     <textarea
                       value={researchAbstract}
@@ -412,7 +541,7 @@ export default function StudentProfile() {
                 )}
               </div>
 
-              {isEditingResearch && (
+              {canEditOwnStudentResearch && isEditingResearch && (
                 <div className="flex justify-end">
                   <button
                     type="button"
@@ -432,7 +561,14 @@ export default function StudentProfile() {
                     <Users className="w-4 h-4" /> Assigned Supervisor
                   </p>
                   <p className="font-bold text-gray-900 text-lg">
-                    {supervisorName}
+                    {supervisorUser ? (
+                      <UserProfileLink
+                        user={supervisorUser}
+                        className="font-bold text-lg"
+                      />
+                    ) : (
+                      supervisorName
+                    )}
                   </p>
                 </div>
 
@@ -447,7 +583,11 @@ export default function StudentProfile() {
                           key={panel._id || panel.userId || index}
                           className="font-semibold text-gray-900"
                         >
-                          {panel.name || panel.userId || `Panel ${index + 1}`}
+                          <UserProfileLink
+                            user={panel}
+                            fallback={`Panel ${index + 1}`}
+                            className="font-semibold"
+                          />
                         </p>
                       ))}
                     </div>
@@ -526,17 +666,16 @@ export default function StudentProfile() {
                           <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2">
                             <div>
                               <p className="text-sm font-bold text-gray-900">
-                                {student.name || student.userId}
+                                <UserProfileLink
+                                  user={student}
+                                  fallback="Student"
+                                  className="font-bold"
+                                />
                               </p>
                               <p className="text-xs font-mono text-gray-500">
                                 {student.matricNumber || student.userId || "-"}
                               </p>
                             </div>
-                            {student.profileRelation && (
-                              <span className="w-fit px-2 py-1 rounded bg-blue-50 text-blue-700 border border-blue-100 text-[10px] font-bold uppercase tracking-wide">
-                                {student.profileRelation}
-                              </span>
-                            )}
                           </div>
 
                           <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mt-3">

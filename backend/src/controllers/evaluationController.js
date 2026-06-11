@@ -2,6 +2,12 @@ const Evaluation = require("../models/Evaluation");
 const { calculateUTHMGrade } = require("../utils/gradeCalculator");
 const PermissionRequest = require("../models/PermissionRequest");
 const Timetable = require("../models/Timetable");
+const {
+  buildEvaluationOutcomeMap,
+  ensureSupervisorEvaluationsForViewer,
+  getEvaluationGroupKey,
+  sanitizeEvaluationForStudent,
+} = require("../utils/evaluationWorkflow");
 
 const toFiniteNumber = (value, fallback = 0) => {
   const parsed = Number(value);
@@ -31,6 +37,8 @@ exports.getAllEvaluations = async (req, res) => {
     const userId = req.user._id || req.user.id || req.user.userId;
     const role = req.user.role;
 
+    await ensureSupervisorEvaluationsForViewer(req.user);
+
     let query = {};
     if (role === "panel") query = { evaluatorId: userId };
     else if (role === "student") query = { studentId: userId };
@@ -44,13 +52,18 @@ exports.getAllEvaluations = async (req, res) => {
       })
       .populate({
         path: "evaluatorId",
-        select: "name email expertiseTags",
+        select: "name email userId role expertiseTags",
         strictPopulate: false,
       })
       .populate({
         path: "sessionId",
-        select: "semester sessionType date venue",
+        select:
+          "title semester sessionType date venue startTime endTime studentDocuments",
         strictPopulate: false,
+        populate: {
+          path: "studentDocuments.uploadedBy",
+          select: "name userId matricNumber email role",
+        },
       })
       .populate({
         path: "rubricId",
@@ -58,6 +71,18 @@ exports.getAllEvaluations = async (req, res) => {
         strictPopulate: false,
       })
       .sort({ createdAt: -1 });
+
+    if (role === "student") {
+      const outcomes = buildEvaluationOutcomeMap(evaluations);
+      const sanitizedEvaluations = evaluations.map((evaluation) =>
+        sanitizeEvaluationForStudent(
+          evaluation,
+          outcomes.get(getEvaluationGroupKey(evaluation)),
+        ),
+      );
+
+      return res.status(200).json({ success: true, data: sanitizedEvaluations });
+    }
 
     res.status(200).json({ success: true, data: evaluations });
   } catch (error) {
@@ -143,16 +168,20 @@ exports.respondToRequest = async (req, res) => {
 // ==========================================
 exports.submitEvaluation = async (req, res) => {
   try {
-    const { sessionId } = req.body;
+    const { sessionId, evaluationId } = req.body;
     const evaluatorId = req.user._id || req.user.id || req.user.userId;
 
     // Find the Pending Evaluation that was created by the Admin
-    const evaluation = await Evaluation.findOne({ sessionId, evaluatorId });
+    const evaluation = await Evaluation.findOne(
+      evaluationId
+        ? { _id: evaluationId, evaluatorId }
+        : { sessionId, evaluatorId },
+    );
 
     if (!evaluation) {
       return res
         .status(404)
-        .json({ error: "Pending evaluation not found for this session." });
+        .json({ error: "Pending evaluation not found for this evaluator." });
     }
 
     if (evaluation.status === "COMPLETED" && !evaluation.isUnlocked) {
@@ -261,7 +290,9 @@ exports.getSessionEvaluations = async (req, res) => {
     const viewerRole = req.user.role;
     const { sessionId } = req.params;
 
-    const timetable = await Timetable.findById(sessionId).select("students panels");
+    const timetable = await Timetable.findById(sessionId)
+      .select("students panels")
+      .populate("students", "supervisorId");
 
     if (!timetable) {
       return res.status(404).json({
@@ -273,8 +304,13 @@ exports.getSessionEvaluations = async (req, res) => {
     const isAdmin = viewerRole === "admin";
     const isAssignedPanel =
       viewerRole === "panel" && hasUserId(timetable.panels || [], viewerId);
+    const isSupervisor =
+      viewerRole === "panel" &&
+      (timetable.students || []).some((student) =>
+        isSameId(student?.supervisorId, viewerId),
+      );
 
-    if (!isAdmin && !isAssignedPanel) {
+    if (!isAdmin && !isAssignedPanel && !isSupervisor) {
       return res.status(403).json({
         success: false,
         message: "You do not have permission to view this session's evaluations.",
@@ -387,7 +423,23 @@ exports.getEvaluationById = async (req, res) => {
       });
     }
 
-    const doc = evaluation.toObject();
+    const doc =
+      viewerRole === "student"
+        ? sanitizeEvaluationForStudent(
+            evaluation,
+            buildEvaluationOutcomeMap(
+              await Evaluation.find({ studentId })
+                .select(
+                  "sessionId sessionType semester status totalMarks scores rubricId",
+                )
+                .populate({
+                  path: "rubricId",
+                  select: "criteria",
+                  strictPopulate: false,
+                }),
+            ).get(getEvaluationGroupKey(evaluation)),
+          )
+        : evaluation.toObject();
     doc.accessGranted = true;
 
     res.json({

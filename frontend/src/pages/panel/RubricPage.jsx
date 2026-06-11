@@ -22,6 +22,44 @@ const toSessionTypeCode = (value = "") =>
 
 const formatSessionType = (value = "") => String(value).replaceAll("_", " ");
 
+const SCORE_DESCRIPTORS = {
+  5: { label: "Outstanding", field: "outstanding", color: "emerald" },
+  4: { label: "Exemplary", field: "exemplary", color: "green" },
+  3: { label: "Proficient", field: "proficient", color: "blue" },
+  2: { label: "Satisfactory", field: "satisfactory", color: "yellow" },
+  1: { label: "Foundational", field: "foundational", color: "orange" },
+  0: { label: "Novice", field: "novice", color: "red" },
+};
+
+const SCORE_CARD_STYLES = {
+  emerald: "bg-emerald-50 border-emerald-200 text-emerald-700",
+  green: "bg-green-50 border-green-200 text-green-700",
+  blue: "bg-blue-50 border-blue-200 text-blue-700",
+  yellow: "bg-yellow-50 border-yellow-200 text-yellow-700",
+  orange: "bg-orange-50 border-orange-200 text-orange-700",
+  red: "bg-red-50 border-red-200 text-red-700",
+};
+
+const getCriterionMaxScore = (criterion) => {
+  const maxScore = Math.floor(Number(criterion?.maxScore ?? 5));
+  return Number.isFinite(maxScore) && maxScore > 0 ? Math.min(maxScore, 5) : 5;
+};
+
+const getScoreScale = (criterion) =>
+  Array.from({ length: getCriterionMaxScore(criterion) + 1 }, (_, index) => {
+    const value = getCriterionMaxScore(criterion) - index;
+    return {
+      value,
+      ...(SCORE_DESCRIPTORS[value] || {
+        label: `Score ${value}`,
+        field: "",
+        color: "blue",
+      }),
+    };
+  });
+
+const formatMarkLabel = (value) => `${value} ${value === 1 ? "mark" : "marks"}`;
+
 export default function RubricPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "superadmin";
@@ -212,7 +250,7 @@ export default function RubricPage() {
       await api.delete(`/rubrics/${id}`);
       loadRubrics();
     } catch (error) {
-      alert("Failed to delete rubric");
+      alert(error.response?.data?.message || "Failed to delete rubric");
     }
   };
 
@@ -248,7 +286,7 @@ export default function RubricPage() {
         {!isAdmin && (
           <div className="mb-6 bg-blue-50 border border-blue-200 rounded-lg p-4">
             <p className="text-sm font-semibold text-blue-800">
-              ℹ️ You have view-only access. Only administrators can create or
+              You have view-only access. Only administrators can create or
               edit official rubrics.
             </p>
           </div>
@@ -393,24 +431,23 @@ export default function RubricPage() {
                     key={criterion.key}
                     className="bg-white border-2 border-indigo-100 rounded-xl p-5 shadow-sm relative mb-4"
                   >
-                    <div className="absolute top-4 right-4 flex gap-4">
+                    <div className="flex items-start justify-between gap-4 mb-4">
+                      <h4 className="font-black text-indigo-800">
+                        CRITERION {index + 1}
+                      </h4>
                       {formData.criteria.length > 1 && (
                         <button
                           type="button"
                           onClick={() => handleRemoveCriterion(index)}
-                          className="text-red-500 hover:text-red-700 text-sm font-bold flex items-center gap-1"
+                          className="text-red-500 hover:text-red-700 text-sm font-bold flex items-center gap-1 shrink-0"
                         >
                           <Trash2 className="w-4 h-4" /> Remove
                         </button>
                       )}
                     </div>
 
-                    <h4 className="font-black text-indigo-800 mb-4">
-                      CRITERION {index + 1}
-                    </h4>
-
-                    <div className="grid grid-cols-12 gap-4 mb-4">
-                      <div className="col-span-8">
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-4">
+                      <div className="md:col-span-8">
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
                           Title
                         </label>
@@ -429,7 +466,7 @@ export default function RubricPage() {
                           required
                         />
                       </div>
-                      <div className="col-span-4">
+                      <div className="md:col-span-4">
                         <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
                           Evaluation Type
                         </label>
@@ -500,115 +537,33 @@ export default function RubricPage() {
                         <label className="block text-xs font-bold text-indigo-500 uppercase mb-3">
                           Grading Scale Descriptions (Optional)
                         </label>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2">
-                          <div>
-                            <p className="text-[10px] font-bold text-gray-500 uppercase mb-1 text-center">
-                              Outstanding (5)
-                            </p>
-                            <textarea
-                              className="w-full text-xs p-2 border rounded"
-                              rows="4"
-                              value={criterion.outstanding || ""}
-                              onChange={(e) =>
-                                handleCriterionChange(
-                                  index,
-                                  "outstanding",
-                                  e.target.value,
-                                )
-                              }
-                              placeholder="Definition..."
-                            />
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-bold text-gray-500 uppercase mb-1 text-center">
-                              Exemplary (4)
-                            </p>
-                            <textarea
-                              className="w-full text-xs p-2 border rounded"
-                              rows="4"
-                              value={criterion.exemplary}
-                              onChange={(e) =>
-                                handleCriterionChange(
-                                  index,
-                                  "exemplary",
-                                  e.target.value,
-                                )
-                              }
-                              placeholder="Definition..."
-                            />
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-bold text-gray-500 uppercase mb-1 text-center">
-                              Proficient (3)
-                            </p>
-                            <textarea
-                              className="w-full text-xs p-2 border rounded"
-                              rows="4"
-                              value={criterion.proficient}
-                              onChange={(e) =>
-                                handleCriterionChange(
-                                  index,
-                                  "proficient",
-                                  e.target.value,
-                                )
-                              }
-                              placeholder="Definition..."
-                            />
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-bold text-gray-500 uppercase mb-1 text-center">
-                              Satisfactory (2)
-                            </p>
-                            <textarea
-                              className="w-full text-xs p-2 border rounded"
-                              rows="4"
-                              value={criterion.satisfactory}
-                              onChange={(e) =>
-                                handleCriterionChange(
-                                  index,
-                                  "satisfactory",
-                                  e.target.value,
-                                )
-                              }
-                              placeholder="Definition..."
-                            />
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-bold text-gray-500 uppercase mb-1 text-center">
-                              Foundational (1)
-                            </p>
-                            <textarea
-                              className="w-full text-xs p-2 border rounded"
-                              rows="4"
-                              value={criterion.foundational}
-                              onChange={(e) =>
-                                handleCriterionChange(
-                                  index,
-                                  "foundational",
-                                  e.target.value,
-                                )
-                              }
-                              placeholder="Definition..."
-                            />
-                          </div>
-                          <div>
-                            <p className="text-[10px] font-bold text-gray-500 uppercase mb-1 text-center">
-                              Novice (0)
-                            </p>
-                            <textarea
-                              className="w-full text-xs p-2 border rounded"
-                              rows="4"
-                              value={criterion.novice}
-                              onChange={(e) =>
-                                handleCriterionChange(
-                                  index,
-                                  "novice",
-                                  e.target.value,
-                                )
-                              }
-                              placeholder="Definition..."
-                            />
-                          </div>
+                        <div
+                          className="grid gap-2"
+                          style={{
+                            gridTemplateColumns:
+                              "repeat(auto-fit, minmax(140px, 1fr))",
+                          }}
+                        >
+                          {getScoreScale(criterion).map((score) => (
+                            <div key={score.value}>
+                              <p className="text-[10px] font-bold text-gray-500 uppercase mb-1 text-center">
+                                {score.label} ({formatMarkLabel(score.value)})
+                              </p>
+                              <textarea
+                                className="w-full text-xs p-2 border rounded"
+                                rows="4"
+                                value={criterion[score.field] || ""}
+                                onChange={(e) =>
+                                  handleCriterionChange(
+                                    index,
+                                    score.field,
+                                    e.target.value,
+                                  )
+                                }
+                                placeholder="Definition..."
+                              />
+                            </div>
+                          ))}
                         </div>
                       </div>
                     ) : (
@@ -655,9 +610,14 @@ export default function RubricPage() {
               <button
                 type="submit"
                 form="rubricForm"
-                className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-sm"
+                disabled={isSubmitting}
+                className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 shadow-sm disabled:opacity-60"
               >
-                {editingRubric ? "Update Rubric" : "Save New Rubric"}
+                {isSubmitting
+                  ? "Saving..."
+                  : editingRubric
+                    ? "Update Rubric"
+                    : "Save New Rubric"}
               </button>
             </div>
           </div>
@@ -714,57 +674,33 @@ export default function RubricPage() {
                               {criterion.weight}%
                             </span>
                           </p>
-                          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
-                            {Number(criterion.maxScore ?? 5) >= 5 && (
-                              <div className="bg-emerald-50 border border-emerald-200 p-3 rounded-lg">
-                                <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-widest mb-2 border-b border-emerald-200 pb-1">
-                                  Outstanding (5)
-                                </p>
-                                <p className="text-xs text-gray-700">
-                                  {criterion.outstanding}
-                                </p>
-                              </div>
-                            )}
-                            <div className="bg-green-50 border border-green-200 p-3 rounded-lg">
-                              <p className="text-[10px] font-bold text-green-700 uppercase tracking-widest mb-2 border-b border-green-200 pb-1">
-                                Exemplary (4)
-                              </p>
-                              <p className="text-xs text-gray-700">
-                                {criterion.exemplary}
-                              </p>
-                            </div>
-                            <div className="bg-blue-50 border border-blue-200 p-3 rounded-lg">
-                              <p className="text-[10px] font-bold text-blue-700 uppercase tracking-widest mb-2 border-b border-blue-200 pb-1">
-                                Proficient (3)
-                              </p>
-                              <p className="text-xs text-gray-700">
-                                {criterion.proficient}
-                              </p>
-                            </div>
-                            <div className="bg-yellow-50 border border-yellow-200 p-3 rounded-lg">
-                              <p className="text-[10px] font-bold text-yellow-700 uppercase tracking-widest mb-2 border-b border-yellow-200 pb-1">
-                                Satisfactory (2)
-                              </p>
-                              <p className="text-xs text-gray-700">
-                                {criterion.satisfactory}
-                              </p>
-                            </div>
-                            <div className="bg-orange-50 border border-orange-200 p-3 rounded-lg">
-                              <p className="text-[10px] font-bold text-orange-700 uppercase tracking-widest mb-2 border-b border-orange-200 pb-1">
-                                Foundational (1)
-                              </p>
-                              <p className="text-xs text-gray-700">
-                                {criterion.foundational}
-                              </p>
-                            </div>
-                            <div className="bg-red-50 border border-red-200 p-3 rounded-lg">
-                              <p className="text-[10px] font-bold text-red-700 uppercase tracking-widest mb-2 border-b border-red-200 pb-1">
-                                Novice (0)
-                              </p>
-                              <p className="text-xs text-gray-700">
-                                {criterion.novice}
-                              </p>
-                            </div>
+                          <div
+                            className="grid gap-3"
+                            style={{
+                              gridTemplateColumns:
+                                "repeat(auto-fit, minmax(150px, 1fr))",
+                            }}
+                          >
+                            {getScoreScale(criterion).map((score) => {
+                              const colorClass =
+                                SCORE_CARD_STYLES[score.color] ||
+                                SCORE_CARD_STYLES.blue;
+
+                              return (
+                                <div
+                                  key={score.value}
+                                  className={`${colorClass} border p-3 rounded-lg`}
+                                >
+                                  <p className="text-[10px] font-bold uppercase tracking-widest mb-2 border-b border-current pb-1">
+                                    {score.label} ({formatMarkLabel(score.value)})
+                                  </p>
+                                  <p className="text-xs text-gray-700">
+                                    {criterion[score.field] ||
+                                      "No description provided."}
+                                  </p>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       ) : (

@@ -1,8 +1,21 @@
-import React, { useState } from 'react';
-import { Upload, FileText, Download, Trash2, Eye, Plus, X, Paperclip } from 'lucide-react';
-import { timetableAPI } from '../services/api';
-import { useAuth } from '../contexts/AuthContext';
-import { getDocumentFileName, openAuthenticatedFile } from '../utils/authenticatedFile';
+import React, { useState } from "react";
+import {
+  Upload,
+  FileText,
+  Download,
+  Trash2,
+  Eye,
+  Plus,
+  X,
+  Paperclip,
+} from "lucide-react";
+import { timetableAPI } from "../services/api";
+import { useAuth } from "../contexts/AuthContext";
+import {
+  getDocumentFileName,
+  openAuthenticatedFile,
+} from "../utils/authenticatedFile";
+import UserProfileLink from "./UserProfileLink";
 
 export default function SessionDocuments({ session, onUpdate }) {
   const { user } = useAuth();
@@ -10,18 +23,18 @@ export default function SessionDocuments({ session, onUpdate }) {
   const [uploading, setUploading] = useState(false);
 
   const [formData, setFormData] = useState({
-    title: '',
-    url: '',
-    type: 'report',
-    description: '',
-    fileSize: '',
+    title: "",
+    url: "",
+    type: "report",
+    description: "",
+    fileSize: "",
   });
 
   const handleUpload = async (e) => {
     e.preventDefault();
 
     if (!formData.title || !formData.url) {
-      alert('Please provide title and URL');
+      alert("Please provide title and URL.");
       return;
     }
 
@@ -29,35 +42,35 @@ export default function SessionDocuments({ session, onUpdate }) {
       setUploading(true);
       await timetableAPI.uploadDocument(session._id, formData);
       
-      alert('✅ Document uploaded successfully!');
+      alert("Document uploaded successfully.");
       setShowUploadModal(false);
       setFormData({
-        title: '',
-        url: '',
-        type: 'report',
-        description: '',
-        fileSize: '',
+        title: "",
+        url: "",
+        type: "report",
+        description: "",
+        fileSize: "",
       });
       
       if (onUpdate) onUpdate();
     } catch (error) {
-      console.error('Upload error:', error);
-      alert(error.response?.data?.message || 'Failed to upload document');
+      console.error("Upload error:", error);
+      alert(error.response?.data?.message || "Failed to upload document.");
     } finally {
       setUploading(false);
     }
   };
 
   const handleDelete = async (documentId) => {
-    if (!window.confirm('Are you sure you want to delete this document?')) return;
+    if (!window.confirm("Are you sure you want to delete this document?")) return;
 
     try {
       await timetableAPI.deleteDocument(session._id, documentId);
-      alert('✅ Document deleted successfully!');
+      alert("Document deleted successfully.");
       if (onUpdate) onUpdate();
     } catch (error) {
-      console.error('Delete error:', error);
-      alert('Failed to delete document');
+      console.error("Delete error:", error);
+      alert("Failed to delete document.");
     }
   };
 
@@ -65,40 +78,52 @@ export default function SessionDocuments({ session, onUpdate }) {
     try {
       await openAuthenticatedFile(document, { download });
     } catch (error) {
-      console.error('Document open error:', error);
-      alert(error.response?.data?.message || 'Failed to open document');
+      console.error("Document open error:", error);
+      alert(error.response?.data?.message || "Failed to open document.");
     }
   };
 
-  const getDocumentIcon = (type) => {
+  const renderDocumentIcon = (type) => {
     switch (type) {
-      case 'report':
-        return '📄';
-      case 'slides':
-        return '📊';
-      case 'supplementary':
-        return '📎';
+      case "supplementary":
+        return (
+          <div className="p-3 rounded-lg bg-amber-50 text-amber-700 border border-amber-100">
+            <Paperclip className="w-6 h-6" />
+          </div>
+        );
+      case "slides":
+        return (
+          <div className="p-3 rounded-lg bg-blue-50 text-blue-700 border border-blue-100">
+            <FileText className="w-6 h-6" />
+          </div>
+        );
+      case "report":
       default:
-        return '📁';
+        return (
+          <div className="p-3 rounded-lg bg-gray-100 text-gray-700 border border-gray-200">
+            <FileText className="w-6 h-6" />
+          </div>
+        );
     }
   };
 
   const getDocumentTypeLabel = (type) => {
     switch (type) {
-      case 'report':
-        return 'Research Report';
-      case 'slides':
-        return 'Presentation Slides';
-      case 'supplementary':
-        return 'Supplementary Material';
+      case "report":
+        return "Research Report";
+      case "slides":
+        return "Presentation Slides";
+      case "supplementary":
+        return "Supplementary Material";
       default:
-        return 'Other Document';
+        return "Other Document";
     }
   };
 
-  const canUpload = user?.role === 'student' || user?.role === 'panel' || user?.role === 'admin';
+  const canUpload =
+    user?.role === "student" || user?.role === "panel" || user?.role === "admin";
   const canDelete = (document) => {
-    return user?.role === 'admin' || document.uploadedBy?._id === user?.id;
+    return user?.role === "admin" || document.uploadedBy?._id === user?.id;
   };
 
   const documents = session.studentDocuments || [];
@@ -109,7 +134,6 @@ export default function SessionDocuments({ session, onUpdate }) {
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6">
-      {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Paperclip className="w-5 h-5 text-gray-600" />
@@ -130,13 +154,11 @@ export default function SessionDocuments({ session, onUpdate }) {
         )}
       </div>
 
-      {/* Info Box */}
       <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-800">
-        <p className="font-semibold mb-1">📤 Document Upload:</p>
+        <p className="font-semibold mb-1">Document Upload</p>
         <p>Upload your research report, presentation slides, and other materials here. Panel members can review documents before the session.</p>
       </div>
 
-      {/* Documents List */}
       {documents.length === 0 ? (
         <div className="text-center py-8 text-gray-500">
           <FileText className="w-12 h-12 text-gray-300 mx-auto mb-3" />
@@ -159,7 +181,7 @@ export default function SessionDocuments({ session, onUpdate }) {
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-3 flex-1">
-                  <div className="text-3xl">{getDocumentIcon(document.type)}</div>
+                  <div>{renderDocumentIcon(document.type)}</div>
                   
                   <div className="flex-1">
                     <h4 className="font-semibold text-gray-900">{document.title}</h4>
@@ -177,10 +199,15 @@ export default function SessionDocuments({ session, onUpdate }) {
                         <span>{document.fileSize}</span>
                       )}
                       <span>
-                        Uploaded by: {document.uploadedBy?.name || 'Unknown'}
+                        Uploaded by:{" "}
+                        <UserProfileLink
+                          user={document.uploadedBy}
+                          fallback="Unknown"
+                          className="font-semibold"
+                        />
                       </span>
                       <span>
-                        {new Date(document.uploadedAt).toLocaleDateString('en-MY')}
+                        {new Date(document.uploadedAt).toLocaleDateString("en-MY")}
                       </span>
                     </div>
 
@@ -225,7 +252,6 @@ export default function SessionDocuments({ session, onUpdate }) {
         </div>
       )}
 
-      {/* Upload Modal */}
       {showUploadModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full">
@@ -240,7 +266,6 @@ export default function SessionDocuments({ session, onUpdate }) {
             </div>
 
             <form onSubmit={handleUpload} className="p-6">
-              {/* Document Title */}
               <div className="mb-4">
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Document Title *
@@ -255,7 +280,6 @@ export default function SessionDocuments({ session, onUpdate }) {
                 />
               </div>
 
-              {/* Document Type */}
               <div className="mb-4">
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Document Type *
@@ -272,7 +296,6 @@ export default function SessionDocuments({ session, onUpdate }) {
                 </select>
               </div>
 
-              {/* Document URL */}
               <div className="mb-4">
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Document URL *
@@ -290,7 +313,6 @@ export default function SessionDocuments({ session, onUpdate }) {
                 </p>
               </div>
 
-              {/* File Size */}
               <div className="mb-4">
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   File Size (optional)
@@ -304,7 +326,6 @@ export default function SessionDocuments({ session, onUpdate }) {
                 />
               </div>
 
-              {/* Description */}
               <div className="mb-6">
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
                   Description (optional)
@@ -318,7 +339,6 @@ export default function SessionDocuments({ session, onUpdate }) {
                 />
               </div>
 
-              {/* Actions */}
               <div className="flex gap-4">
                 <button
                   type="button"

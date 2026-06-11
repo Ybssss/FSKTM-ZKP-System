@@ -18,6 +18,7 @@ const userSchema = new mongoose.Schema(
       default: null,
     },
     profession: { type: String, default: "" },
+    profileImageUrl: { type: String, default: "" },
     researchTitle: { type: String, default: "" },
     researchAbstract: {
       type: String,

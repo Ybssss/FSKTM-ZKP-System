@@ -7,7 +7,6 @@ export default function QRCodePage() {
   const [sessions, setSessions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedSession, setSelectedSession] = useState(null);
-  const [qrData, setQrData] = useState(null);
   const [qrImage, setQrImage] = useState(null);
   const [generating, setGenerating] = useState(false);
 
@@ -19,17 +18,15 @@ export default function QRCodePage() {
     try {
       setLoading(true);
       const data = await timetableAPI.getAll();
-      
-      // Filter upcoming sessions only
+
       const upcoming = (data.timetables || []).filter(
-        t => new Date(t.date) >= new Date() && t.status === 'scheduled'
+        (t) => new Date(t.date) >= new Date() && t.status === "scheduled",
       );
-      
+
       setSessions(upcoming);
-      console.log('✅ Loaded', upcoming.length, 'upcoming sessions');
     } catch (error) {
-      console.error('Error loading sessions:', error);
-      alert('Failed to load sessions. Make sure sessions are created in Session Management.');
+      console.error("Error loading sessions:", error);
+      alert("Failed to load sessions. Make sure sessions are created in Session Management.");
     } finally {
       setLoading(false);
     }
@@ -39,34 +36,28 @@ export default function QRCodePage() {
     try {
       setGenerating(true);
       setSelectedSession(session);
-      
-      console.log('📱 Generating QR for session:', session._id);
 
-      // Call backend to generate QR with verification token
       const response = await qrAPI.generate(session._id);
-      
+
       if (!response.success) {
-        throw new Error(response.message || 'Failed to generate QR');
+        throw new Error(response.message || "Failed to generate QR");
       }
 
       const qrPayload = response.qrData;
-      setQrData(qrPayload);
 
-      // Generate QR code image
       const qrCodeImage = await QRCode.toDataURL(JSON.stringify(qrPayload), {
         width: 300,
         margin: 2,
         color: {
-          dark: '#10B981',
-          light: '#FFFFFF',
+          dark: "#10B981",
+          light: "#FFFFFF",
         },
       });
 
       setQrImage(qrCodeImage);
-      console.log('✅ QR code generated successfully');
     } catch (error) {
-      console.error('❌ Generate QR error:', error);
-      alert(error.response?.data?.message || error.message || 'Failed to generate QR code');
+      console.error("Generate QR error:", error);
+      alert(error.response?.data?.message || error.message || "Failed to generate QR code.");
     } finally {
       setGenerating(false);
     }
@@ -76,7 +67,7 @@ export default function QRCodePage() {
     if (!qrImage || !selectedSession) return;
 
     const link = document.createElement('a');
-    link.download = `QR_${selectedSession.sessionType}_${new Date().toISOString().split('T')[0]}.png`;
+    link.download = `QR_${selectedSession.sessionType}_${new Date().toISOString().split("T")[0]}.png`;
     link.href = qrImage;
     link.click();
   };
@@ -84,14 +75,12 @@ export default function QRCodePage() {
   return (
     <>
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">QR Code Generator</h1>
           <p className="text-gray-600 mt-2">Generate QR codes for attendance tracking</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Sessions List */}
           <div className="bg-white rounded-lg shadow-sm border border-gray-200">
             <div className="px-6 py-4 border-b border-gray-200">
               <h2 className="text-xl font-bold text-gray-900">Upcoming Sessions</h2>

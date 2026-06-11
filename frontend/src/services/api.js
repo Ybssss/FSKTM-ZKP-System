@@ -1,4 +1,9 @@
 import axios from "axios";
+import {
+  clearStoredSession,
+  isInvalidSessionResponse,
+  isRevokedSessionResponse,
+} from "../utils/authSession";
 
 const resolveApiUrl = () => {
   if (import.meta.env.VITE_API_URL) {
@@ -20,7 +25,7 @@ const api = axios.create({
   baseURL: API_URL,
 });
 
-// Request Interceptor: Attach token
+// Attach the current JWT to every authenticated request.
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) {
@@ -29,21 +34,31 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-// NEW: Response Interceptor for Remote Wipe
+// Clear local credentials when the backend reports that the device session was revoked.
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response && error.response.status === 401) {
-      const msg = error.response.data?.message || "";
-      // If the backend explicitly says the session/device was revoked
-      if (
-        msg.includes("revoked") ||
-        msg.includes("removed") ||
-        msg.includes("logged out")
-      ) {
-        console.warn("🚨 Device revoked remotely! Initiating self-destruct...");
-        localStorage.clear(); // Wipes ALL ZKP keys, tokens, and preferences
-        window.location.href = "/login?revoked=true";
+    if (
+      error.response?.status === 401 &&
+      localStorage.getItem("token")
+    ) {
+      const code = String(error.response.data?.code || "");
+      const message = String(error.response.data?.message || "");
+
+      if (isInvalidSessionResponse(code, message)) {
+        const revoked = isRevokedSessionResponse(code, message);
+
+        clearStoredSession({
+          removeDeviceBinding: revoked,
+          removePrivateKey: revoked,
+        });
+
+        const nextLocation = revoked ? "/login?revoked=true" : "/login?expired=true";
+        if (
+          `${window.location.pathname}${window.location.search}` !== nextLocation
+        ) {
+          window.location.assign(nextLocation);
+        }
       }
     }
     return Promise.reject(error);
@@ -62,8 +77,11 @@ export const authAPI = {
     });
     return response.data;
   },
-  getChallenge: async (userId) => {
-    const response = await api.post("/auth/challenge", { userId });
+  getChallenge: async (userId, recaptchaToken) => {
+    const response = await api.post("/auth/challenge", {
+      userId,
+      recaptchaToken,
+    });
     return response.data;
   },
 
@@ -71,7 +89,7 @@ export const authAPI = {
     const response = await api.post("/auth/verify", {
       userId,
       proof,
-      trustDevice, // <-- This is what fixes the "Trusted Device" issue!
+      trustDevice,
       deviceId,
     });
     return response.data;
@@ -158,6 +176,12 @@ export const userAPI = {
   },
   update: async (id, userData) => {
     const response = await api.put(`/users/${id}`, userData);
+    return response.data;
+  },
+  updateProfileImage: async (id, profileImageUrl) => {
+    const response = await api.patch(`/users/${id}/profile-image`, {
+      profileImageUrl,
+    });
     return response.data;
   },
   delete: async (id) => {
@@ -421,6 +445,19 @@ export const analyticsAPI = {
   getStats: async () => {
     const response = await api.get("/analytics/stats");
     return response.data;
+  },
+
+  getOverview: async () => {
+    const response = await api.get("/analytics/stats");
+    return response.data;
+  },
+
+  getTrends: async () => {
+    const response = await api.get("/analytics/stats");
+    return {
+      success: response.data?.success ?? true,
+      trends: response.data?.stats?.trends || [],
+    };
   },
 
   // Get stats for student dashboard

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Calendar as CalendarIcon,
@@ -17,44 +17,27 @@ import {
 import { useNavigate } from "react-router-dom";
 import api, { sessionBatchAPI } from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
-
-const normalizeDateKey = (value) => {
-  if (!value) return "";
-  if (typeof value === "string") {
-    const match = value.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (match) return `${match[1]}-${match[2]}-${match[3]}`;
-  }
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(
-    date.getDate(),
-  ).padStart(2, "0")}`;
-};
-
-const timeToMinutes = (value) => {
-  const match = String(value || "").match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) return null;
-  return Number(match[1]) * 60 + Number(match[2]);
-};
-
-const minutesToTime = (minutes) => {
-  const normalized = ((Number(minutes) || 0) % 1440 + 1440) % 1440;
-  return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${String(normalized % 60).padStart(2, "0")}`;
-};
+import UserProfileLink from "../../components/UserProfileLink";
+import SortableTh from "../../components/SortableTh";
+import useSortableData from "../../hooks/useSortableData";
+import {
+  buildPublishConflictMap,
+  buildTimingConflictMap,
+  getPanel,
+  getStudent,
+  idOf,
+  minutesToTime,
+  nameOf,
+  normalizeDateKey,
+  timeToMinutes,
+} from "../../utils/timetableConflicts";
 
 const addMinutes = (time, minutes) => {
   const base = timeToMinutes(time);
   if (base === null) return "";
   return minutesToTime(base + Number(minutes || 0));
 };
-
-const getStudent = (session) => session.student || session.students?.[0] || null;
-const getPanel = (session, index) => session.panels?.[index] || session[`panel${index + 1}Id`] || null;
-const idOf = (value) => String(value?._id || value || "");
-const nameOf = (value) => value?.name || value?.userId || "-";
 const assignedPanelValue = (assignment) => assignment?.panelId || assignment;
-
-const rangesOverlap = (aStart, aEnd, bStart, bEnd) => aStart < bEnd && bStart < aEnd;
 const sortSessionsBySchedule = (items = []) =>
   [...items].sort((a, b) => {
     const aKey = `${normalizeDateKey(a.date)} ${a.startTime || a.time || ""} ${a.title || ""}`;
@@ -114,7 +97,7 @@ export default function TimetableManagementPage() {
 
   const isExistingBatchMode = batchMode === "existing";
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     setLoading(true);
     try {
       const sessionRes = isAdmin ? await api.get("/timetables") : await api.get("/timetables/my");
@@ -151,8 +134,8 @@ export default function TimetableManagementPage() {
 
       return {
         sessions: fetchedSessions,
-        batches,
-        rubrics,
+        batches: [],
+        rubrics: [],
         users: [],
       };
     } catch (error) {
@@ -161,11 +144,11 @@ export default function TimetableManagementPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAdmin]);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   const selectedBatch = useMemo(
     () => batches.find((batch) => String(batch.batchId) === String(selectedBatchId)),
@@ -182,31 +165,38 @@ export default function TimetableManagementPage() {
 
   const filteredBatches = useMemo(() => {
     const term = batchSearch.toLowerCase().trim();
-    if (!term) return batches;
-    return batches.filter((batch) =>
-      [
-        batch.batchName,
-        batch.batchId,
-        batch.sessionType,
-        batch.academicSession,
-        normalizeDateKey(batch.date || batch.earliestDate),
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(term),
-    );
+    const visibleBatches = !term
+      ? batches
+      : batches.filter((batch) =>
+          [
+            batch.batchName,
+            batch.batchId,
+            batch.sessionType,
+            batch.academicSession,
+            normalizeDateKey(batch.date || batch.earliestDate),
+          ]
+            .filter(Boolean)
+            .join(" ")
+            .toLowerCase()
+            .includes(term),
+        );
+
+    return [...visibleBatches].sort((a, b) => {
+      const aKey = `${normalizeDateKey(a.date || a.earliestDate)} ${a.batchName || a.batchId || ""}`;
+      const bKey = `${normalizeDateKey(b.date || b.earliestDate)} ${b.batchName || b.batchId || ""}`;
+      return aKey.localeCompare(bKey);
+    });
   }, [batches, batchSearch]);
 
-  const getAutoSlot = (index, config = bulkConfig, duration = slotDuration) => {
+  const getAutoSlot = useCallback((index, config = bulkConfig, duration = slotDuration) => {
     const startTime = addMinutes(
       config.startTime || "09:00",
       index * (Number(duration || 30) + Number(config.breakBetweenSlotsMinutes || 0)),
     );
     return { startTime, endTime: addMinutes(startTime, Number(duration || 30)) };
-  };
+  }, [bulkConfig, slotDuration]);
 
-  const recalcRows = (rows, config = bulkConfig, duration = slotDuration) =>
+  const recalcRows = useCallback((rows, config = bulkConfig, duration = slotDuration) =>
     rows.map((row, index) => {
       const slot = getAutoSlot(index, config, duration);
       return {
@@ -216,9 +206,9 @@ export default function TimetableManagementPage() {
         startTime: slot.startTime,
         endTime: slot.endTime,
       };
-    });
+    }), [bulkConfig, getAutoSlot, slotDuration]);
 
-  const makeExistingRows = (batchSessions = selectedBatchSessions) =>
+  const makeExistingRows = useCallback((batchSessions) =>
     batchSessions.map((session, index) => {
       const student = getStudent(session);
       const p1 = getPanel(session, 0);
@@ -241,7 +231,7 @@ export default function TimetableManagementPage() {
         panel2Name: nameOf(p2),
         status: session.status || "scheduled",
       };
-    });
+    }), []);
 
   const resetRowsFromBatch = (batch, sessionSource = sessions) => {
     const batchDate = normalizeDateKey(batch?.date || batch?.earliestDate || new Date());
@@ -275,7 +265,7 @@ export default function TimetableManagementPage() {
   useEffect(() => {
     if (isExistingBatchMode && selectedBatchId) {
       setReviewRows((rows) => {
-        const existingRows = makeExistingRows();
+        const existingRows = makeExistingRows(selectedBatchSessions);
         const draftRows = rows.filter((row) => row.type === "draft");
         return recalcRows([...existingRows, ...draftRows]);
       });
@@ -288,6 +278,8 @@ export default function TimetableManagementPage() {
     bulkConfig.startTime,
     bulkConfig.breakBetweenSlotsMinutes,
     slotDuration,
+    makeExistingRows,
+    recalcRows,
   ]);
 
   const updateBulkConfig = (patch) => {
@@ -300,17 +292,17 @@ export default function TimetableManagementPage() {
     });
   };
 
-  const resolvePanel = (value) => {
+  const resolvePanel = useCallback((value) => {
     const panelId = idOf(value);
     if (!panelId) return null;
     return panels.find((panel) => String(panel._id) === panelId) || value;
-  };
+  }, [panels]);
 
-  const assignedPanelNames = (student) =>
+  const assignedPanelNames = useCallback((student) =>
     (student.assignedPanels || [])
       .slice(0, 2)
       .map((assignment) => nameOf(resolvePanel(assignedPanelValue(assignment))))
-      .filter((name) => name && name !== "-");
+      .filter((name) => name && name !== "-"), [resolvePanel]);
 
   const filteredBulkStudents = useMemo(() => {
     const term = bulkStudentSearch.toLowerCase().trim();
@@ -339,7 +331,7 @@ export default function TimetableManagementPage() {
         if (aSelected !== bSelected) return aSelected ? -1 : 1;
         return String(a.name || "").localeCompare(String(b.name || ""));
       });
-  }, [bulkStudentSearch, panels, selectedStudentIds, students]);
+  }, [assignedPanelNames, bulkStudentSearch, selectedStudentIds, students]);
 
   const studentsWithDefaultPanels = students.filter(
     (student) => (student.assignedPanels || []).length >= 2,
@@ -402,150 +394,22 @@ export default function TimetableManagementPage() {
   };
 
   const timingConflictMap = useMemo(() => {
-    const conflicts = new Map();
-    const add = (key, message) => {
-      const messages = conflicts.get(key) || [];
-      if (!messages.includes(message)) conflicts.set(key, [...messages, message]);
-    };
-
-    const rows = reviewRows.map((row) => {
-      const panelEntries = [
-        [idOf(row.panel1Id), row.panel1Name],
-        [idOf(row.panel2Id), row.panel2Name],
-      ].filter(([panelId]) => panelId);
-
-      return {
-        ...row,
-        source: "review",
-        sessionId: idOf(row.sessionId),
-        studentId: idOf(row.studentId),
-        date: normalizeDateKey(row.date),
-        start: timeToMinutes(row.startTime),
-        end: timeToMinutes(row.endTime),
-        panels: panelEntries.map(([panelId]) => panelId),
-        panelNames: Object.fromEntries(panelEntries),
-      };
-    });
-    const reviewedSessionIds = new Set(rows.map((row) => row.sessionId).filter(Boolean));
-    const reviewDates = new Set(rows.map((row) => row.date).filter(Boolean));
-    const existingItems = sessions
-      .filter((session) => String(session.status || "").toLowerCase() !== "cancelled")
-      .map((session) => {
-        const sessionId = idOf(session._id || session.id);
-        const student = getStudent(session);
-        const panelValues = session.panels?.length ? session.panels : [getPanel(session, 0), getPanel(session, 1)];
-        const panelEntries = panelValues
-          .map((panel) => [idOf(panel), nameOf(panel)])
-          .filter(([panelId]) => panelId);
-        return {
-          source: "existing",
-          sessionId,
-          title: session.title || session.sessionType?.replaceAll("_", " ") || "Existing session",
-          studentId: idOf(student),
-          studentName: student?.name || "Student",
-          date: normalizeDateKey(session.date),
-          startTime: session.startTime || session.time || "",
-          endTime: session.endTime || "",
-          start: timeToMinutes(session.startTime || session.time),
-          end: timeToMinutes(session.endTime),
-          panels: panelEntries.map(([panelId]) => panelId),
-          panelNames: Object.fromEntries(panelEntries),
-        };
-      })
-      .filter((item) => item.date && reviewDates.has(item.date))
-      .filter((item) => !item.sessionId || !reviewedSessionIds.has(item.sessionId));
-
-    rows.forEach((row) => {
-      if (!row.studentId) add(row.key, "Missing student.");
-      if (!row.date) add(row.key, "Missing date.");
-      if (row.start === null || row.end === null) add(row.key, "Invalid time frame.");
-      if (row.panels.length !== 2) add(row.key, "Exactly 2 panels required.");
-      if (new Set(row.panels).size !== row.panels.length) add(row.key, "Panel 1 and Panel 2 are duplicated.");
-    });
-
-    const allItems = [...rows, ...existingItems];
-    const addToReviewRow = (item, message) => {
-      if (item.source === "review") add(item.key, message);
-    };
-    const itemLabel = (item) =>
-      item.source === "review"
-        ? `row #${item.slotNo} (${item.studentName || item.title || "session"})`
-        : `existing session "${item.title}"`;
-    const itemTime = (item) => `${item.startTime || "?"}-${item.endTime || "?"}`;
-    const panelNameFor = (item, panelId) => {
-      const directName = item.panelNames?.[panelId];
-      if (directName && directName !== "-") return directName;
-      const directoryName = nameOf(panels.find((panel) => idOf(panel) === panelId));
-      return directoryName && directoryName !== "-" ? directoryName : "Selected panel";
-    };
-
-    for (let i = 0; i < allItems.length; i += 1) {
-      for (let j = i + 1; j < allItems.length; j += 1) {
-        const a = allItems[i];
-        const b = allItems[j];
-        if (a.source !== "review" && b.source !== "review") continue;
-        if (a.sessionId && b.sessionId && a.sessionId === b.sessionId) continue;
-        if (a.date !== b.date) continue;
-        if (a.studentId && a.studentId === b.studentId) {
-          addToReviewRow(
-            a,
-            `Student conflict: ${a.studentName || "This student"} already has ${itemLabel(b)} on ${a.date} at ${itemTime(b)}. One student can only have one session per day.`,
-          );
-          addToReviewRow(
-            b,
-            `Student conflict: ${b.studentName || "This student"} already has ${itemLabel(a)} on ${b.date} at ${itemTime(a)}. One student can only have one session per day.`,
-          );
-        }
-        if (a.start === null || a.end === null || b.start === null || b.end === null) continue;
-        if (!rangesOverlap(a.start, a.end, b.start, b.end)) continue;
-        const sharedPanel = a.panels.find((panelId) => b.panels.includes(panelId));
-        if (sharedPanel) {
-          addToReviewRow(
-            a,
-            `Panel conflict: ${panelNameFor(a, sharedPanel)} is also assigned to ${itemLabel(b)} at ${itemTime(b)}, which overlaps this row at ${itemTime(a)}.`,
-          );
-          addToReviewRow(
-            b,
-            `Panel conflict: ${panelNameFor(b, sharedPanel)} is also assigned to ${itemLabel(a)} at ${itemTime(a)}, which overlaps this row at ${itemTime(b)}.`,
-          );
-        }
-      }
-    }
-
-    return conflicts;
+    return buildTimingConflictMap({ reviewRows, sessions, panels });
   }, [panels, reviewRows, sessions]);
 
   const publishConflictMap = useMemo(() => {
-    const conflicts = new Map(
-      [...timingConflictMap.entries()].map(([key, messages]) => [
-        key,
-        [...messages],
-      ]),
-    );
-    const add = (key, message) =>
-      conflicts.set(key, [...(conflicts.get(key) || []), message]);
-
-    reviewRows
-      .filter((row) => row.type === "draft")
-      .forEach((row) => {
-        if (isExistingBatchMode && !selectedBatchId) {
-          add(row.key, "Select an existing batch before publishing.");
-        }
-        if (!String(bulkConfig.batchName || "").trim()) {
-          add(row.key, "Batch name is required before publishing.");
-        }
-        if (!String(bulkConfig.academicSession || "").trim()) {
-          add(row.key, "Academic session is required before publishing.");
-        }
-        if (!bulkConfig.rubricId) {
-          add(row.key, "Rubric is required before publishing.");
-        }
-        if (!String(bulkConfig.venue || "").trim()) {
-          add(row.key, "Online meeting link is required before publishing.");
-        }
-      });
-
-    return conflicts;
+    return buildPublishConflictMap({
+      timingConflictMap,
+      reviewRows,
+      isExistingBatchMode,
+      selectedBatchId,
+      bulkConfig: {
+        academicSession: bulkConfig.academicSession,
+        batchName: bulkConfig.batchName,
+        rubricId: bulkConfig.rubricId,
+        venue: bulkConfig.venue,
+      },
+    });
   }, [
     bulkConfig.academicSession,
     bulkConfig.batchName,
@@ -755,20 +619,20 @@ export default function TimetableManagementPage() {
   };
 
   const currentUserId = idOf(user?.id || user?._id);
-  const isMyAssignedSession = (session) =>
-    (session.panels || []).some((panel) => idOf(panel) === currentUserId);
+  const isMyAssignedSession = useCallback((session) =>
+    (session.panels || []).some((panel) => idOf(panel) === currentUserId), [currentUserId]);
 
   const visibleSessions = useMemo(
     () =>
       isAdmin && sessionScope === "mine"
         ? sessions.filter(isMyAssignedSession)
         : sessions,
-    [currentUserId, isAdmin, sessionScope, sessions],
+    [isAdmin, isMyAssignedSession, sessionScope, sessions],
   );
 
   const myAssignedSessionCount = useMemo(
     () => sessions.filter(isMyAssignedSession).length,
-    [currentUserId, sessions],
+    [isMyAssignedSession, sessions],
   );
 
   const filteredSessions = useMemo(() => {
@@ -792,6 +656,23 @@ export default function TimetableManagementPage() {
         .includes(term);
     });
   }, [visibleSessions, searchTerm]);
+  const sessionSortAccessors = useMemo(
+    () => ({
+      session: (session) => `${session.title || session.sessionType || ""} ${session.batchName || session.batchId || ""}`,
+      schedule: (session) => `${normalizeDateKey(session.date)} ${session.startTime || session.time || ""}`,
+      student: (session) => {
+        const student = getStudent(session);
+        return `${student?.name || ""} ${student?.matricNumber || student?.userId || ""}`;
+      },
+      panels: (session) => `${nameOf(getPanel(session, 0))} ${nameOf(getPanel(session, 1))}`,
+    }),
+    [],
+  );
+  const {
+    sortedItems: sortedSessions,
+    sortConfig: sessionSortConfig,
+    requestSort: requestSessionSort,
+  } = useSortableData(filteredSessions, sessionSortAccessors, { key: "schedule" });
 
   const formatLink = (url) => {
     if (!url) return "#";
@@ -849,18 +730,24 @@ export default function TimetableManagementPage() {
           <div className="overflow-x-auto">
             <table className="w-full text-left min-w-[900px]">
               <thead className="bg-gray-50 border-b text-xs text-gray-600 uppercase">
-                <tr><th className="p-4">Session</th><th className="p-4">Schedule</th><th className="p-4">Student</th><th className="p-4">Panels</th><th className="p-4 text-right">Actions</th></tr>
+                <tr>
+                  <SortableTh className="p-4" sortKey="session" sortConfig={sessionSortConfig} onSort={requestSessionSort}>Session</SortableTh>
+                  <SortableTh className="p-4" sortKey="schedule" sortConfig={sessionSortConfig} onSort={requestSessionSort}>Schedule</SortableTh>
+                  <SortableTh className="p-4" sortKey="student" sortConfig={sessionSortConfig} onSort={requestSessionSort}>Student</SortableTh>
+                  <SortableTh className="p-4" sortKey="panels" sortConfig={sessionSortConfig} onSort={requestSessionSort}>Panels</SortableTh>
+                  <th className="p-4 text-right">Actions</th>
+                </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {filteredSessions.map((session) => {
+                {sortedSessions.map((session) => {
                   const sessionId = session._id || session.id;
                   const student = getStudent(session);
                   return (
                     <tr key={sessionId} className="hover:bg-gray-50">
                       <td className="p-4"><p className="font-bold text-gray-900">{session.title || session.sessionType}</p><p className="text-xs text-gray-500">{session.batchName || session.batchId || "No batch"}</p></td>
                       <td className="p-4 text-sm text-gray-700"><div>{normalizeDateKey(session.date)}</div><div className="font-semibold">{session.startTime || session.time} - {session.endTime}</div><a href={formatLink(session.venue || session.googleMeetLink)} target="_blank" rel="noreferrer" className="text-blue-700 font-semibold flex items-center gap-1"><Video className="w-4 h-4" /> Link</a></td>
-                      <td className="p-4"><p className="font-bold">{student?.name || "-"}</p><p className="text-xs text-gray-500">{student?.matricNumber || student?.userId || "-"}</p></td>
-                      <td className="p-4 text-sm"><p>{nameOf(getPanel(session, 0))}</p><p>{nameOf(getPanel(session, 1))}</p></td>
+                      <td className="p-4"><p className="font-bold"><UserProfileLink user={student} fallback="-" className="font-bold" /></p><p className="text-xs text-gray-500">{student?.matricNumber || student?.userId || "-"}</p></td>
+                      <td className="p-4 text-sm"><p><UserProfileLink user={getPanel(session, 0)} fallback={nameOf(getPanel(session, 0))} /></p><p><UserProfileLink user={getPanel(session, 1)} fallback={nameOf(getPanel(session, 1))} /></p></td>
                       <td className="p-4">
                         <div className="flex justify-end gap-2">
                           <button
@@ -913,14 +800,102 @@ export default function TimetableManagementPage() {
               </div>
 
               {isExistingBatchMode && (
-                <>
-                  <input value={batchSearch} onChange={(e) => setBatchSearch(e.target.value)} placeholder="Search available batches..." className="w-full p-2 border rounded-lg mb-2" />
-                  <select value={selectedBatchId} onChange={(e) => handleSelectBatch(e.target.value)} className="w-full p-2 border rounded-lg font-semibold bg-gray-50">
-                    <option value="">Select existing batch...</option>
-                    {filteredBatches.map((batch) => <option key={batch.batchId} value={batch.batchId}>{batch.batchName || batch.batchId} — {normalizeDateKey(batch.date || batch.earliestDate)}</option>)}
-                  </select>
-                  <button onClick={openEditBatch} disabled={!selectedBatchId} className="mt-2 w-full px-3 py-2 rounded-lg font-bold text-sm bg-amber-50 text-amber-700 border border-amber-200 disabled:opacity-50">Edit Selected Batch</button>
-                </>
+                <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-3 space-y-3">
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-indigo-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      value={batchSearch}
+                      onChange={(e) => setBatchSearch(e.target.value)}
+                      placeholder="Search batch name, ID, session, or date"
+                      className="w-full pl-9 pr-3 py-2 border border-indigo-100 rounded-lg bg-white text-sm focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div className="rounded-lg border border-indigo-100 bg-white overflow-hidden">
+                    <div className="flex items-center justify-between gap-3 px-3 py-2 border-b border-indigo-100 bg-indigo-50/60 text-[11px] font-bold uppercase tracking-wide text-indigo-700">
+                      <span>Existing Batches</span>
+                      <span>{filteredBatches.length} match(es)</span>
+                    </div>
+                    <div className="max-h-56 overflow-y-auto divide-y divide-indigo-50">
+                      {filteredBatches.length === 0 ? (
+                        <div className="px-3 py-4 text-sm text-gray-500">
+                          No batch matches this search.
+                        </div>
+                      ) : (
+                        filteredBatches.map((batch) => {
+                          const isSelected =
+                            String(selectedBatchId) === String(batch.batchId);
+                          const batchDate = normalizeDateKey(
+                            batch.date || batch.earliestDate,
+                          );
+                          const batchType =
+                            batch.sessionType?.replaceAll("_", " ") || "Session";
+
+                          return (
+                            <button
+                              key={batch.batchId}
+                              type="button"
+                              onClick={() => handleSelectBatch(batch.batchId)}
+                              className={`w-full px-3 py-3 text-left transition-colors ${
+                                isSelected
+                                  ? "bg-indigo-600 text-white"
+                                  : "bg-white hover:bg-indigo-50"
+                              }`}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="font-black truncate">
+                                    {batch.batchName || batch.batchId}
+                                  </p>
+                                  <p
+                                    className={`text-xs truncate ${
+                                      isSelected ? "text-indigo-100" : "text-gray-500"
+                                    }`}
+                                  >
+                                    {batch.batchId}
+                                  </p>
+                                </div>
+                                <span
+                                  className={`shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase ${
+                                    isSelected
+                                      ? "border-indigo-200 text-white"
+                                      : "border-indigo-100 bg-indigo-50 text-indigo-700"
+                                  }`}
+                                >
+                                  {batchType}
+                                </span>
+                              </div>
+                              <p
+                                className={`mt-2 text-xs ${
+                                  isSelected ? "text-indigo-100" : "text-gray-600"
+                                }`}
+                              >
+                                {batchDate} · {batch.academicSession || "No academic session"}
+                              </p>
+                            </button>
+                          );
+                        })
+                      )}
+                    </div>
+                  </div>
+                  {selectedBatch ? (
+                    <div className="rounded-lg bg-white border border-indigo-100 p-3 text-xs text-gray-700">
+                      <p className="font-black text-gray-900">{selectedBatch.batchName || selectedBatch.batchId}</p>
+                      <p>{selectedBatch.batchId}</p>
+                      <p>{normalizeDateKey(selectedBatch.date || selectedBatch.earliestDate)} | {selectedBatch.sessionType?.replaceAll("_", " ") || "Session"}</p>
+                    </div>
+                  ) : (
+                    <p className="text-xs font-semibold text-indigo-700">
+                      {filteredBatches.length} matching batch(es) available.
+                    </p>
+                  )}
+                  <button
+                    onClick={openEditBatch}
+                    disabled={!selectedBatchId}
+                    className="w-full px-3 py-2 rounded-lg font-bold text-sm bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 disabled:opacity-50"
+                  >
+                    Edit Selected Batch
+                  </button>
+                </div>
               )}
             </div>
 
@@ -1018,13 +993,31 @@ export default function TimetableManagementPage() {
                   const defaultPanels = assignedPanelNames(student);
 
                   return (
-                    <button key={student._id} onClick={() => toggleStudentForBulk(student)} className={`w-full text-left p-3 rounded-lg border ${selectedStudentIds.includes(student._id) ? "bg-indigo-50 border-indigo-300" : "bg-white border-gray-200 hover:bg-gray-50"}`}>
-                      <p className="font-bold text-gray-900">{student.name}</p>
+                    <div
+                      key={student._id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => toggleStudentForBulk(student)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          toggleStudentForBulk(student);
+                        }
+                      }}
+                      className={`w-full text-left p-3 rounded-lg border cursor-pointer ${selectedStudentIds.includes(student._id) ? "bg-indigo-50 border-indigo-300" : "bg-white border-gray-200 hover:bg-gray-50"}`}
+                    >
+                      <p className="font-bold text-gray-900">
+                        <UserProfileLink
+                          user={student}
+                          className="font-bold"
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      </p>
                       <p className="text-xs text-gray-500">{student.matricNumber || student.userId}</p>
                       <p className={`text-[11px] mt-1 font-semibold ${defaultPanels.length === 2 ? "text-green-700" : "text-amber-700"}`}>
                         Panels: {defaultPanels.length ? defaultPanels.join(" / ") : "Not assigned"}
                       </p>
-                    </button>
+                    </div>
                   );
                 })}
               </div>

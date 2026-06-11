@@ -130,12 +130,8 @@ router.post("/", async (req, res) => {
       });
     }
 
-    console.log("📝 Creating rubric:", req.body.name);
-
     const rubricPayload = buildRubricPayload(req.body);
     const rubric = await Rubric.create(rubricPayload);
-
-    console.log("✅ Rubric created:", rubric._id);
 
     res.status(201).json({
       success: true,
@@ -172,8 +168,6 @@ router.put("/:id", async (req, res) => {
       });
     }
 
-    console.log("📝 Updating rubric:", req.params.id);
-
     const rubricPayload = buildRubricPayload(req.body);
 
     const rubric = await Rubric.findByIdAndUpdate(
@@ -191,8 +185,6 @@ router.put("/:id", async (req, res) => {
         message: "Rubric not found",
       });
     }
-
-    console.log("✅ Rubric updated");
 
     res.json({
       success: true,
@@ -229,8 +221,6 @@ router.delete("/:id", async (req, res) => {
       });
     }
 
-    console.log("🗑️ Deleting rubric:", req.params.id);
-
     const rubric = await Rubric.findByIdAndDelete(req.params.id);
 
     if (!rubric) {
@@ -239,8 +229,6 @@ router.delete("/:id", async (req, res) => {
         message: "Rubric not found",
       });
     }
-
-    console.log("✅ Rubric deleted");
 
     res.json({
       success: true,

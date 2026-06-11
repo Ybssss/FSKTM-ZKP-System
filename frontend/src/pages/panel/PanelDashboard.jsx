@@ -1,8 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { AlertCircle, ArrowRight, Calendar, Clock, FileText, MapPin } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import api from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
+import UserProfileLink from "../../components/UserProfileLink";
 
 const dateKey = (value) => {
   if (!value) return "";
@@ -35,7 +36,7 @@ export default function PanelDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -48,11 +49,11 @@ export default function PanelDashboard() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [isAdmin]);
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [loadData]);
 
   const upcomingSessions = useMemo(() => {
     const now = new Date();
@@ -160,7 +161,13 @@ export default function PanelDashboard() {
                   <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                     <div>
                       <h3 className="font-bold text-gray-900">{session.title || session.sessionType?.replaceAll("_", " ")}</h3>
-                      <p className="text-sm text-indigo-700 font-semibold">{student?.name || "Student TBA"}</p>
+                      <p className="text-sm font-semibold">
+                        <UserProfileLink
+                          user={student}
+                          fallback="Student TBA"
+                          className="font-semibold"
+                        />
+                      </p>
                       <div className="flex flex-wrap gap-2 mt-2 text-xs text-gray-600">
                         <span className="px-2 py-1 bg-gray-100 rounded-full flex gap-1 items-center"><Clock className="w-3 h-3" />{session.startTime || session.time} - {session.endTime || ""}</span>
                         <span className="px-2 py-1 bg-gray-100 rounded-full flex gap-1 items-center"><MapPin className="w-3 h-3" />{session.venue || session.googleMeetLink || "Online"}</span>
@@ -188,7 +195,13 @@ export default function PanelDashboard() {
               <div key={sessionId} className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3 hover:bg-gray-50">
                 <div>
                   <h3 className="font-bold text-gray-900 flex gap-2 items-center"><FileText className="w-4 h-4 text-indigo-500" />{session.title || session.sessionType?.replaceAll("_", " ")}</h3>
-                  <p className="text-sm text-gray-600">{student?.name || "Student TBA"}</p>
+                  <p className="text-sm">
+                    <UserProfileLink
+                      user={student}
+                      fallback="Student TBA"
+                      className="font-semibold"
+                    />
+                  </p>
                   <div className="flex flex-wrap gap-2 mt-2 text-xs text-gray-600">
                     <span>{dateKey(session.date)}</span><span>{session.startTime || session.time}</span><span>{session.venue || session.googleMeetLink || "Online"}</span>
                   </div>

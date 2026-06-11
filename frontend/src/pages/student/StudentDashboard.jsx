@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import api, { analyticsAPI, attendanceAPI, timetableAPI } from "../../services/api";
 import {
@@ -11,6 +11,7 @@ import {
   FileText,
   MapPin,
 } from "lucide-react";
+import { countPublishedEvaluationGroups } from "../../utils/studentDashboard";
 
 const SESSION_TYPE_LABELS = {
   PROPOSAL_DEFENSE: "Proposal Defense",
@@ -108,11 +109,7 @@ export default function StudentDashboard() {
   const [calendarMonth, setCalendarMonth] = useState(() => new Date());
   const [selectedDateKey, setSelectedDateKey] = useState(() => formatDateKey(new Date()));
 
-  useEffect(() => {
-    fetchDashboardData();
-  }, []);
-
-  const fetchDashboardData = async () => {
+  const fetchDashboardData = useCallback(async () => {
     try {
       setLoading(true);
       setError(null);
@@ -122,19 +119,15 @@ export default function StudentDashboard() {
         if (analyticsResponse.success && analyticsResponse.stats) {
           setStats((prev) => ({ ...prev, ...analyticsResponse.stats }));
         }
-      } catch (_) {
+      } catch {
         try {
           const evalResponse = await api.get("/evaluations");
           const evaluations = evalResponse.data?.evaluations || evalResponse.data?.data || [];
-          const myCompleted = evaluations.filter((evaluation) => {
-            const studentId = evaluation.studentId?._id || evaluation.studentId;
-            return String(studentId) === String(user?.id) && evaluation.status === "COMPLETED";
-          });
           setStats((prev) => ({
             ...prev,
-            totalEvaluations: myCompleted.length,
+            totalEvaluations: countPublishedEvaluationGroups(evaluations),
           }));
-        } catch (_) {
+        } catch {
           // Keep default stats.
         }
       }
@@ -168,12 +161,16 @@ export default function StudentDashboard() {
         console.log("Could not fetch attendance:", error.message);
       }
     } catch (error) {
-      console.error("❌ Error fetching dashboard data:", error);
+      console.error("Error fetching dashboard data:", error);
       setError(error.response?.data?.message || error.message);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
 
   const todayKey = formatDateKey(new Date());
 

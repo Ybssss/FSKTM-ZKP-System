@@ -265,7 +265,7 @@ const main = async () => {
     console.log(`Checked ${sessions.length} timetable session(s).`);
 
     if (violations.length > 0) {
-      console.error(`❌ Schedule validation failed: ${violations.length} violation(s).`);
+      console.error(`Schedule validation failed: ${violations.length} violation(s).`);
       violations.forEach((violation, index) => {
         console.error(`\n${index + 1}. ${violation.type}`);
         console.error(violation.message);
@@ -277,10 +277,10 @@ const main = async () => {
     }
 
     console.log(
-      "✅ Schedule validation passed: one student/day/session, no panel-time crashes, valid Proposal → Progress → Pre-Viva lifecycle, and four same-day PIXEL/QUANTUM/WAVELET/CYBER Progress Assessment demo batches with multiple students.",
+      "Schedule validation passed: one student/day/session, no panel-time crashes, valid Proposal -> Progress -> Pre-Viva lifecycle, and four same-day PIXEL/QUANTUM/WAVELET/CYBER Progress Assessment demo batches with multiple students.",
     );
   } catch (error) {
-    console.error("❌ Validation error:", error);
+    console.error("Validation error:", error);
     process.exitCode = 1;
   } finally {
     await mongoose.connection.close();

@@ -11,6 +11,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import UserProfileLink from "../../components/UserProfileLink";
 
 const SESSION_TYPE_LABELS = {
   PROPOSAL_DEFENSE: "Proposal Defense",
@@ -131,7 +132,12 @@ function SessionCard({ session, compact = false }) {
               key={panel?._id || panel?.id || panel?.email || panel}
               className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100 text-xs font-semibold"
             >
-              <Users className="w-3 h-3" /> {panel?.name || panel?.email || panel}
+              <Users className="w-3 h-3" />{" "}
+              <UserProfileLink
+                user={panel}
+                fallback={panel?.email || panel || "Panel"}
+                className="font-semibold"
+              />
             </span>
           ))}
         </div>
@@ -166,7 +172,7 @@ export default function SchedulePage() {
         [];
       setSessions(sortSessions(sessionsData));
     } catch (error) {
-      console.error("❌ Error fetching sessions:", error);
+      console.error("Error fetching sessions:", error);
       setError(error.response?.data?.message || error.message);
     } finally {
       setLoading(false);

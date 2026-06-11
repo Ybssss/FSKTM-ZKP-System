@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import { useAuth } from "../../contexts/AuthContext";
 import { attendanceAPI } from "../../services/api";
 import api from "../../services/api";
 import { Scanner } from "@yudiel/react-qr-scanner";
@@ -14,7 +13,6 @@ import {
 } from "lucide-react";
 
 export default function AttendancePage() {
-  const { user } = useAuth();
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
@@ -70,7 +68,7 @@ export default function AttendancePage() {
         token: parsedToken,
         code: parsedToken,
       };
-    } catch (_) {
+    } catch {
       // Not JSON, continue.
     }
 
@@ -87,7 +85,7 @@ export default function AttendancePage() {
           parsedUrl.searchParams.get("code") ||
           parsedUrl.searchParams.get("token"),
       };
-    } catch (_) {
+    } catch {
       // Not URL, treat as manual code.
     }
 

@@ -1,32 +1,30 @@
-import React, { useState, useEffect } from 'react';
-import { Save, Edit, Eye, FileText } from 'lucide-react';
-import { timetableAPI } from '../services/api';
-import { useAuth } from '../contexts/AuthContext';
+import React, { useState, useEffect } from "react";
+import { Save, Edit, FileText } from "lucide-react";
+import { timetableAPI } from "../services/api";
+import { useAuth } from "../contexts/AuthContext";
+import UserProfileLink from "./UserProfileLink";
 
 export default function PanelPreReviewNotes({ session, onUpdate }) {
   const { user } = useAuth();
-  const isPanel = user?.role === 'panel' || user?.role === 'admin';
+  const isPanel = user?.role === "panel" || user?.role === "admin";
 
-  const [notes, setNotes] = useState('');
-  const [isDraft, setIsDraft] = useState(false);
+  const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
 
-  // Find current panel's notes
   const myNotes = session.panelNotes?.find(
-    note => note.panelId?._id === user?.id || note.panelId === user?.id
+    (note) => note.panelId?._id === user?.id || note.panelId === user?.id,
   );
 
   useEffect(() => {
     if (myNotes) {
       setNotes(myNotes.notes);
-      setIsDraft(myNotes.isDraft);
     }
   }, [myNotes]);
 
   const handleSave = async (saveAsDraft = false) => {
     if (!notes.trim()) {
-      alert('Please write some notes before saving');
+      alert("Please write some notes before saving.");
       return;
     }
 
@@ -37,12 +35,12 @@ export default function PanelPreReviewNotes({ session, onUpdate }) {
         isDraft: saveAsDraft,
       });
 
-      alert(saveAsDraft ? '✅ Notes saved as draft!' : '✅ Notes finalized!');
+      alert(saveAsDraft ? "Notes saved as draft." : "Notes finalized.");
       setIsEditing(false);
       if (onUpdate) onUpdate();
     } catch (error) {
-      console.error('Save notes error:', error);
-      alert('Failed to save notes');
+      console.error("Save notes error:", error);
+      alert("Failed to save notes.");
     } finally {
       setSaving(false);
     }
@@ -54,7 +52,6 @@ export default function PanelPreReviewNotes({ session, onUpdate }) {
 
   return (
     <div className="bg-white rounded-lg border border-gray-200 p-6">
-      {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <FileText className="w-5 h-5 text-purple-600" />
@@ -62,10 +59,10 @@ export default function PanelPreReviewNotes({ session, onUpdate }) {
           {myNotes && (
             <span className={`px-2 py-1 text-xs rounded-full ${
               myNotes.isDraft 
-                ? 'bg-yellow-100 text-yellow-700' 
-                : 'bg-green-100 text-green-700'
+                ? "bg-yellow-100 text-yellow-700"
+                : "bg-green-100 text-green-700"
             }`}>
-              {myNotes.isDraft ? 'Draft' : 'Finalized'}
+              {myNotes.isDraft ? "Draft" : "Finalized"}
             </span>
           )}
         </div>
@@ -81,25 +78,21 @@ export default function PanelPreReviewNotes({ session, onUpdate }) {
         )}
       </div>
 
-      {/* Info Box */}
       <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg text-sm text-purple-800">
-        <p className="font-semibold mb-1">📝 Pre-Review Notes:</p>
+        <p className="font-semibold mb-1">Pre-Review Notes</p>
         <p>Review student documents in advance and write your initial thoughts here. These notes are private and only visible to you until finalized.</p>
       </div>
 
-      {/* Notes Display/Edit */}
       {myNotes && !isEditing ? (
-        /* View Mode */
         <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
           <div className="prose max-w-none">
             <p className="text-gray-800 whitespace-pre-wrap">{myNotes.notes}</p>
           </div>
           <div className="mt-4 pt-4 border-t border-gray-300 text-xs text-gray-600">
-            <p>Last updated: {new Date(myNotes.updatedAt).toLocaleString('en-MY')}</p>
+            <p>Last updated: {new Date(myNotes.updatedAt).toLocaleString("en-MY")}</p>
           </div>
         </div>
       ) : (
-        /* Edit Mode */
         <div>
           <textarea
             value={notes}
@@ -109,11 +102,11 @@ export default function PanelPreReviewNotes({ session, onUpdate }) {
             placeholder="Write your pre-review notes here...
 
 Examples:
-• Initial observations from reading the report
-• Questions to ask during presentation
-• Areas that need more clarification
-• Preliminary assessment notes
-• Points to discuss with other panel members"
+- Initial observations from reading the report
+- Questions to ask during presentation
+- Areas that need more clarification
+- Preliminary assessment notes
+- Points to discuss with other panel members"
           />
 
           <div className="mt-4 flex items-center justify-between">
@@ -163,7 +156,7 @@ Examples:
           </div>
 
           <div className="mt-3 p-3 bg-gray-50 border border-gray-200 rounded-lg text-xs text-gray-600">
-            <p className="font-semibold mb-1">💡 Tips:</p>
+            <p className="font-semibold mb-1">Tips</p>
             <ul className="list-disc list-inside space-y-1">
               <li><strong>Draft:</strong> Save as draft while you're still reviewing. You can edit later.</li>
               <li><strong>Finalize:</strong> Finalize when you've completed your pre-review. You can still edit if needed.</li>
@@ -173,26 +166,29 @@ Examples:
         </div>
       )}
 
-      {/* Other Panel Notes (Read-only, for admin) */}
-      {user?.role === 'admin' && session.panelNotes && session.panelNotes.length > 1 && (
+      {user?.role === "admin" && session.panelNotes && session.panelNotes.length > 1 && (
         <div className="mt-6 pt-6 border-t border-gray-300">
           <h4 className="font-semibold text-gray-900 mb-3">All Panel Notes:</h4>
           <div className="space-y-3">
             {session.panelNotes.map((note) => (
               <div key={note._id} className="border border-gray-200 rounded-lg p-3 bg-gray-50">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="font-medium text-gray-900">{note.panelId?.name}</span>
+                  <UserProfileLink
+                    user={note.panelId}
+                    fallback="Panel"
+                    className="font-medium"
+                  />
                   <span className={`px-2 py-1 text-xs rounded-full ${
                     note.isDraft 
-                      ? 'bg-yellow-100 text-yellow-700' 
-                      : 'bg-green-100 text-green-700'
+                      ? "bg-yellow-100 text-yellow-700"
+                      : "bg-green-100 text-green-700"
                   }`}>
-                    {note.isDraft ? 'Draft' : 'Finalized'}
+                    {note.isDraft ? "Draft" : "Finalized"}
                   </span>
                 </div>
                 <p className="text-sm text-gray-700 whitespace-pre-wrap">{note.notes}</p>
                 <p className="text-xs text-gray-500 mt-2">
-                  {new Date(note.updatedAt).toLocaleString('en-MY')}
+                  {new Date(note.updatedAt).toLocaleString("en-MY")}
                 </p>
               </div>
             ))}

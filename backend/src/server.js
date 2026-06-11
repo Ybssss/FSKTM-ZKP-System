@@ -1,16 +1,32 @@
-// Load environment variables FIRST - before anything else!
 require("dotenv").config();
 
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-// Initialize express app
 const app = express();
+app.set("trust proxy", 1);
+
 const expertiseRoutes = require("./routes/expertiseRoutes");
 const helmet = require("helmet");
 const mongoSanitize = require("express-mongo-sanitize");
 const sessionBatchRoutes = require("./routes/sessionBatch");
 const { getEmailConfigStatus } = require("./utils/mailer");
+
+const isLoopbackOrigin = (origin) => {
+  if (!origin) return false;
+
+  try {
+    const { protocol, hostname } = new URL(origin);
+
+    if (!["http:", "https:"].includes(protocol)) {
+      return false;
+    }
+
+    return ["localhost", "127.0.0.1", "::1"].includes(hostname);
+  } catch {
+    return false;
+  }
+};
 
 const getAllowedOrigins = () => {
   const configuredOrigins = [
@@ -28,7 +44,6 @@ const getAllowedOrigins = () => {
   ];
 };
 
-// Middleware
 app.use(
   helmet({
     crossOriginResourcePolicy: false,
@@ -37,18 +52,17 @@ app.use(
 
 app.use(
   express.json({
-    limit: "2mb",
+    limit: "4mb",
   }),
 );
 
 app.use(
   express.urlencoded({
     extended: true,
-    limit: "2mb",
+    limit: "4mb",
   }),
 );
 
-// Blocks MongoDB operator injection such as $ne, $gt, $where
 app.use(
   mongoSanitize({
     replaceWith: "_",
@@ -58,7 +72,11 @@ app.use(
 app.use(
   cors({
     origin(origin, callback) {
-      if (!origin || getAllowedOrigins().includes(origin)) {
+      if (
+        !origin ||
+        isLoopbackOrigin(origin) ||
+        getAllowedOrigins().includes(origin)
+      ) {
         callback(null, true);
         return;
       }
@@ -69,15 +87,13 @@ app.use(
   }),
 );
 
-// Connect to MongoDB
-console.log("🔌 Attempting to connect to MongoDB...");
 console.log(
-  "🔍 MONGO_URI:",
-  process.env.MONGO_URI ? "Loaded ✅" : "MISSING ❌",
+  "Attempting to connect to MongoDB...",
+  process.env.MONGO_URI ? "MONGO_URI loaded" : "MONGO_URI missing",
 );
 
 if (!process.env.MONGO_URI) {
-  console.error("❌ MONGO_URI is not defined in .env file!");
+  console.error("MONGO_URI is not defined in .env file.");
   console.error("Please create a .env file in the backend directory with:");
   console.error("MONGO_URI=mongodb://localhost:27017/fsktm-zkp");
   process.exit(1);
@@ -86,16 +102,15 @@ if (!process.env.MONGO_URI) {
 mongoose
   .connect(process.env.MONGO_URI)
   .then(() => {
-    console.log("✅ MongoDB Connected:", mongoose.connection.host);
-    console.log("📊 Database:", mongoose.connection.name);
+    console.log("MongoDB connected:", mongoose.connection.host);
+    console.log("Database:", mongoose.connection.name);
   })
   .catch((err) => {
-    console.error("❌ MongoDB Connection Error:", err.message);
+    console.error("MongoDB connection error:", err.message);
     console.error("Make sure MongoDB is running: mongod or net start MongoDB");
     process.exit(1);
   });
 
-// Import routes
 const authRoutes = require("./routes/auth");
 const userRoutes = require("./routes/user");
 const evaluationRoutes = require("./routes/evaluation");
@@ -104,8 +119,8 @@ const timetableRoutes = require("./routes/timetable");
 const feedbackRoutes = require("./routes/feedback");
 const attendanceRoutes = require("./routes/attendance");
 const qrRoutes = require("./routes/qr");
-const analyticsRoutes = require("./routes/analytics"); // ← NEW: Analytics route
-// Register routes
+const analyticsRoutes = require("./routes/analytics");
+
 app.use("/api/auth", authRoutes);
 app.use("/api/users", userRoutes);
 app.use("/api/evaluations", evaluationRoutes);
@@ -115,10 +130,9 @@ app.use("/api/session-batches", sessionBatchRoutes);
 app.use("/api/feedback", feedbackRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/qr", qrRoutes);
-app.use("/api/analytics", analyticsRoutes); // ← NEW: Register analytics route
+app.use("/api/analytics", analyticsRoutes);
 app.use("/api", expertiseRoutes);
 
-// Root route
 app.get("/", (req, res) => {
   res.json({
     success: true,
@@ -133,12 +147,11 @@ app.get("/", (req, res) => {
       feedback: "/api/feedback",
       attendance: "/api/attendance",
       qr: "/api/qr",
-      analytics: "/api/analytics", // ← NEW: Added to documentation
+      analytics: "/api/analytics",
     },
   });
 });
 
-// Health check endpoint
 app.get("/api/health", (req, res) => {
   const emailConfig = getEmailConfigStatus();
 
@@ -159,7 +172,6 @@ app.get("/api/health", (req, res) => {
   });
 });
 
-// 404 handler
 app.use((req, res) => {
   res.status(404).json({
     success: false,
@@ -167,9 +179,8 @@ app.use((req, res) => {
   });
 });
 
-// Error handler
 app.use((err, req, res, next) => {
-  console.error("❌ Server Error:", err);
+  console.error("Server error:", err);
 
   res.status(err.status || 500).json({
     success: false,
@@ -178,34 +189,32 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server
 const PORT = process.env.PORT || 5000;
 const server = app.listen(PORT, () => {
   console.log(
-    `🚀 Server running on port ${PORT} in ${process.env.NODE_ENV || "development"} mode`,
+    `Server running on port ${PORT} in ${process.env.NODE_ENV || "development"} mode`,
   );
-  console.log(`📚 API Documentation: http://localhost:${PORT}/api`);
-  console.log(`🏥 Health Check: http://localhost:${PORT}/api/health`);
+  console.log(`API documentation: http://localhost:${PORT}/api`);
+  console.log(`Health check: http://localhost:${PORT}/api/health`);
 });
 
-// Graceful shutdown
 process.on("SIGTERM", () => {
-  console.log("👋 SIGTERM received, shutting down gracefully...");
+  console.log("SIGTERM received, shutting down gracefully...");
   server.close(() => {
-    console.log("🛑 Server closed");
+    console.log("Server closed");
     mongoose.connection.close(false, () => {
-      console.log("🗄️ MongoDB connection closed");
+      console.log("MongoDB connection closed");
       process.exit(0);
     });
   });
 });
 
 process.on("SIGINT", () => {
-  console.log("👋 SIGINT received, shutting down gracefully...");
+  console.log("SIGINT received, shutting down gracefully...");
   server.close(() => {
-    console.log("🛑 Server closed");
+    console.log("Server closed");
     mongoose.connection.close(false, () => {
-      console.log("🗄️ MongoDB connection closed");
+      console.log("MongoDB connection closed");
       process.exit(0);
     });
   });

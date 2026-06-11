@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import {
   Users,
@@ -12,6 +12,9 @@ import {
   Edit,
 } from "lucide-react";
 import api from "../../services/api";
+import UserProfileLink from "../../components/UserProfileLink";
+import SortableTh from "../../components/SortableTh";
+import useSortableData from "../../hooks/useSortableData";
 
 // Reusable Tag Input Component for Expertise/Specialties
 const TagInput = ({ tags, setTags, placeholder }) => {
@@ -227,16 +230,14 @@ export default function UsersPage() {
     try {
       const payload = { ...formData };
 
-      // 🔴 IDIOT-PROOF: Strict Role Change Warning
       if (payload.role !== payload.originalRole) {
         const confirmChange = window.confirm(
-          `🚨 CRITICAL ACTION: You are changing ${payload.name}'s role from [${payload.originalRole.toUpperCase()}] to [${payload.role.toUpperCase()}].\n\nAre you absolutely sure you want to do this?`,
+          `You are changing ${payload.name}'s role from [${payload.originalRole.toUpperCase()}] to [${payload.role.toUpperCase()}].\n\nDo you want to continue?`,
         );
         if (!confirmChange) return;
       }
 
       if (payload.role === "student" && payload.matricNumber) {
-        // 🔴 IDIOT-PROOF: Strip accidental spaces and force uppercase on Edit
         payload.matricNumber = payload.matricNumber
           .replace(/\s+/g, "")
           .toUpperCase();
@@ -249,7 +250,6 @@ export default function UsersPage() {
 
       await api.put(`/users/${payload.id}`, payload);
 
-      // 🔴 HANDOVER: If they just demoted themselves, log them out instantly!
       if (
         payload.id === (user.id || user._id) &&
         payload.role !== payload.originalRole
@@ -261,7 +261,7 @@ export default function UsersPage() {
         return;
       }
 
-      alert("✅ User details updated successfully!");
+      alert("User details updated successfully.");
       setShowEditModal(false);
       fetchUsers();
     } catch (error) {
@@ -272,7 +272,7 @@ export default function UsersPage() {
   const handleResetZkp = async (userId, name, email) => {
     if (resettingUserId) return;
 
-    if (!window.confirm(`⚠️ WARNING: Erase ${name}'s keys?`)) return;
+    if (!window.confirm(`Reset ${name}'s keys?`)) return;
 
     try {
       setResettingUserId(userId);
@@ -300,11 +300,36 @@ export default function UsersPage() {
     }
   };
 
+  const getSupervisorNameForUser = useCallback((targetUser) => {
+    if (!targetUser?.supervisorId) return "No Supervisor Assigned";
+    if (typeof targetUser.supervisorId === "object" && targetUser.supervisorId.name) {
+      return targetUser.supervisorId.name;
+    }
+    const foundSv = usersList.find((sysUser) => sysUser._id === targetUser.supervisorId);
+    return foundSv?.name || "No Supervisor Assigned";
+  }, [usersList]);
+
   const filteredUsers = usersList.filter(
     (u) =>
       u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       u.userId.toLowerCase().includes(searchTerm.toLowerCase()),
   );
+
+  const userSortAccessors = useMemo(
+    () => ({
+      user: (u) => `${u.name || ""} ${u.userId || ""}`,
+      role: (u) => `${u.role || ""} ${u.program || ""} ${(u.expertiseTags || []).join(" ")}`,
+      supervisor: (u) => (u.role === "student" ? getSupervisorNameForUser(u) : ""),
+      status: (u) => (u.zkpRegistered ? "secured" : "pending setup"),
+    }),
+    [getSupervisorNameForUser],
+  );
+
+  const {
+    sortedItems: sortedUsers,
+    sortConfig: userSortConfig,
+    requestSort: requestUserSort,
+  } = useSortableData(filteredUsers, userSortAccessors, { key: "user" });
 
   const currentEmailStatus = newCredentials?.emailStatus || {};
   const emailFailed = Boolean(currentEmailStatus.error);
@@ -484,31 +509,44 @@ export default function UsersPage() {
           <table className="w-full text-left">
             <thead className="bg-gray-50 border-b text-sm text-gray-600 uppercase tracking-wider">
               <tr>
-                <th className="p-4">User Info</th>
-                <th className="p-4">Role & Details</th>
-                <th className="p-4">Supervisor</th>
-                <th className="p-4">Status & Actions</th>
+                <SortableTh className="p-4" sortKey="user" sortConfig={userSortConfig} onSort={requestUserSort}>User Info</SortableTh>
+                <SortableTh className="p-4" sortKey="role" sortConfig={userSortConfig} onSort={requestUserSort}>Role & Details</SortableTh>
+                <SortableTh className="p-4" sortKey="supervisor" sortConfig={userSortConfig} onSort={requestUserSort}>Supervisor</SortableTh>
+                <SortableTh className="p-4" sortKey="status" sortConfig={userSortConfig} onSort={requestUserSort}>Status & Actions</SortableTh>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {filteredUsers.map((u) => {
+              {loading ? (
+                <tr>
+                  <td colSpan={4} className="p-6 text-center text-sm font-semibold text-gray-500">
+                    Loading users...
+                  </td>
+                </tr>
+              ) : sortedUsers.map((u) => {
                 let svName = "No Supervisor Assigned";
                 let hasSv = false;
+                let supervisorUser = null;
                 if (u.supervisorId) {
                   hasSv = true;
-                  if (typeof u.supervisorId === "object" && u.supervisorId.name)
+                  if (typeof u.supervisorId === "object" && u.supervisorId.name) {
                     svName = u.supervisorId.name;
-                  else if (typeof u.supervisorId === "string") {
+                    supervisorUser = u.supervisorId;
+                  } else if (typeof u.supervisorId === "string") {
                     const foundSv = usersList.find(
                       (sysUser) => sysUser._id === u.supervisorId,
                     );
-                    if (foundSv) svName = foundSv.name;
+                    if (foundSv) {
+                      svName = foundSv.name;
+                      supervisorUser = foundSv;
+                    }
                   }
                 }
                 return (
                   <tr key={u._id} className="hover:bg-gray-50">
                     <td className="p-4">
-                      <p className="font-bold text-gray-900">{u.name}</p>
+                      <p className="font-bold text-gray-900">
+                        <UserProfileLink user={u} className="font-bold" />
+                      </p>
                       <p className="text-sm font-mono text-gray-500">
                         {u.userId}
                       </p>
@@ -551,7 +589,11 @@ export default function UsersPage() {
                         hasSv ? (
                           <div className="flex flex-col">
                             <span className="font-bold text-gray-900">
-                              {svName}
+                              <UserProfileLink
+                                user={supervisorUser}
+                                fallback={svName}
+                                className="font-bold"
+                              />
                             </span>
                             <span className="text-[10px] text-indigo-600 font-bold uppercase">
                               Supervisor
@@ -817,7 +859,6 @@ export default function UsersPage() {
                 </div>
               </div>
 
-              {/* HANDOVER PROTOCOL */}
               <div className="bg-red-50 p-4 border border-red-200 rounded-lg">
                 <label className="block text-sm font-bold text-red-700 mb-1">
                   System Role
@@ -836,8 +877,8 @@ export default function UsersPage() {
                 {formData.id === (user.id || user._id) &&
                   formData.role !== "admin" && (
                     <p className="text-[10px] text-red-600 font-bold mt-2 uppercase bg-red-100 p-2 rounded">
-                      🚨 WARNING: You are demoting YOURSELF. If you save, you
-                      will instantly lose Admin access and be redirected!
+                      You are demoting your own account. Saving will remove
+                      admin access and redirect you to log in again.
                     </p>
                   )}
               </div>

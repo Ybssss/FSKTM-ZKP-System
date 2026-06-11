@@ -1,17 +1,14 @@
 import React, { useState, useEffect } from "react";
-import { useAuth } from "../../contexts/AuthContext";
 import api from "../../services/api";
 import { UserMinus } from "lucide-react";
 
 export default function AdminManagementPage() {
-  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState("create");
   const [studentView, setStudentView] = useState("unassigned");
 
   const [students, setStudents] = useState([]);
   const [panels, setPanels] = useState([]);
 
-  // 🔴 FIXED: Separated search terms to prevent cross-contamination
   const [studentSearchTerm, setStudentSearchTerm] = useState("");
   const [panelSearchTerm, setPanelSearchTerm] = useState("");
 
@@ -62,7 +59,7 @@ export default function AdminManagementPage() {
         matricNumber: "",
       });
       fetchUsers();
-    } catch (err) {
+    } catch {
       alert("Failed to create user");
     }
   };
@@ -100,7 +97,7 @@ export default function AdminManagementPage() {
       setSelectedPanels([]);
       setAiSuggestions([]);
       fetchUsers();
-    } catch (err) {
+    } catch {
       alert("Assignment failed.");
     }
   };
@@ -124,7 +121,7 @@ export default function AdminManagementPage() {
       }
       alert(`${student.name} unassigned successfully.`);
       fetchUsers();
-    } catch (err) {
+    } catch {
       alert("Failed to unassign.");
     }
   };
@@ -160,7 +157,7 @@ export default function AdminManagementPage() {
       } else {
         alert("No relevant panels were found.");
       }
-    } catch (err) {
+    } catch {
       alert("Expertise matching failed.");
     } finally {
       setIsMatching(false);
@@ -177,7 +174,6 @@ export default function AdminManagementPage() {
   const activeList =
     studentView === "unassigned" ? unassignedStudents : assignedStudents;
 
-  // 🔴 Uses studentSearchTerm purely!
   const filteredActiveList = activeList.filter((s) => {
     const searchLow = studentSearchTerm.toLowerCase();
     return (
@@ -193,7 +189,6 @@ export default function AdminManagementPage() {
         students.find((s) => s._id === selectedStudentIds[0])?.supervisorId
       : null;
 
-  // 🔴 Uses panelSearchTerm purely!
   let displayPanels = panels.filter((p) => {
     if (p._id === activeSvId) return false;
     const searchLow = panelSearchTerm.toLowerCase();

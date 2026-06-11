@@ -6,6 +6,19 @@ const Evaluation = require("../models/Evaluation");
 const SessionBatch = require("../models/SessionBatch");
 const Rubric = require("../models/Rubric");
 const { toSessionTypeCode } = require("../utils/sessionType");
+const {
+  buildEvaluationDocsForTimetable,
+} = require("../utils/evaluationWorkflow");
+const {
+  buildValidationItems,
+  cleanArray,
+  cleanText,
+  idString,
+  normalizeDateOnly,
+  parseTimeToMinutes,
+  rangesOverlap,
+  validateItems,
+} = require("../utils/timetableValidation");
 
 let fileStorage = {};
 try {
@@ -36,16 +49,6 @@ const FILE_VIEW_TICKET_EXPIRES_IN = "2m";
 const getJwtSecret = () =>
   process.env.JWT_SECRET || "your-fallback-secret-key";
 
-const cleanText = (value = "", max = 500) =>
-  String(value)
-    .normalize("NFKC")
-    .replace(/[<>]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-    .slice(0, max);
-
-const cleanArray = (value) => (Array.isArray(value) ? value.filter(Boolean) : []);
-
 const makeHttpError = (message, statusCode = 400) => {
   const error = new Error(message);
   error.statusCode = statusCode;
@@ -69,20 +72,6 @@ const resolveRubricSessionType = async ({ sessionType, rubricId }) => {
 
   return resolved;
 };
-
-const normalizeDateOnly = (value) => {
-  if (!value) return "";
-  if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    const y = value.getFullYear();
-    const m = String(value.getMonth() + 1).padStart(2, "0");
-    const d = String(value.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
-  }
-  const raw = String(value).trim();
-  const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  return match ? `${match[1]}-${match[2]}-${match[3]}` : raw.slice(0, 10);
-};
-
 
 const formatDateDisplay = (dateValue) => {
   const dateOnly = normalizeDateOnly(dateValue);
@@ -109,16 +98,6 @@ const formatDateDisplay = (dateValue) => {
   };
 };
 
-const parseTimeToMinutes = (timeValue) => {
-  const raw = String(timeValue || "").trim();
-  const match = raw.match(/^(\d{1,2}):(\d{2})$/);
-  if (!match) return null;
-  const h = Number(match[1]);
-  const m = Number(match[2]);
-  if (h < 0 || h > 23 || m < 0 || m > 59) return null;
-  return h * 60 + m;
-};
-
 const formatMinutesToTime = (minutes) => {
   const normalized = ((Number(minutes) || 0) % 1440 + 1440) % 1440;
   return `${String(Math.floor(normalized / 60)).padStart(2, "0")}:${String(
@@ -136,11 +115,6 @@ const toNonNegativeInt = (value, fallback = 0) => {
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 };
 
-const idString = (value) => String(value?._id || value || "");
-
-const rangesOverlap = (aStart, aEnd, bStart, bEnd) =>
-  aStart < bEnd && bStart < aEnd;
-
 const sameId = (a, b) => idString(a) && idString(a) === idString(b);
 
 const sessionHasUser = (values = [], userId) =>
@@ -148,13 +122,25 @@ const sessionHasUser = (values = [], userId) =>
 
 const getDocumentUploaderId = (document) => idString(document?.uploadedBy);
 
-const canAccessSessionMaterial = (timetable, user, document = null) => {
+const canAccessSessionMaterial = async (timetable, user, document = null) => {
   const userId = user?.id || user?._id;
   if (!user || !userId) return false;
   if (user.role === "admin") return true;
   if (document && sameId(getDocumentUploaderId(document), userId)) return true;
   if (user.role === "student") return sessionHasUser(timetable.students || [], userId);
-  if (user.role === "panel") return sessionHasUser(timetable.panels || [], userId);
+  if (user.role === "panel") {
+    if (sessionHasUser(timetable.panels || [], userId)) return true;
+
+    const studentIds = (timetable.students || []).map(idString).filter(Boolean);
+    if (!studentIds.length) return false;
+
+    return Boolean(
+      await User.exists({
+        _id: { $in: studentIds },
+        supervisorId: userId,
+      }),
+    );
+  }
   return false;
 };
 
@@ -241,7 +227,7 @@ const streamAuthorizedDocumentFile = async (fileId, user, res) => {
     return res.status(404).json({ success: false, message: "Material not found." });
   }
 
-  if (!canAccessSessionMaterial(timetable, user, document)) {
+  if (!(await canAccessSessionMaterial(timetable, user, document))) {
     return res.status(403).json({
       success: false,
       message: "You do not have permission to view this material.",
@@ -312,75 +298,6 @@ const assertPanelReplacementWindow = (existingSession, nextPanels) => {
   }
 };
 
-const buildValidationItems = (items = []) =>
-  items.map((item) => ({
-    sessionId: idString(item.sessionId || item._id),
-    studentId: idString(item.studentId || item.student || item.students?.[0]),
-    panelIds: cleanArray(item.panelIds || item.panels || [item.panel1Id, item.panel2Id]).map(idString),
-    date: normalizeDateOnly(item.date),
-    startTime: cleanText(item.startTime || item.time, 20),
-    endTime: cleanText(item.endTime, 20),
-    title: cleanText(item.title || "Session", 150),
-  }));
-
-const validateItems = (items) => {
-  const errors = [];
-
-  for (const item of items) {
-    if (!item.studentId) errors.push(`${item.title}: missing student.`);
-    if (!item.date) errors.push(`${item.title}: missing date.`);
-    if (parseTimeToMinutes(item.startTime) === null)
-      errors.push(`${item.title}: invalid start time.`);
-    if (parseTimeToMinutes(item.endTime) === null)
-      errors.push(`${item.title}: invalid end time.`);
-    if (item.panelIds.length < 2) errors.push(`${item.title}: exactly 2 panels required.`);
-    if (new Set(item.panelIds).size !== item.panelIds.length)
-      errors.push(`${item.title}: duplicate panel selected.`);
-  }
-
-  const byStudentDate = new Map();
-  for (const item of items) {
-    const key = `${item.studentId}|${item.date}`;
-    if (!item.studentId || !item.date) continue;
-    if (byStudentDate.has(key)) {
-      errors.push(
-        `Student conflict: one student can only have one session per day (${item.title}).`,
-      );
-    }
-    byStudentDate.set(key, item);
-  }
-
-  for (let i = 0; i < items.length; i += 1) {
-    const a = items[i];
-    const aStart = parseTimeToMinutes(a.startTime);
-    const aEnd = parseTimeToMinutes(a.endTime);
-    if (aStart === null || aEnd === null) continue;
-
-    for (let j = i + 1; j < items.length; j += 1) {
-      const b = items[j];
-      if (a.date !== b.date) continue;
-      const bStart = parseTimeToMinutes(b.startTime);
-      const bEnd = parseTimeToMinutes(b.endTime);
-      if (bStart === null || bEnd === null) continue;
-      if (!rangesOverlap(aStart, aEnd, bStart, bEnd)) continue;
-
-      const sharedPanels = a.panelIds.filter((panelId) => b.panelIds.includes(panelId));
-      if (sharedPanels.length) {
-        errors.push(
-          `Panel conflict: the same panel is assigned at overlapping time (${a.title} / ${b.title}).`,
-        );
-      }
-    }
-  }
-
-  if (errors.length) {
-    const err = new Error(errors.join("\n"));
-    err.statusCode = 400;
-    err.validationErrors = errors;
-    throw err;
-  }
-};
-
 const validateAgainstExisting = async ({ items, excludeSessionIds = [] }) => {
   validateItems(items);
 
@@ -438,11 +355,11 @@ const validateAgainstExisting = async ({ items, excludeSessionIds = [] }) => {
       const sharedPanels = item.panelIds.filter((panelId) =>
         existingItem.panelIds.includes(panelId),
       );
-      if (sharedPanels.length) {
+      sharedPanels.forEach((panelId) => {
         errors.push(
-          `Panel conflict: the same panel is assigned at overlapping time (${item.title} / ${existingItem.title}).`,
+          `Panel conflict: panel ${panelId} is assigned at overlapping time (${item.title} / ${existingItem.title}).`,
         );
-      }
+      });
     }
   }
 
@@ -454,19 +371,7 @@ const validateAgainstExisting = async ({ items, excludeSessionIds = [] }) => {
   }
 };
 
-const buildPendingEvaluations = (timetable, payload, semester) => {
-  const studentId = payload.students?.[0];
-  if (!studentId || !Array.isArray(payload.panels)) return [];
-  return payload.panels.filter(Boolean).map((evaluatorId) => ({
-    sessionId: timetable._id,
-    studentId,
-    evaluatorId,
-    rubricId: payload.rubricId,
-    semester: semester || payload.semester || payload.academicSession || "",
-    sessionType: payload.sessionType,
-    status: "PENDING",
-  }));
-};
+const buildPendingEvaluations = buildEvaluationDocsForTimetable;
 
 const buildPayload = async (body, userId) => {
   const sessionType = await resolveRubricSessionType({
@@ -538,7 +443,7 @@ exports.createTimetable = async (req, res) => {
     await validateAgainstExisting({ items: validationItem });
 
     const timetable = await Timetable.create(payload);
-    const evaluations = buildPendingEvaluations(timetable, payload, req.body.semester);
+    const evaluations = await buildPendingEvaluations(timetable, payload, req.body.semester);
     if (evaluations.length) await Evaluation.insertMany(evaluations);
 
     const populated = await populateTimetableQuery(Timetable.findById(timetable._id));
@@ -690,9 +595,14 @@ exports.createBulkTimetables = async (req, res) => {
 
     const createdTimetables = await Timetable.insertMany(payloads);
     const evaluationsToInsert = [];
-    createdTimetables.forEach((session, index) => {
-      evaluationsToInsert.push(...buildPendingEvaluations(session, payloads[index], req.body.semester));
-    });
+    for (let index = 0; index < createdTimetables.length; index += 1) {
+      const pending = await buildPendingEvaluations(
+        createdTimetables[index],
+        payloads[index],
+        req.body.semester,
+      );
+      evaluationsToInsert.push(...pending);
+    }
     if (evaluationsToInsert.length) await Evaluation.insertMany(evaluationsToInsert);
 
     res.status(201).json({ success: true, count: createdTimetables.length, timetables: createdTimetables.map(formatTimetable) });
@@ -768,7 +678,7 @@ exports.updateTimetable = async (req, res) => {
 
     if (updates.panels || updates.rubricId || updates.sessionType) {
       await Evaluation.deleteMany({ sessionId: updated._id, status: "PENDING" });
-      const pending = buildPendingEvaluations(
+      const pending = await buildPendingEvaluations(
         updated,
         {
           students: updated.students,
@@ -1020,7 +930,7 @@ exports.uploadDocument = async (req, res) => {
   try {
     const timetable = await Timetable.findById(req.params.id);
     if (!timetable) return res.status(404).json({ success: false, message: "Session not found." });
-    if (!canAccessSessionMaterial(timetable, req.user)) {
+    if (!(await canAccessSessionMaterial(timetable, req.user))) {
       return res.status(403).json({
         success: false,
         message: "You can only upload materials for your own session.",
@@ -1071,7 +981,7 @@ exports.deleteDocument = async (req, res) => {
     if (!timetable) return res.status(404).json({ success: false, message: "Session not found." });
     const doc = timetable.studentDocuments.id(req.params.documentId);
     if (!doc) return res.status(404).json({ success: false, message: "Material not found." });
-    if (!canAccessSessionMaterial(timetable, req.user, doc)) {
+    if (!(await canAccessSessionMaterial(timetable, req.user, doc))) {
       return res.status(403).json({
         success: false,
         message: "You can only delete materials you uploaded.",
@@ -1107,7 +1017,7 @@ exports.createDocumentFileViewTicket = async (req, res) => {
       return res.status(404).json({ success: false, message: "Material not found." });
     }
 
-    if (!canAccessSessionMaterial(timetable, req.user, document)) {
+    if (!(await canAccessSessionMaterial(timetable, req.user, document))) {
       return res.status(403).json({
         success: false,
         message: "You do not have permission to view this material.",

@@ -3,49 +3,17 @@ const router = express.Router();
 const { authenticateToken } = require("../middleware/auth");
 const User = require("../models/User");
 const userController = require("../controllers/userController");
+const {
+  cleanProfileImageUrl,
+  mergeStaffStudents,
+} = require("../utils/userProfileUtils");
 
 const STAFF_STUDENT_SELECT =
-  "name userId email matricNumber program researchTitle researchAbstract supervisorId";
+  "name userId email matricNumber program profileImageUrl researchTitle researchAbstract supervisorId";
 const SAFE_USER_SELECT =
-  "name userId email role matricNumber program yearOfStudy profession researchTitle researchAbstract supervisorId assignedStudents assignedPanels expertiseTags zkpRegistered createdAt updatedAt";
+  "name userId email role matricNumber program yearOfStudy profession profileImageUrl researchTitle researchAbstract supervisorId assignedStudents assignedPanels expertiseTags zkpRegistered createdAt updatedAt";
 
 const idString = (value) => String(value?._id || value || "");
-
-const mergeStaffStudents = (assignedStudents = [], supervisedStudents = []) => {
-  const byId = new Map();
-
-  const addStudent = (student, relation) => {
-    const raw = student?.toObject ? student.toObject() : student;
-    if (!raw) return;
-
-    const key = idString(raw._id);
-    const existing = byId.get(key);
-
-    if (existing) {
-      const relations = new Set([
-        ...(existing.profileRelations || [existing.profileRelation]).filter(Boolean),
-        relation,
-      ]);
-      existing.profileRelations = [...relations];
-      existing.profileRelation = [...relations].join(" & ");
-      byId.set(key, existing);
-      return;
-    }
-
-    byId.set(key, {
-      ...raw,
-      profileRelations: [relation],
-      profileRelation: relation,
-    });
-  };
-
-  assignedStudents.forEach((student) => addStudent(student, "Panel"));
-  supervisedStudents.forEach((student) => addStudent(student, "Supervisor"));
-
-  return [...byId.values()].sort((a, b) =>
-    String(a.name || a.userId || "").localeCompare(String(b.name || b.userId || "")),
-  );
-};
 
 const getSupervisedStudents = (staffId) =>
   User.find({ role: "student", supervisorId: staffId })
@@ -70,7 +38,7 @@ router.get("/my-students", async (req, res) => {
         "assignedStudents",
         STAFF_STUDENT_SELECT,
       )
-      .populate("assignedStudents.supervisorId", "name userId email")
+      .populate("assignedStudents.supervisorId", "name userId email profileImageUrl")
       .select("assignedStudents");
     const supervisedStudents = await getSupervisedStudents(req.user.id);
     const students = mergeStaffStudents(
@@ -95,8 +63,8 @@ router.get("/", async (req, res) => {
     }
     const users = await User.find()
       .select(SAFE_USER_SELECT)
-      .populate("supervisorId", "name email userId")
-      .populate("assignedPanels.panelId", "name email userId expertiseTags")
+      .populate("supervisorId", "name email userId profileImageUrl")
+      .populate("assignedPanels.panelId", "name email userId profileImageUrl expertiseTags")
       .sort({ createdAt: -1 });
     res.json({ success: true, users });
   } catch (error) {
@@ -136,10 +104,10 @@ router.patch("/me/research-abstract", async (req, res) => {
       { new: true, runValidators: true },
     )
       .select(
-        "name userId email role matricNumber program researchTitle researchAbstract supervisorId assignedPanels zkpRegistered",
+        "name userId email role matricNumber program profileImageUrl researchTitle researchAbstract supervisorId assignedPanels zkpRegistered",
       )
-      .populate("supervisorId", "name userId email")
-      .populate("assignedPanels.panelId", "name userId email");
+      .populate("supervisorId", "name userId email profileImageUrl")
+      .populate("assignedPanels.panelId", "name userId email profileImageUrl");
 
     res.json({
       success: true,
@@ -155,19 +123,79 @@ router.patch("/me/research-abstract", async (req, res) => {
   }
 });
 
+router.patch("/:id/profile-image", async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Only administrators can update user profile images.",
+      });
+    }
+
+    const profileImageUrl = cleanProfileImageUrl(req.body.profileImageUrl);
+    const user = await User.findByIdAndUpdate(
+      req.params.id,
+      { $set: { profileImageUrl } },
+      { new: true, runValidators: true },
+    )
+      .select(SAFE_USER_SELECT)
+      .populate("supervisorId", "name email userId profileImageUrl")
+      .populate("assignedPanels.panelId", "name email userId profileImageUrl expertiseTags")
+      .populate({
+        path: "assignedStudents",
+        select: STAFF_STUDENT_SELECT,
+        populate: { path: "supervisorId", select: "name userId email profileImageUrl" },
+      })
+      .lean();
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found.",
+      });
+    }
+
+    if (["admin", "panel"].includes(user.role)) {
+      const supervisedStudents = await getSupervisedStudents(user._id);
+      user.assignedStudents = mergeStaffStudents(
+        user.assignedStudents || [],
+        supervisedStudents,
+      );
+      user.supervisedStudents = supervisedStudents.map((student) => ({
+        ...student,
+        profileRelation: "Supervisor",
+        profileRelations: ["Supervisor"],
+      }));
+    }
+
+    res.json({
+      success: true,
+      message: profileImageUrl
+        ? "Profile image updated successfully."
+        : "Profile image removed successfully.",
+      user,
+    });
+  } catch (error) {
+    res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || "Failed to update profile image.",
+    });
+  }
+});
+
 // Current user profile with role-specific fields.
 router.get("/me/profile", async (req, res) => {
   try {
     const user = await User.findById(req.user.id)
       .select(
-        "name userId email role matricNumber program yearOfStudy profession researchTitle researchAbstract supervisorId assignedPanels assignedStudents expertiseTags authenticatedDevices zkpRegistered createdAt updatedAt",
+        "name userId email role matricNumber program yearOfStudy profession profileImageUrl researchTitle researchAbstract supervisorId assignedPanels assignedStudents expertiseTags authenticatedDevices zkpRegistered createdAt updatedAt",
       )
-      .populate("supervisorId", "name userId email")
-      .populate("assignedPanels.panelId", "name userId email")
+      .populate("supervisorId", "name userId email profileImageUrl")
+      .populate("assignedPanels.panelId", "name userId email profileImageUrl")
       .populate({
         path: "assignedStudents",
         select: STAFF_STUDENT_SELECT,
-        populate: { path: "supervisorId", select: "name userId email" },
+        populate: { path: "supervisorId", select: "name userId email profileImageUrl" },
       })
       .lean();
 
@@ -286,10 +314,10 @@ router.patch("/me/research-title", async (req, res) => {
       },
     )
       .select(
-        "name userId email role matricNumber program researchTitle researchAbstract supervisorId assignedPanels zkpRegistered",
+        "name userId email role matricNumber program profileImageUrl researchTitle researchAbstract supervisorId assignedPanels zkpRegistered",
       )
-      .populate("supervisorId", "name userId email")
-      .populate("assignedPanels.panelId", "name userId email");
+      .populate("supervisorId", "name userId email profileImageUrl")
+      .populate("assignedPanels.panelId", "name userId email profileImageUrl");
 
     res.json({
       success: true,
@@ -307,11 +335,34 @@ router.patch("/me/research-title", async (req, res) => {
 
 router.get("/:id", async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select(SAFE_USER_SELECT);
+    const user = await User.findById(req.params.id)
+      .select(SAFE_USER_SELECT)
+      .populate("supervisorId", "name email userId profileImageUrl")
+      .populate("assignedPanels.panelId", "name email userId profileImageUrl expertiseTags")
+      .populate({
+        path: "assignedStudents",
+        select: STAFF_STUDENT_SELECT,
+        populate: { path: "supervisorId", select: "name userId email profileImageUrl" },
+      })
+      .lean();
     if (!user)
       return res
         .status(404)
         .json({ success: false, message: "User not found" });
+
+    if (["admin", "panel"].includes(user.role)) {
+      const supervisedStudents = await getSupervisedStudents(user._id);
+      user.assignedStudents = mergeStaffStudents(
+        user.assignedStudents || [],
+        supervisedStudents,
+      );
+      user.supervisedStudents = supervisedStudents.map((student) => ({
+        ...student,
+        profileRelation: "Supervisor",
+        profileRelations: ["Supervisor"],
+      }));
+    }
+
     res.json({ success: true, user });
   } catch (error) {
     res.status(500).json({

@@ -1,16 +1,44 @@
-import React, { useState, useEffect } from "react";
-import axios from "axios";
-import api from "../../services/api"; // 🔴 Use your configured API to include the Auth token automatically!
+import React, { useState, useEffect, useMemo } from "react";
+import api from "../../services/api";
 import { ShieldAlert, CheckCircle, XCircle, Clock } from "lucide-react";
+import UserProfileLink from "./UserProfileLink";
+import SortableTh from "./SortableTh";
+import useSortableData from "../hooks/useSortableData";
 
 const AdminDashboard = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
 
-  // 🔴 NEW: State for global unlock requests
   const [pendingRequests, setPendingRequests] = useState([]);
   const [loadingRequests, setLoadingRequests] = useState(true);
+
+  const upcomingTimetableRows = useMemo(
+    () => [
+      {
+        id: "demo-upcoming-1",
+        time: "Today, 10:00 AM",
+        student: "Ali Bin Abu",
+        sessionType: "PROPOSAL_DEFENSE",
+        panels: "Dr. Samihah, Prof. Ahmad",
+      },
+    ],
+    [],
+  );
+  const timetableSortAccessors = useMemo(
+    () => ({
+      time: (row) => row.time,
+      student: (row) => row.student,
+      sessionType: (row) => row.sessionType,
+      panels: (row) => row.panels,
+    }),
+    [],
+  );
+  const {
+    sortedItems: sortedTimetableRows,
+    sortConfig: timetableSortConfig,
+    requestSort: requestTimetableSort,
+  } = useSortableData(upcomingTimetableRows, timetableSortAccessors, { key: "time" });
 
   useEffect(() => {
     loadRequests();
@@ -33,9 +61,9 @@ const AdminDashboard = () => {
       return;
     try {
       await api.post("/feedback/permissions/respond", { requestId, action });
-      loadRequests(); // Refresh the table
+      loadRequests();
     } catch (error) {
-      alert("Failed to process request.");
+      alert(error.response?.data?.message || "Failed to process request.");
     }
   };
 
@@ -45,7 +73,6 @@ const AdminDashboard = () => {
     setIsSearching(true);
 
     try {
-      // 🔴 Using configured api instance
       const res = await api.get(`/feedback/search?query=${searchQuery}`);
       setSearchResults(res.data.evaluations || []);
     } catch (error) {
@@ -87,7 +114,6 @@ const AdminDashboard = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
-        {/* Full-Text Search Feature */}
         <div className="lg:col-span-1 bg-white p-6 rounded-lg shadow">
           <h2 className="text-xl font-bold mb-4 border-b pb-2">
             Historical Feedback Search
@@ -122,10 +148,20 @@ const AdminDashboard = () => {
                 className="p-3 bg-gray-50 border rounded mb-2 text-sm"
               >
                 <span className="text-xs font-bold text-purple-600 bg-purple-100 px-2 py-1 rounded mb-1 inline-block">
-                  {res.semester} | {res.studentId?.name}
+                  {res.semester} |{" "}
+                  <UserProfileLink
+                    user={res.studentId}
+                    fallback="Unknown Student"
+                    className="font-bold"
+                  />
                 </span>
                 <p className="text-gray-800 font-semibold mt-1">
-                  {res.evaluatorId?.name} wrote:
+                  <UserProfileLink
+                    user={res.evaluatorId}
+                    fallback="Unknown Evaluator"
+                    className="font-semibold"
+                  />{" "}
+                  wrote:
                 </p>
                 <p className="text-gray-600 mt-1 italic">
                   "{res.overallComments || "View full report for details."}"
@@ -135,7 +171,6 @@ const AdminDashboard = () => {
           </div>
         </div>
 
-        {/* Timetable & Reminders */}
         <div className="lg:col-span-2 bg-white p-6 rounded-lg shadow">
           <div className="flex justify-between items-center border-b pb-2 mb-4">
             <h2 className="text-xl font-bold">Upcoming Timetable</h2>
@@ -147,35 +182,36 @@ const AdminDashboard = () => {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="bg-gray-100 text-gray-600">
-                <th className="p-3 font-semibold">Time</th>
-                <th className="p-3 font-semibold">Student</th>
-                <th className="p-3 font-semibold">Session Type</th>
-                <th className="p-3 font-semibold">Panels</th>
+                <SortableTh className="p-3 font-semibold" sortKey="time" sortConfig={timetableSortConfig} onSort={requestTimetableSort}>Time</SortableTh>
+                <SortableTh className="p-3 font-semibold" sortKey="student" sortConfig={timetableSortConfig} onSort={requestTimetableSort}>Student</SortableTh>
+                <SortableTh className="p-3 font-semibold" sortKey="sessionType" sortConfig={timetableSortConfig} onSort={requestTimetableSort}>Session Type</SortableTh>
+                <SortableTh className="p-3 font-semibold" sortKey="panels" sortConfig={timetableSortConfig} onSort={requestTimetableSort}>Panels</SortableTh>
                 <th className="p-3 font-semibold">Action</th>
               </tr>
             </thead>
             <tbody>
-              <tr className="border-b">
-                <td className="p-3">Today, 10:00 AM</td>
-                <td className="p-3 font-bold text-gray-800">Ali Bin Abu</td>
-                <td className="p-3">
-                  <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-bold uppercase">
-                    PROPOSAL_DEFENSE
-                  </span>
-                </td>
-                <td className="p-3 text-gray-600">Dr. Samihah, Prof. Ahmad</td>
-                <td className="p-3">
-                  <button className="text-red-600 font-bold text-xs hover:underline">
-                    Send Reminder
-                  </button>
-                </td>
-              </tr>
+              {sortedTimetableRows.map((row) => (
+                <tr key={row.id} className="border-b">
+                  <td className="p-3">{row.time}</td>
+                  <td className="p-3 font-bold text-gray-800">{row.student}</td>
+                  <td className="p-3">
+                    <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-bold uppercase">
+                      {row.sessionType}
+                    </span>
+                  </td>
+                  <td className="p-3 text-gray-600">{row.panels}</td>
+                  <td className="p-3">
+                    <button className="text-red-600 font-bold text-xs hover:underline">
+                      Send Reminder
+                    </button>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
       </div>
 
-      {/* 🔴 NEW: GLOBAL APPROVALS QUEUE */}
       <div className="bg-white rounded-xl shadow-md border border-gray-200 overflow-hidden">
         <div className="p-6 border-b border-gray-200 bg-red-50 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -228,11 +264,19 @@ const AdminDashboard = () => {
                   </div>
 
                   <h3 className="text-lg font-bold text-gray-900">
-                    {req.requestingPanelId?.name}{" "}
+                    <UserProfileLink
+                      user={req.requestingPanelId}
+                      fallback="Unknown Panel"
+                      className="font-bold"
+                    />{" "}
                     <span className="text-gray-400 font-normal text-sm">
                       is requesting access to
                     </span>{" "}
-                    {req.studentId?.name}
+                    <UserProfileLink
+                      user={req.studentId}
+                      fallback="Unknown Student"
+                      className="font-bold"
+                    />
                   </h3>
 
                   <p className="text-sm text-gray-600 mt-1">

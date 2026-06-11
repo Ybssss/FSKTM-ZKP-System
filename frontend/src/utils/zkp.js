@@ -1,7 +1,6 @@
 import { ec as EC } from "elliptic";
 import SHA256 from "crypto-js/sha256";
 
-// Initialize the secp256k1 Elliptic Curve
 const ec = new EC("secp256k1");
 
 const ZKP_CONFIG = {
@@ -11,9 +10,7 @@ const ZKP_CONFIG = {
 };
 
 class ZKPAuth {
-  // 1. Generate an Elliptic Curve Key Pair
   async generateKeyPair() {
-    console.log("🔐 Generating TRUE Elliptic Curve key pair...");
     const key = ec.genKeyPair();
     return {
       privateKey: key.getPrivate("hex"),
@@ -21,9 +18,7 @@ class ZKPAuth {
     };
   }
 
-  // 2. Generate the Cryptographic Proof (Fiat-Shamir heuristic)
   async generateProof(userId, serverChallenge) {
-    console.log("📐 Starting Schnorr Proof Generation...");
     const privKeyHex = await this.getRawPrivateKeyString(userId);
     if (!privKeyHex) throw new Error("No private key found on this device");
 
@@ -46,8 +41,6 @@ class ZKPAuth {
       s: s.toString(16),
     };
 
-    // X-RAY LOG
-    console.log("✅ Generated Schnorr Proof Object:", proofObj);
     return proofObj;
   }
 
@@ -82,10 +75,7 @@ class ZKPAuth {
     );
   }
 
-  // ==========================================
-  // E2EE DEVICE PAIRING BRIDGE
-  // ==========================================
-
+  // Generate a temporary RSA keypair for device-to-device key transfer.
   async generateEphemeralKeyPair() {
     const keyPair = await window.crypto.subtle.generateKey(
       {
@@ -132,6 +122,7 @@ class ZKPAuth {
   }
 
   async encryptPayload(publicKeyBase64, payloadString) {
+    // Encrypt the transferred private key with a one-time AES key, then wrap that AES key with RSA.
     const aesKey = await window.crypto.subtle.generateKey(
       { name: "AES-GCM", length: 256 },
       true,

@@ -4,7 +4,7 @@ const evaluationSchema = new mongoose.Schema(
   {
     sessionId: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Timetable", // 🔴 FIXED: Was "Session", causing Mongoose to return null!
+      ref: "Timetable",
       required: true,
     },
     studentId: {

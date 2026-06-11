@@ -11,6 +11,9 @@ const Evaluation = require("../models/Evaluation");
 const Rubric = require("../models/Rubric");
 const Attendance = require("../models/Attendance");
 const PermissionRequest = require("../models/PermissionRequest");
+const {
+  buildDemoCompletedEvaluationFields,
+} = require("../utils/demoEvaluationFixtures");
 
 const envPath = path.join(__dirname, "../../.env");
 dotenv.config({ path: envPath });
@@ -606,7 +609,7 @@ const cleanGridFsBucket = async () => {
   const bucketName = process.env.GRIDFS_BUCKET_NAME || "session_materials";
 
   if (!mongoose.connection.db) {
-    console.warn("⚠️ MongoDB connection is not ready. Skipping GridFS cleanup.");
+    console.warn("MongoDB connection is not ready. Skipping GridFS cleanup.");
     return;
   }
 
@@ -621,10 +624,10 @@ const cleanGridFsBucket = async () => {
     await chunksCollection.deleteMany({});
 
     console.log(
-      `🧹 Deleted ${fileCount} uploaded material file(s) and ${chunkCount} GridFS chunk(s) from bucket "${bucketName}".`,
+      `Deleted ${fileCount} uploaded material file(s) and ${chunkCount} GridFS chunk(s) from bucket "${bucketName}".`,
     );
   } catch (error) {
-    console.warn("⚠️ Could not clean GridFS uploaded files:", error.message);
+    console.warn("Could not clean GridFS uploaded files:", error.message);
   }
 };
 
@@ -642,7 +645,7 @@ if (proposalWeightTotal !== 100) {
 const seedDatabase = async () => {
   try {
     await mongoose.connect(MONGO_URI);
-    console.log("✅ Database connected.\n");
+    console.log("Database connected.\n");
 
     //Cleared Timetables instead of deprecated Sessions
     await PermissionRequest.deleteMany({});
@@ -659,7 +662,7 @@ const seedDatabase = async () => {
     await cleanGridFsBucket();
 
     // 1. Create Rubrics
-    console.log("📚 Seeding UTHM Rubric Templates with FULL Criteria...");
+    console.log("Seeding UTHM rubric templates with full criteria...");
     const createdRubrics = await Rubric.create(rubricsData);
 
     const proposalRubric = createdRubrics.find(
@@ -673,7 +676,7 @@ const seedDatabase = async () => {
     );
 
     // 2. Create Admins (Unified without SuperAdmin)
-    console.log("👨‍💼 Seeding Administrators...");
+    console.log("Seeding administrators...");
     const adminUsers = [
       {
         userId: "admin_samihah",
@@ -681,7 +684,7 @@ const seedDatabase = async () => {
         email: "samihah@uthm.edu.my",
         role: "admin",
         registrationCode: "demo",
-        // 🔴 FIXED: Since admins can be assigned to panels now, give them tags!
+        // Admin users can also be assigned as panel evaluators.
         profession: "DS13 Pensyarah Kanan — Jabatan Multimedia",
         expertiseTags: [
           "Multimedia",
@@ -703,7 +706,7 @@ const seedDatabase = async () => {
     let allUsers = await User.create(adminUsers);
 
     // 3. Create Stable Demo Panels
-    console.log("👥 Seeding 5 Demo Panel Accounts...");
+    console.log("Seeding 5 demo panel accounts...");
 
     const demoPanels = [
       {
@@ -796,7 +799,7 @@ const seedDatabase = async () => {
     allUsers = [...allUsers, ...createdPanels];
 
     // 4. Create Students and Assign Supervisors
-    console.log("🎓 Seeding Students and assigning Supervisors securely...");
+    console.log("Seeding students and assigning supervisors...");
 
     const studentUsers = [
       {
@@ -1001,7 +1004,7 @@ const seedDatabase = async () => {
       },
     ];
 
-    console.log("🔗 Saving Panel Assignments to Database...");
+    console.log("Saving panel assignments to the database...");
 
     const panelAssignmentMap = studentLifecyclePlan.map(
       ({ studentEmail, panels }) => ({
@@ -1033,7 +1036,7 @@ const seedDatabase = async () => {
     }
 
     // 5. Create Sessions (Using Timetable Model)
-    console.log("📅 Seeding Evaluation Sessions with conflict-safe batches...");
+    console.log("Seeding evaluation sessions with conflict-safe batches...");
 
     const makeDate = (dateOnly) => new Date(`${dateOnly}T00:00:00.000Z`);
 
@@ -1465,7 +1468,7 @@ const seedDatabase = async () => {
     };
 
     validateSeedSchedule(sessionsData);
-    console.log("✅ Seed schedule validation passed before inserting timetables.");
+    console.log("Seed schedule validation passed before inserting timetables.");
 
     await SessionBatch.create(stageBatchRecords);
 
@@ -1549,45 +1552,7 @@ const seedDatabase = async () => {
     };
 
     // 6. Auto-Create Evaluations
-    console.log("📋 Seeding evaluations linked to Rubrics...");
-
-    const makeScoreMapFromValues = (rubric, values = {}) => {
-      const map = {};
-
-      rubric.criteria
-        .filter((criterion) => criterion.type === "quantitative")
-        .forEach((criterion) => {
-          map[criterion.key] = values[criterion.key] ?? 4;
-        });
-
-      return map;
-    };
-
-    const calculateWeightedTotalMarks = (rubric, scores = {}) =>
-      Number(
-        rubric.criteria
-          .filter((criterion) => criterion.type === "quantitative")
-          .reduce((sum, criterion) => {
-            const score = Number(scores[criterion.key] || 0);
-            const maxScore = Number(criterion.maxScore || 5);
-            const weight = Number(criterion.weight || 0);
-
-            return maxScore > 0 ? sum + (score / maxScore) * weight : sum;
-          }, 0)
-          .toFixed(2),
-      );
-
-    const makeQualitativeMap = (rubric, text) => {
-      const map = {};
-
-      rubric.criteria
-        .filter((criterion) => criterion.type === "qualitative")
-        .forEach((criterion) => {
-          map[criterion.key] = text;
-        });
-
-      return map;
-    };
+    console.log("Seeding evaluations linked to rubrics...");
 
     const evaluationsData = [];
 
@@ -1596,93 +1561,51 @@ const seedDatabase = async () => {
         const student = allUsers.find((u) => u.email === slot.studentEmail);
         const title = `${stage.titlePrefix} - ${student.name}`;
         const isCompleted = stage.status === "completed";
+        const evaluatorEntries = [
+          ...slot.panels.map((panelId) => ({
+            evaluatorId: panelId,
+            formFiller: "Panel",
+          })),
+          ...(student?.supervisorId
+            ? [
+                {
+                  evaluatorId: student.supervisorId,
+                  formFiller: "Supervisor",
+                },
+              ]
+            : []),
+        ].filter(
+          (entry, index, array) =>
+            array.findIndex(
+              (candidate) =>
+                String(candidate.evaluatorId) === String(entry.evaluatorId),
+            ) === index,
+        );
 
-        for (const panelId of slot.panels) {
+        for (const { evaluatorId, formFiller } of evaluatorEntries) {
           const common = {
             sessionId: getSessionIdByTitle(title),
             rubricId: stage.rubric._id,
             studentId: getUserId(slot.studentEmail),
-            evaluatorId: panelId,
+            evaluatorId,
             semester: "Semester 1, 2025/2026",
             sessionType: stage.sessionType,
             status: isCompleted ? "COMPLETED" : "PENDING",
+            formFiller,
           };
 
           if (!isCompleted) {
             evaluationsData.push(common);
-          } else if (stage.sessionType === "PROGRESS_ASSESSMENT") {
-            evaluationsData.push({
-              ...common,
-              summaryOfProgress:
-                stage.stageKey === "progress1"
-                  ? "The student has completed early research milestones after proposal approval, including refinement of objectives and initial system design."
-                  : "The student has demonstrated continued progress, including prototype improvement, preliminary validation, and preparation for pre-viva readiness.",
-              commentsForImprovement:
-                stage.stageKey === "progress1"
-                  ? "The student should strengthen the literature gap, improve research planning, and prepare clearer evidence for the next progress review."
-                  : "The student should finalize data analysis, improve report structure, and prepare stronger justification before pre-viva.",
-              overallSuggestions:
-                stage.stageKey === "progress1"
-                  ? "Proceed to the next progress assessment after completing planned implementation milestones."
-                  : "Proceed toward pre-viva preparation with continuous supervision and final documentation refinement.",
-            });
-          } else if (stage.sessionType === "PRE_VIVA") {
-            const scores = makeScoreMapFromValues(stage.rubric, {
-              crit_a_title: 4,
-              crit_b_abs: 4,
-              crit_c_prob: 4,
-              crit_d_obj: 4,
-              crit_e_lit: 4,
-              crit_f_meth: 4,
-              crit_g_res: 4,
-              crit_h_find: 4,
-              crit_i_eth: 4,
-              crit_j_contrib: 4,
-              crit_k_conc: 4,
-              crit_l_org2: 4,
-              crit_m_lang2: 4,
-              crit_n_ref2: 4,
-              crit_o_pres2: 4,
-              crit_p_delib: 4,
-            });
-
-            evaluationsData.push({
-              ...common,
-              totalMarks: calculateWeightedTotalMarks(stage.rubric, scores),
-              scores,
-              qualitativeFeedback: makeQualitativeMap(
-                stage.rubric,
-                "The candidate demonstrates acceptable thesis readiness with minor improvements required before final submission.",
-              ),
-              overallComments:
-                "The candidate is ready to proceed with minor amendments and improved presentation of findings.",
-            });
           } else {
-            const scores = makeScoreMapFromValues(stage.rubric, {
-              crit_a_title: 4,
-              crit_b_exec_summary: 4,
-              crit_c_problem: 4,
-              crit_d_objective: 4,
-              crit_e_literature: 4,
-              crit_f_methodology: 4,
-              crit_g_prelim: 4,
-              crit_h_ethics: 4,
-              crit_i_org: 4,
-              crit_j_lang: 4,
-              crit_k_ref: 4,
-              crit_l_pres: 4,
-            });
-
             evaluationsData.push({
               ...common,
-              totalMarks: calculateWeightedTotalMarks(stage.rubric, scores),
-              scores,
-              qualitativeFeedback: makeQualitativeMap(
-                stage.rubric,
-                "The proposal is acceptable. The research direction is clear and the methodology is suitable with minor refinement.",
-              ),
-              overallComments:
-                "Good proposal foundation. The candidate can proceed after refining literature gap and methodology justification.",
+              ...buildDemoCompletedEvaluationFields({
+                rubric: stage.rubric,
+                sessionType: stage.sessionType,
+                title,
+                stageKey: stage.stageKey,
+                formFiller,
+              }),
             });
           }
         }
@@ -1691,7 +1614,7 @@ const seedDatabase = async () => {
 
     const createdEvaluations = await Evaluation.create(evaluationsData);
 
-    console.log("🧾 Seeding attendance records...");
+    console.log("Seeding attendance records...");
 
     await Attendance.create(
       stageConfigs
@@ -1711,109 +1634,153 @@ const seedDatabase = async () => {
         ),
     );
 
-    console.log("🔐 Seeding permission request demo cases...");
+    console.log("Seeding permission request demo cases...");
 
-    const findSessionByTitle = (title) =>
-      createdSessions.find((session) => session.title === title);
-
-    const findCompletedEvaluation = ({
-      studentEmail,
-      sessionTitle,
-      evaluatorId,
-      excludeEvaluatorId,
-    }) => {
-      const targetSession = findSessionByTitle(sessionTitle);
-
-      if (!targetSession) return null;
-
-      return createdEvaluations.find((ev) => {
-        const sameStudent =
-          ev.studentId.toString() === getUserId(studentEmail).toString();
-        const sameSession =
-          ev.sessionId.toString() === targetSession._id.toString();
-        const completed = ev.status === "COMPLETED";
-        const evaluatorMatches = evaluatorId
-          ? ev.evaluatorId.toString() === evaluatorId.toString()
-          : true;
-        const evaluatorExcluded = excludeEvaluatorId
-          ? ev.evaluatorId.toString() !== excludeEvaluatorId.toString()
-          : true;
-
-        return (
-          sameStudent &&
-          sameSession &&
-          completed &&
-          evaluatorMatches &&
-          evaluatorExcluded
+    const reviewerIds = createdPanels.map((panel) => panel._id);
+    const permissionKeys = new Set();
+    const permissionTargets = createdEvaluations
+      .filter((evaluation) => evaluation.status === "COMPLETED")
+      .map((evaluation) => {
+        const student = allUsers.find(
+          (candidate) =>
+            candidate._id.toString() === evaluation.studentId.toString(),
         );
-      });
+        const historicalSession = createdSessions.find(
+          (session) => session._id.toString() === evaluation.sessionId.toString(),
+        );
+        const currentSession = student
+          ? createdSessions.find(
+              (session) =>
+                session.sessionType === "PRE_VIVA" &&
+                (session.students || []).some(
+                  (sessionStudentId) =>
+                    sessionStudentId.toString() === student._id.toString(),
+                ),
+            ) || null
+          : null;
+
+        return {
+          evaluation,
+          student,
+          historicalSession,
+          currentSession,
+        };
+      })
+      .filter((target) => target.student && target.historicalSession && target.currentSession);
+
+    const findPermissionTarget = ({
+      requesterId,
+      preferredOwnerIds = [],
+    }) => {
+      const requesterKey = requesterId.toString();
+      const orderedOwnerIds = [
+        ...preferredOwnerIds.map((ownerId) => ownerId?.toString()).filter(Boolean),
+        ...reviewerIds.map((ownerId) => ownerId.toString()),
+      ];
+
+      for (const ownerId of orderedOwnerIds) {
+        const match = permissionTargets.find((target) => {
+          const targetOwnerId = target.evaluation.evaluatorId.toString();
+          const key = `${requesterKey}:${target.evaluation._id}`;
+
+          return (
+            targetOwnerId !== requesterKey &&
+            targetOwnerId === ownerId &&
+            !permissionKeys.has(key)
+          );
+        });
+
+        if (match) return match;
+      }
+
+      return permissionTargets.find((target) => {
+        const targetOwnerId = target.evaluation.evaluatorId.toString();
+        const key = `${requesterKey}:${target.evaluation._id}`;
+        return targetOwnerId !== requesterKey && !permissionKeys.has(key);
+      }) || null;
     };
 
-    const createPermissionDemo = async ({
-      studentEmail,
-      historicalSessionTitle,
-      currentSessionTitle,
+    const createPermissionFromTarget = async ({
+      target,
       requestingPanelId,
-      owningPanelId,
       status,
       reason,
     }) => {
-      const currentSession = findSessionByTitle(currentSessionTitle);
-      const targetEvaluation = findCompletedEvaluation({
-        studentEmail,
-        sessionTitle: historicalSessionTitle,
-        evaluatorId: owningPanelId,
-      });
+      if (!target) return false;
 
-      if (!currentSession || !targetEvaluation) {
-        console.warn(
-          `⚠️ Skipped permission demo: ${studentEmail}, historical=${historicalSessionTitle}, current=${currentSessionTitle}`,
-        );
-        return;
-      }
+      const key = `${requestingPanelId.toString()}:${target.evaluation._id}`;
+      if (permissionKeys.has(key)) return false;
+      permissionKeys.add(key);
 
       const permissionPayload = {
         requestingPanelId,
-        targetEvaluationId: targetEvaluation._id,
-        owningPanelId: targetEvaluation.evaluatorId,
-        studentId: getUserId(studentEmail),
+        targetEvaluationId: target.evaluation._id,
+        owningPanelId: target.evaluation.evaluatorId,
+        studentId: target.student._id,
         status,
         reason,
         scope: "SINGLE_EVALUATION",
-        currentSessionId: currentSession._id,
-        batchId: currentSession.batchId || null,
+        currentSessionId: target.currentSession._id,
+        batchId: target.currentSession.batchId || null,
       };
 
       if (status === "APPROVED") {
-        permissionPayload.approvedBy = targetEvaluation.evaluatorId;
+        permissionPayload.approvedBy = target.evaluation.evaluatorId;
         permissionPayload.approvedAt = new Date();
       }
 
       await PermissionRequest.create(permissionPayload);
+      return true;
     };
 
-    await createPermissionDemo({
-      studentEmail: "siti@student.uthm.edu.my",
-      historicalSessionTitle: "Proposal Defense - Siti Nuraisyah",
-      currentSessionTitle: "Pre-Viva - Siti Nuraisyah",
-      requestingPanelId: createdPanels[3]._id,
-      owningPanelId: createdPanels[2]._id,
-      status: "PENDING",
-      reason:
-        "Demo pending request to review Siti Nuraisyah's previous Proposal Defense before the current Pre-Viva session.",
-    });
+    let permissionDemoCount = 0;
 
-    await createPermissionDemo({
-      studentEmail: "chong@student.uthm.edu.my",
-      historicalSessionTitle: "Progress Assessment 2 - Chong Wei Ming",
-      currentSessionTitle: "Pre-Viva - Chong Wei Ming",
-      requestingPanelId: createdPanels[0]._id,
-      owningPanelId: createdPanels[2]._id,
-      status: "APPROVED",
-      reason:
-        "Demo approved request to review Chong Wei Ming's previous Progress Assessment before the current Pre-Viva session.",
-    });
-    console.log("\n🧪 DEMO ACCOUNTS");
+    for (let index = 0; index < reviewerIds.length; index += 1) {
+      const requestingPanelId = reviewerIds[index];
+      const nextOwnerId = reviewerIds[(index + 1) % reviewerIds.length];
+      const altOwnerId = reviewerIds[(index + 2) % reviewerIds.length];
+      const target = findPermissionTarget({
+        requesterId: requestingPanelId,
+        preferredOwnerIds: [nextOwnerId, altOwnerId],
+      });
+
+      if (
+        await createPermissionFromTarget({
+          target,
+          requestingPanelId,
+          status: "PENDING",
+          reason:
+            "Demo pending request: panel needs historical context from this student's completed evaluation before the current Pre-Viva session.",
+        })
+      ) {
+        permissionDemoCount += 1;
+      }
+    }
+
+    for (let index = 0; index < reviewerIds.length; index += 1) {
+      const requestingPanelId = reviewerIds[index];
+      const nextOwnerId = reviewerIds[(index + 1) % reviewerIds.length];
+      const altOwnerId = reviewerIds[(index + 2) % reviewerIds.length];
+      const target = findPermissionTarget({
+        requesterId: requestingPanelId,
+        preferredOwnerIds: [altOwnerId, nextOwnerId],
+      });
+
+      if (
+        await createPermissionFromTarget({
+          target,
+          requestingPanelId,
+          status: "APPROVED",
+          reason:
+            "Demo approved request: panel can view a historical evaluation and student context for continuity.",
+        })
+      ) {
+        permissionDemoCount += 1;
+      }
+    }
+
+    console.log(`Seeded ${permissionDemoCount} permission request demo cases.`);
+    console.log("\nDEMO ACCOUNTS");
     console.log("Admin: admin_samihah / registration code: demo");
     console.log("Student Ali: AW240001 / code: demo");
     console.log("Student Siti: AW240002 / code: demo");
@@ -1844,7 +1811,7 @@ const seedDatabase = async () => {
       .select("name assignedStudents")
       .lean();
 
-    console.log("\n📊 SEED VALIDATION SUMMARY");
+    console.log("\nSEED VALIDATION SUMMARY");
     console.log(`Panels: ${totalPanels}`);
     console.log(`Students: ${totalStudents}`);
     console.log(`Session batches: ${totalBatches}`);
@@ -1859,9 +1826,9 @@ const seedDatabase = async () => {
         `${panel.name}: ${panel.assignedStudents?.length || 0} assigned student(s)`,
       );
     });
-    console.log("✅ DATABASE SEEDING COMPLETED SUCCESSFULLY!");
+    console.log("Database seeding completed successfully.");
   } catch (error) {
-    console.error("❌ Error:", error);
+    console.error("Error:", error);
     process.exit(1);
   } finally {
     await mongoose.connection.close();

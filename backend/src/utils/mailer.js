@@ -204,7 +204,7 @@ exports.sendRegistrationEmail = async (
       html,
     });
 
-    console.log(`✉️ Email sent to ${receiver}: ${result.messageId}`);
+    console.log(`Email sent to ${receiver}: ${result.messageId}`);
     return result;
   }
 
@@ -218,7 +218,7 @@ exports.sendRegistrationEmail = async (
     html,
   });
 
-  console.log(`✉️ Email sent to ${receiver}: ${info.messageId}`);
+  console.log(`Email sent to ${receiver}: ${info.messageId}`);
 
   return {
     success: true,

@@ -1,25 +1,13 @@
 import React from "react";
 import { X, Calendar, User, Award, FileText } from "lucide-react";
+import UserProfileLink from "./UserProfileLink";
 
 export default function EvaluationDetailModal({ evaluation, onClose }) {
   if (!evaluation) return null;
 
-  const getScoreColor = (score) => {
-    if (score >= 80) return "bg-green-100 text-green-700";
-    if (score >= 60) return "bg-yellow-100 text-yellow-700";
-    return "bg-red-100 text-red-700";
-  };
-
-  const getScoreBarColor = (score) => {
-    if (score >= 80) return "bg-green-500";
-    if (score >= 60) return "bg-yellow-500";
-    return "bg-red-500";
-  };
-
   return (
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-        {/* Header */}
         <div className="sticky top-0 bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
           <h2 className="text-2xl font-bold text-gray-900">
             Evaluation Details
@@ -33,12 +21,15 @@ export default function EvaluationDetailModal({ evaluation, onClose }) {
         </div>
 
         <div className="p-6">
-          {/* Student Info */}
           <div className="bg-gradient-to-r from-primary to-primary-dark rounded-lg p-6 text-white mb-6">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-2xl font-bold mb-2">
-                  {evaluation.studentId?.name || "Unknown Student"}
+                  <UserProfileLink
+                    user={evaluation.studentId}
+                    fallback="Unknown Student"
+                    className="font-bold text-white hover:text-white"
+                  />
                 </h3>
                 <div className="space-y-1 text-sm opacity-90">
                   <p>Matric: {evaluation.studentId?.matricNumber || "N/A"}</p>
@@ -61,7 +52,6 @@ export default function EvaluationDetailModal({ evaluation, onClose }) {
             </div>
           </div>
 
-          {/* Evaluation Info */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
             <div className="flex items-center gap-3 p-4 bg-gray-50 rounded-lg">
               <Calendar className="w-5 h-5 text-primary" />
@@ -92,20 +82,20 @@ export default function EvaluationDetailModal({ evaluation, onClose }) {
               <div>
                 <div className="text-xs text-gray-500">Evaluator</div>
                 <div className="font-semibold text-gray-900">
-                  {evaluation.evaluatorId?.name || "N/A"}
+                  <UserProfileLink
+                    user={evaluation.evaluatorId}
+                    fallback="N/A"
+                    className="font-semibold"
+                  />
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Score Breakdown Section */}
           <div className="space-y-4">
             {evaluation.rubricId?.criteria?.map((criterion) => {
-              // 🚀 THE FIX: Look up the score by the Criteria ID
-              // We use .toString() to ensure the IDs match
               const score = evaluation.scores[criterion._id.toString()] || 0;
 
-              // Calculate percentage for the progress bar
               const percentage = (score / criterion.maxScore) * 100;
 
               return (
@@ -133,7 +123,6 @@ export default function EvaluationDetailModal({ evaluation, onClose }) {
                     </div>
                   </div>
 
-                  {/* Visual Progress Bar */}
                   <div className="w-full bg-gray-100 rounded-full h-2">
                     <div
                       className="bg-indigo-500 h-2 rounded-full transition-all duration-500"
@@ -145,7 +134,6 @@ export default function EvaluationDetailModal({ evaluation, onClose }) {
             })}
           </div>
 
-          {/* Overall Comments */}
           {evaluation.overallComments && (
             <div className="mb-6">
               <h3 className="text-lg font-bold text-gray-900 mb-3">
@@ -159,7 +147,6 @@ export default function EvaluationDetailModal({ evaluation, onClose }) {
             </div>
           )}
 
-          {/* Recommendations */}
           {evaluation.recommendations && (
             <div className="mb-6">
               <h3 className="text-lg font-bold text-gray-900 mb-3">
@@ -173,7 +160,6 @@ export default function EvaluationDetailModal({ evaluation, onClose }) {
             </div>
           )}
 
-          {/* Rubric Info */}
           <div className="mt-6 pt-6 border-t border-gray-200">
             <div className="flex items-center justify-between text-sm text-gray-500">
               <div>

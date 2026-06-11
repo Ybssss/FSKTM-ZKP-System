@@ -1,6 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { CheckCircle, XCircle, Calendar, Users, Clock } from "lucide-react";
 import api from "../../services/api";
+import SortableTh from "../../components/SortableTh";
+import useSortableData from "../../hooks/useSortableData";
 
 export default function PanelAttendancePage() {
   const [sessions, setSessions] = useState([]);
@@ -29,6 +31,26 @@ export default function PanelAttendancePage() {
     }
   };
 
+  const getAttendanceStatusLabel = (session) =>
+    session.status === "COMPLETED" || new Date(session.date) < new Date()
+      ? "Logged"
+      : "Pending";
+
+  const attendanceSortAccessors = useMemo(
+    () => ({
+      date: (session) => `${session.date || ""} ${session.time || session.startTime || ""}`,
+      session: (session) => `${session.sessionType || ""} ${session.venue || ""}`,
+      candidate: (session) => `${session.student?.name || ""} ${session.student?.matricNumber || ""}`,
+      status: (session) => getAttendanceStatusLabel(session),
+    }),
+    [],
+  );
+  const {
+    sortedItems: sortedSessions,
+    sortConfig: attendanceSortConfig,
+    requestSort: requestAttendanceSort,
+  } = useSortableData(sessions, attendanceSortAccessors, { key: "date" });
+
   if (loading) {
     return (
       <div className="p-12 text-center text-gray-500 font-bold">
@@ -55,10 +77,10 @@ export default function PanelAttendancePage() {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200 text-xs uppercase tracking-wider text-gray-500">
-                <th className="p-4 font-bold">Date & Time</th>
-                <th className="p-4 font-bold">Session / Venue</th>
-                <th className="p-4 font-bold">Candidate</th>
-                <th className="p-4 font-bold text-center">Status</th>
+                <SortableTh className="p-4 font-bold" sortKey="date" sortConfig={attendanceSortConfig} onSort={requestAttendanceSort}>Date & Time</SortableTh>
+                <SortableTh className="p-4 font-bold" sortKey="session" sortConfig={attendanceSortConfig} onSort={requestAttendanceSort}>Session / Venue</SortableTh>
+                <SortableTh className="p-4 font-bold" sortKey="candidate" sortConfig={attendanceSortConfig} onSort={requestAttendanceSort}>Candidate</SortableTh>
+                <SortableTh className="p-4 font-bold text-center" sortKey="status" sortConfig={attendanceSortConfig} onSort={requestAttendanceSort}>Status</SortableTh>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -69,7 +91,7 @@ export default function PanelAttendancePage() {
                   </td>
                 </tr>
               ) : (
-                sessions.map((session) => (
+                sortedSessions.map((session) => (
                   <tr
                     key={session._id || session.id}
                     className="hover:bg-gray-50 transition-colors"
@@ -104,8 +126,7 @@ export default function PanelAttendancePage() {
                     </td>
                     <td className="p-4 text-center">
                       {/* Assuming your backend marks session status or you have an attendance boolean */}
-                      {session.status === "COMPLETED" ||
-                      new Date(session.date) < new Date() ? (
+                      {getAttendanceStatusLabel(session) === "Logged" ? (
                         <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-green-50 text-green-700 border border-green-200 rounded-full text-xs font-bold">
                           <CheckCircle className="w-4 h-4" /> Logged
                         </span>

@@ -1,5 +1,5 @@
 // src/components/PanelAssigner.jsx
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 
 const PanelAssigner = ({ studentTitle, panelCandidates, onAssign }) => {
   const [selectedPanel, setSelectedPanel] = useState("");
@@ -8,7 +8,7 @@ const PanelAssigner = ({ studentTitle, panelCandidates, onAssign }) => {
   const [loading, setLoading] = useState(false);
 
   // Simple algorithm to check how many expertise tags match the Research Title
-  const calculateMatch = (tags, title) => {
+  const calculateMatch = useCallback((tags, title) => {
     if (!tags || tags.length === 0) return 0;
 
     const titleWords = title.toLowerCase().split(" ");
@@ -29,9 +29,9 @@ const PanelAssigner = ({ studentTitle, panelCandidates, onAssign }) => {
     // Calculate percentage (max 100%)
     const percentage = Math.min(Math.round((matches / tags.length) * 100), 100);
     setMatchScore(percentage);
-  };
+  }, []);
 
-  const loadStoredExpertise = (panelName) => {
+  const loadStoredExpertise = useCallback((panelName) => {
     if (!panelName) {
       setExpertise([]);
       setMatchScore(0);
@@ -50,12 +50,12 @@ const PanelAssigner = ({ studentTitle, panelCandidates, onAssign }) => {
     setExpertise(storedTags);
     calculateMatch(storedTags, studentTitle);
     setLoading(false);
-  };
+  }, [calculateMatch, panelCandidates, studentTitle]);
 
   // Load stored database expertise whenever a new panel is selected.
   useEffect(() => {
     loadStoredExpertise(selectedPanel);
-  }, [selectedPanel, panelCandidates, studentTitle]);
+  }, [loadStoredExpertise, selectedPanel]);
 
   const handleConfirm = () => {
     if (onAssign && selectedPanel) {
@@ -130,7 +130,6 @@ const PanelAssigner = ({ studentTitle, panelCandidates, onAssign }) => {
         </div>
       )}
 
-      {/* NEW: Confirmation Button */}
       <button
         onClick={handleConfirm}
         disabled={!selectedPanel}

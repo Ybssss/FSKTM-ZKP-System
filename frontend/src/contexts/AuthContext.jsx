@@ -1,9 +1,21 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useState,
+  useEffect,
+} from "react";
 import zkp from "../utils/zkp";
 import { authAPI } from "../services/api";
+import {
+  clearStoredSession,
+  isRevokedSessionResponse,
+  parseStoredUser,
+} from "../utils/authSession";
 
 const AuthContext = createContext();
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useAuth = () => {
   const context = useContext(AuthContext);
   if (!context) {
@@ -16,61 +28,106 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    checkAuth();
+  const clearLocalSession = useCallback(({
+    clearDeviceBinding = false,
+    clearKeys = false,
+  } = {}) => {
+    clearStoredSession({
+      storedUser: parseStoredUser(localStorage.getItem("user")),
+      removeDeviceBinding: clearDeviceBinding,
+      removePrivateKey: clearKeys,
+    });
+    setUser(null);
   }, []);
 
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
+    setLoading(true);
+
     try {
       const token = localStorage.getItem("token");
       const userData = localStorage.getItem("user");
 
-      if (token && userData) {
-        setUser(JSON.parse(userData));
-      } else {
+      if (!token || !userData) {
         setUser(null);
+        return;
       }
+
+      let parsedUser = null;
+      try {
+        parsedUser = JSON.parse(userData);
+      } catch {
+        clearLocalSession();
+        return;
+      }
+
+      const response = await authAPI.getMe();
+      const freshUser = response.user || parsedUser;
+
+      localStorage.setItem("user", JSON.stringify(freshUser));
+      setUser(freshUser);
     } catch (error) {
+      if (error.response?.status === 401) {
+        const code = String(error.response.data?.code || "");
+        const message = String(error.response.data?.message || "");
+        const revoked = isRevokedSessionResponse(code, message);
+
+        clearLocalSession({
+          clearDeviceBinding: revoked,
+          clearKeys: revoked,
+        });
+        return;
+      }
+
       setUser(null);
     } finally {
       setLoading(false);
     }
-  };
+  }, [clearLocalSession]);
 
-  const login = async (userId, trustDevice = false) => {
+  useEffect(() => {
+    checkAuth();
+
+    const handleSessionCleared = () => {
+      setUser(null);
+      setLoading(false);
+    };
+
+    window.addEventListener("auth-session-cleared", handleSessionCleared);
+
+    return () => {
+      window.removeEventListener("auth-session-cleared", handleSessionCleared);
+    };
+  }, [checkAuth]);
+
+  const login = async (userId, trustDevice = false, recaptchaToken = "") => {
     try {
-      console.log("🔐 Starting ZKP login...");
-
       const hasKeys = zkp.hasKeysForUser(userId);
       if (!hasKeys) {
         throw new Error("No cryptographic keys found for this device.");
       }
 
-      // Check for existing device ID, or create a new one
+      // Reuse the local device identifier so the backend can update the same trusted-device record.
       let deviceId = localStorage.getItem("zkp_device_id");
       if (!deviceId) {
         deviceId = "dev_" + Math.random().toString(36).substring(2, 15);
       }
 
-      console.log("📝 Requesting challenge...");
-      const challengeResponse = await authAPI.getChallenge(userId);
+      const challengeResponse = await authAPI.getChallenge(
+        userId,
+        recaptchaToken,
+      );
 
-      console.log("🔑 Generating Proof using zkp.js...");
       const proofObject = await zkp.generateProof(
         userId,
         challengeResponse.challenge,
       );
 
-      // Force the passed parameter into a strict boolean
       const forceTrusted = trustDevice === true || trustDevice === "true";
 
-      console.log(
-        `🔍 Verifying proof with server... (Trust Device: ${forceTrusted})`,
-      );
       const verifyResponse = await authAPI.verify(
         userId,
         proofObject,
-        forceTrusted, // 👈 FIXED: We use the local 'forceTrusted' variable now!
+        forceTrusted,
         deviceId,
       );
 
@@ -89,38 +146,32 @@ export const AuthProvider = ({ children }) => {
 
       return { success: true, user: verifyResponse.user };
     } catch (error) {
+      console.error("ZKP login failed:", error);
       throw error;
     }
   };
 
   const register = async (userId, registrationCode) => {
     try {
-      console.log("🔐 Starting ZKP registration...");
-
-      // 1. Generate keys IN MEMORY first (Do not save to localStorage yet!)
-      console.log("📝 Generating cryptographic keys...");
+      // Generate the keys in memory first so a failed registration cannot overwrite a valid local key.
       const keyPair = await zkp.generateKeyPair();
       const publicKey = await zkp.exportPublicKey(keyPair.publicKey);
 
-      // 2. Send the public key to the backend FIRST
-      console.log("🌐 Registering with server...");
       const response = await authAPI.register(
         userId,
         publicKey,
         registrationCode,
       );
 
-      // 3. If the backend rejects it (e.g., "User already registered")
       if (!response.success) {
-        // We throw an error and STOP. The old key in localStorage is safely preserved!
         throw new Error(response.message || "Registration failed");
       }
 
-      // 4. 🔴 THE FIX: ONLY save the private key locally IF the server succeeded
       await zkp.storePrivateKey(userId, keyPair.privateKey);
 
       return { success: true };
     } catch (error) {
+      console.error("ZKP registration failed:", error);
       throw error;
     }
   };
@@ -135,14 +186,12 @@ export const AuthProvider = ({ children }) => {
     const trustDevice =
       localStorage.getItem(`zkp_trust_device_${userId}`) === "true";
 
-    // If it is a temporary/untrusted session (like a public lab computer)
+    // Untrusted sessions behave like public-lab access and wipe the local key on logout.
     if (!trustDevice && userId) {
-      console.log("Wiping temporary ZKP keys and device trace...");
-      zkp.deleteKeys(userId); // They must pair again!
-      localStorage.removeItem("zkp_device_id"); // Destroy the device trace
+      zkp.deleteKeys(userId);
+      localStorage.removeItem("zkp_device_id");
     }
 
-    // Standard session cleanup
     localStorage.removeItem("token");
     localStorage.removeItem("user");
     setUser(null);

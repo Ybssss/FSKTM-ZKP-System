@@ -1,6 +1,35 @@
 import React, { useState, useEffect } from "react";
 import { rubricAPI } from "../../services/api";
 import { ClipboardList, Search, ChevronDown, ChevronUp } from "lucide-react";
+import UserProfileLink from "../../components/UserProfileLink";
+
+const SCORE_DESCRIPTORS = {
+  5: { label: "Outstanding", field: "outstanding" },
+  4: { label: "Exemplary", field: "exemplary" },
+  3: { label: "Proficient", field: "proficient" },
+  2: { label: "Satisfactory", field: "satisfactory" },
+  1: { label: "Foundational", field: "foundational" },
+  0: { label: "Novice", field: "novice" },
+};
+
+const getCriterionMaxScore = (criterion) => {
+  const maxScore = Math.floor(Number(criterion?.maxScore ?? 5));
+  return Number.isFinite(maxScore) && maxScore > 0 ? Math.min(maxScore, 5) : 5;
+};
+
+const getScoreScale = (criterion) =>
+  Array.from({ length: getCriterionMaxScore(criterion) + 1 }, (_, index) => {
+    const value = getCriterionMaxScore(criterion) - index;
+    return {
+      value,
+      ...(SCORE_DESCRIPTORS[value] || {
+        label: `Score ${value}`,
+        field: "",
+      }),
+    };
+  });
+
+const formatMarkLabel = (value) => `${value} ${value === 1 ? "mark" : "marks"}`;
 
 export default function StudentRubrics() {
   const [rubrics, setRubrics] = useState([]);
@@ -78,9 +107,17 @@ export default function StudentRubrics() {
         {filteredRubrics.length > 0 ? (
           filteredRubrics.map((rubric) => {
             const isExpanded = expandedRubric === rubric._id;
-            const totalWeightage =
-              rubric.criteria?.reduce((sum, c) => sum + (c.weight || 0), 0) ||
-              0;
+            const quantitativeCriteria =
+              rubric.criteria?.filter(
+                (criterion) => criterion.type !== "qualitative",
+              ) || [];
+            const totalWeightage = quantitativeCriteria.reduce(
+              (sum, criterion) => sum + Number(criterion.weight || 0),
+              0,
+            );
+            const rubricSummary = quantitativeCriteria.length
+              ? `Total Weightage: ${totalWeightage}%`
+              : "Qualitative feedback rubric";
 
             return (
               <div
@@ -108,7 +145,7 @@ export default function StudentRubrics() {
                       )}
                       <div className="flex items-center gap-4 mt-3 text-sm text-gray-600">
                         <span>{rubric.criteria?.length || 0} Criteria</span>
-                        <span>Total Weightage: {totalWeightage}%</span>
+                        <span>{rubricSummary}</span>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -152,13 +189,21 @@ export default function StudentRubrics() {
                                   Type: {criterion.type || "quantitative"}
                                 </span>
 
-                                <span className="px-2 py-1 bg-gray-50 text-gray-700 text-xs font-bold rounded border border-gray-100">
-                                  Max Score: {criterion.maxScore ?? 5}
-                                </span>
+                                {criterion.type !== "qualitative" ? (
+                                  <>
+                                    <span className="px-2 py-1 bg-gray-50 text-gray-700 text-xs font-bold rounded border border-gray-100">
+                                      Max Score: {criterion.maxScore ?? 5}
+                                    </span>
 
-                                <span className="px-2 py-1 bg-gray-50 text-gray-700 text-xs font-bold rounded border border-gray-100">
-                                  Weight: {criterion.weight ?? 0}%
-                                </span>
+                                    <span className="px-2 py-1 bg-gray-50 text-gray-700 text-xs font-bold rounded border border-gray-100">
+                                      Weight: {criterion.weight ?? 0}%
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span className="px-2 py-1 bg-amber-50 text-amber-700 text-xs font-bold rounded border border-amber-100">
+                                    Feedback prompt
+                                  </span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -170,32 +215,20 @@ export default function StudentRubrics() {
                               </p>
 
                               <div className="space-y-2">
-                                {[
-                                  ["5", "Outstanding", criterion.outstanding],
-                                  ["4", "Exemplary", criterion.exemplary],
-                                  ["3", "Proficient", criterion.proficient],
-                                  ["2", "Satisfactory", criterion.satisfactory],
-                                  ["1", "Foundational", criterion.foundational],
-                                  ["0", "Novice", criterion.novice],
-                                ]
-                                  .filter(
-                                    ([mark]) =>
-                                      Number(mark) <=
-                                      Number(criterion.maxScore ?? 5),
-                                  )
-                                  .map(([mark, label, text]) => (
+                                {getScoreScale(criterion).map((score) => (
                                   <div
-                                    key={mark}
+                                    key={score.value}
                                     className="grid grid-cols-1 md:grid-cols-[80px_140px_1fr] gap-2 p-3 bg-gray-50 rounded-lg border border-gray-100 text-sm"
                                   >
                                     <div className="font-black text-indigo-700">
-                                      {mark} mark
+                                      {formatMarkLabel(score.value)}
                                     </div>
                                     <div className="font-bold text-gray-900">
-                                      {label}
+                                      {score.label}
                                     </div>
                                     <div className="text-gray-700">
-                                      {text || "No description provided."}
+                                      {criterion[score.field] ||
+                                        "No description provided."}
                                     </div>
                                   </div>
                                 ))}
@@ -208,7 +241,12 @@ export default function StudentRubrics() {
 
                     {rubric.createdBy && (
                       <div className="mt-4 pt-4 border-t border-gray-200 text-sm text-gray-600">
-                        Created by: {rubric.createdBy.name || "Administrator"}
+                        Created by:{" "}
+                        <UserProfileLink
+                          user={rubric.createdBy}
+                          fallback="Administrator"
+                          className="font-semibold"
+                        />
                       </div>
                     )}
                   </div>

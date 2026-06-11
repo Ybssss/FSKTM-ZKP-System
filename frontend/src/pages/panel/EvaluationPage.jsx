@@ -1,123 +1,49 @@
-import React, { useState, useEffect } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   ClipboardCheck,
   Eye,
   X,
-  Calculator,
   CheckCircle2,
   FileText,
   AlertCircle,
-  Calendar,
+  ExternalLink,
   Lock,
   ShieldAlert,
 } from "lucide-react";
 import api from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
+import UserProfileLink from "../../components/UserProfileLink";
+import SortableTh from "../../components/SortableTh";
+import useSortableData from "../../hooks/useSortableData";
+import {
+  getDocumentFileName,
+  openAuthenticatedFile,
+} from "../../utils/authenticatedFile";
+import {
+  buildEvaluationSubmitPayload,
+  calculateCriterionContribution,
+  calculateWeightedTotal,
+  findMissingQuantitativeCriterion,
+  formatMark,
+  formatMarkLabel,
+  getCriterionMaxScore,
+  getCriterionWeight,
+  getEvaluationDisplayedTotal,
+  getEvaluationRoleBadgeClass,
+  getEvaluationRoleLabel,
+  getQualitativeCriteria,
+  getQuantitativeCriteria,
+  getRubricWeightTotal,
+  getScoreDescription,
+  getScoreScale,
+  hasQuantitativeCriteria,
+  legacyProgressFeedback,
+  toNumber,
+} from "../../utils/evaluationForm";
 
-const DEFAULT_MAX_SCORE = 5;
-const SCORE_LABELS = {
-  5: { label: "Outstanding", descriptionKey: "outstanding" },
-  4: { label: "Exemplary", descriptionKey: "exemplary" },
-  3: { label: "Proficient", descriptionKey: "proficient" },
-  2: { label: "Satisfactory", descriptionKey: "satisfactory" },
-  1: { label: "Foundational", descriptionKey: "foundational" },
-  0: { label: "Novice", descriptionKey: "novice" },
-};
-
-const getCriteria = (evaluation) => evaluation?.rubricId?.criteria || [];
-const getQuantitativeCriteria = (evaluation) =>
-  getCriteria(evaluation).filter((c) => c.type === "quantitative");
-const getQualitativeCriteria = (evaluation) =>
-  getCriteria(evaluation).filter((c) => c.type === "qualitative");
-const hasQuantitativeCriteria = (evaluation) =>
-  getQuantitativeCriteria(evaluation).length > 0;
-
-const legacyProgressFeedback = (evaluation) => ({
-  prog_1_summary: evaluation?.summaryOfProgress || "",
-  prog_2_improve: evaluation?.commentsForImprovement || "",
-  prog_3_suggest: evaluation?.overallSuggestions || "",
-});
-
-const toNumber = (value, fallback = 0) => {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : fallback;
-};
-
-const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
-
-const formatMark = (value) =>
-  toNumber(value, 0)
-    .toFixed(2)
-    .replace(/\.?0+$/, "");
-
-const hasScoreEntries = (scoreValues = {}) =>
-  Boolean(scoreValues && Object.keys(scoreValues).length > 0);
-
-const getCriterionWeight = (criterion) =>
-  Math.max(toNumber(criterion?.weight, 0), 0);
-
-const getCriterionMaxScore = (criterion) => {
-  const maxScore = Math.floor(toNumber(criterion?.maxScore, DEFAULT_MAX_SCORE));
-  return maxScore > 0 ? maxScore : DEFAULT_MAX_SCORE;
-};
-
-const getScoreScale = (criterion) =>
-  Array.from({ length: getCriterionMaxScore(criterion) + 1 }, (_, index) => {
-    const value = getCriterionMaxScore(criterion) - index;
-    const scoreLabel = SCORE_LABELS[value] || {
-      label: `Score ${value}`,
-      descriptionKey: "",
-    };
-
-    return { value, ...scoreLabel };
-  });
-
-const getScoreDescription = (criterion, score) => {
-  if (score.descriptionKey && criterion?.[score.descriptionKey]) {
-    return criterion[score.descriptionKey];
-  }
-
-  if (score.value === getCriterionMaxScore(criterion) && criterion?.exemplary) {
-    return criterion.exemplary;
-  }
-
-  return "No description provided.";
-};
-
-const getScoreValue = (criterion, scoreValues = {}) =>
-  toNumber(scoreValues?.[criterion?.key], 0);
-
-const calculateCriterionContribution = (criterion, scoreValues = {}) => {
-  const weight = getCriterionWeight(criterion);
-  const maxScore = getCriterionMaxScore(criterion);
-  const score = clamp(getScoreValue(criterion, scoreValues), 0, maxScore);
-
-  return maxScore > 0 ? (score / maxScore) * weight : 0;
-};
-
-const calculateWeightedTotal = (evaluation, scoreValues = {}) =>
-  getQuantitativeCriteria(evaluation).reduce(
-    (total, criterion) =>
-      total + calculateCriterionContribution(criterion, scoreValues),
-    0,
-  );
-
-const getRubricWeightTotal = (evaluation) =>
-  getQuantitativeCriteria(evaluation).reduce(
-    (total, criterion) => total + getCriterionWeight(criterion),
-    0,
-  );
-
-const getEvaluationDisplayedTotal = (evaluation, scoreValues) => {
-  const scoresToUse = scoreValues || evaluation?.scores || {};
-
-  if (hasScoreEntries(scoresToUse)) {
-    return calculateWeightedTotal(evaluation, scoresToUse);
-  }
-
-  return toNumber(evaluation?.totalMarks, 0);
-};
+const getSessionDocuments = (evaluation) =>
+  evaluation?.sessionId?.studentDocuments || [];
 
 export default function EvaluationPage() {
   const { user } = useAuth();
@@ -130,26 +56,14 @@ export default function EvaluationPage() {
   const [evaluations, setEvaluations] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Modal State
   const [selectedEval, setSelectedEval] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form State
   const [scores, setScores] = useState({});
   const [qualFeedback, setQualFeedback] = useState({});
   const [overallComments, setOverallComments] = useState("");
 
-  const [progressData, setProgressData] = useState({
-    summaryOfProgress: "",
-    commentsForImprovement: "",
-    overallSuggestions: "",
-  });
-
-  useEffect(() => {
-    loadEvaluations();
-  }, [urlId]);
-
-  const loadEvaluations = async () => {
+  const loadEvaluations = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -184,9 +98,12 @@ export default function EvaluationPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [urlId]);
 
-  // Send Unlock Request to Admin Dashboard
+  useEffect(() => {
+    loadEvaluations();
+  }, [loadEvaluations]);
+
   const handleUnlockRequest = async () => {
     if (!selectedEval) return;
 
@@ -209,7 +126,7 @@ export default function EvaluationPage() {
 
       if (res.data.success) {
         alert(
-          "✅ Unlock request sent to the Administration. You will be able to edit once approved.",
+          "Unlock request sent to the administration. You will be able to edit once approved.",
         );
       }
     } catch (err) {
@@ -231,7 +148,7 @@ export default function EvaluationPage() {
       const res = await api.post(`/feedback/evaluations/${selectedEval._id}/unlock-self`);
 
       if (res.data.success) {
-        alert("✅ Evaluation unlocked. You can now edit and resubmit it.");
+        alert("Evaluation unlocked. You can now edit and resubmit it.");
         setSelectedEval((prev) => ({ ...prev, isUnlocked: true }));
         loadEvaluations();
       }
@@ -244,15 +161,6 @@ export default function EvaluationPage() {
   };
 
 
-  useEffect(() => {
-    if (urlId && evaluations.length > 0 && !selectedEval) {
-      const targetEval = evaluations.find((ev) => ev._id === urlId);
-      if (targetEval) {
-        openEvaluationModal(targetEval);
-      }
-    }
-  }, [urlId, evaluations]);
-
   const getLiveTotalScore = () => calculateWeightedTotal(selectedEval, scores);
 
   const calculateTotalScore = () => formatMark(getLiveTotalScore());
@@ -261,58 +169,43 @@ export default function EvaluationPage() {
     setScores((prev) => ({ ...prev, [criteriaKey]: value }));
   };
 
+  const handleMaterialOpen = async (document) => {
+    try {
+      await openAuthenticatedFile(document);
+    } catch (error) {
+      alert(
+        error.response?.data?.message ||
+          error.response?.data?.error ||
+          "Failed to open material.",
+      );
+    }
+  };
+
+  const getOriginalFileLabel = (document) => {
+    const fileName = getDocumentFileName(document);
+    return fileName && fileName !== document?.title ? fileName : "";
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setIsSubmitting(true);
 
     try {
-      const quantitativeCriteria = getQuantitativeCriteria(selectedEval);
-      const qualitativeCriteria = getQualitativeCriteria(selectedEval);
-      const isScored = quantitativeCriteria.length > 0;
+      const missingScore = findMissingQuantitativeCriterion(selectedEval, scores);
 
-      if (isScored) {
-        const missingScore = quantitativeCriteria.find(
-          (criterion) =>
-            !Object.prototype.hasOwnProperty.call(scores, criterion.key),
-        );
-
-        if (missingScore) {
-          alert("Please provide a score for ALL criteria before submitting.");
-          setIsSubmitting(false);
-          return;
-        }
+      if (missingScore) {
+        alert("Please provide a score for ALL criteria before submitting.");
+        setIsSubmitting(false);
+        return;
       }
-
-      const payload = {
-        sessionId: selectedEval.sessionId._id || selectedEval.sessionId,
-        sessionType: selectedEval.sessionType,
-      };
-
-      if (isScored) {
-        payload.scores = scores;
-        payload.totalMarks = Number(getLiveTotalScore().toFixed(2));
-      }
-
-      payload.qualitativeFeedback = qualFeedback;
-      payload.overallComments = overallComments;
-      payload.summaryOfProgress =
-        progressData.summaryOfProgress ||
-        qualFeedback.prog_1_summary ||
-        qualFeedback[qualitativeCriteria[0]?.key] ||
-        "";
-      payload.commentsForImprovement =
-        progressData.commentsForImprovement ||
-        qualFeedback.prog_2_improve ||
-        qualFeedback[qualitativeCriteria[1]?.key] ||
-        "";
-      payload.overallSuggestions =
-        progressData.overallSuggestions ||
-        qualFeedback.prog_3_suggest ||
-        qualFeedback[qualitativeCriteria[2]?.key] ||
-        "";
+      const payload = buildEvaluationSubmitPayload(selectedEval, {
+        scores,
+        qualFeedback,
+        overallComments,
+      });
 
       await api.post("/evaluations/submit", payload);
-      alert("✅ Evaluation submitted successfully and is now LOCKED.");
+      alert("Evaluation submitted successfully and is now locked.");
       closeModal();
       loadEvaluations();
     } catch (error) {
@@ -326,7 +219,7 @@ export default function EvaluationPage() {
     }
   };
 
-  const openEvaluationModal = (ev) => {
+  const openEvaluationModal = useCallback((ev) => {
     setSelectedEval(ev);
 
     if (!urlId || urlId !== ev._id) {
@@ -345,12 +238,6 @@ export default function EvaluationPage() {
       setScores(ev.scores || {});
       setQualFeedback(savedQualFeedback);
       setOverallComments(ev.overallComments || "");
-      setProgressData({
-        summaryOfProgress: ev.summaryOfProgress || savedQualFeedback.prog_1_summary || "",
-        commentsForImprovement:
-          ev.commentsForImprovement || savedQualFeedback.prog_2_improve || "",
-        overallSuggestions: ev.overallSuggestions || savedQualFeedback.prog_3_suggest || "",
-      });
     } else {
       const savedDraft = localStorage.getItem(`eval_draft_${ev._id}`);
       if (savedDraft) {
@@ -363,13 +250,17 @@ export default function EvaluationPage() {
         setQualFeedback({});
         setOverallComments("");
       }
-      setProgressData({
-        summaryOfProgress: "",
-        commentsForImprovement: "",
-        overallSuggestions: "",
-      });
     }
-  };
+  }, [location.state, navigate, urlId]);
+
+  useEffect(() => {
+    if (urlId && evaluations.length > 0 && !selectedEval) {
+      const targetEval = evaluations.find((ev) => ev._id === urlId);
+      if (targetEval) {
+        openEvaluationModal(targetEval);
+      }
+    }
+  }, [urlId, evaluations, selectedEval, openEvaluationModal]);
 
   const closeModal = () => {
     setSelectedEval(null);
@@ -385,6 +276,34 @@ export default function EvaluationPage() {
   };
 
   const [searchTerm, setSearchTerm] = useState("");
+  const filteredEvaluations = useMemo(
+    () =>
+      evaluations.filter(
+        (e) =>
+          e.studentId?.name
+            ?.toLowerCase()
+            .includes(searchTerm.toLowerCase()) ||
+          e.studentId?.matricNumber
+            ?.toLowerCase()
+            .includes(searchTerm.toLowerCase()),
+      ),
+    [evaluations, searchTerm],
+  );
+  const evaluationSortAccessors = useMemo(
+    () => ({
+      candidate: (ev) => `${ev.studentId?.name || ""} ${ev.studentId?.matricNumber || ""}`,
+      session: (ev) => `${ev.sessionType || ""} ${getEvaluationRoleLabel(ev)} ${ev.semester || ""}`,
+      evaluator: (ev) => `${ev.evaluatorId?.name || ""} ${getEvaluationRoleLabel(ev)}`,
+      status: (ev) => ev.status || "",
+      score: (ev) => getEvaluationDisplayedTotal(ev),
+    }),
+    [],
+  );
+  const {
+    sortedItems: sortedEvaluations,
+    sortConfig: evaluationSortConfig,
+    requestSort: requestEvaluationSort,
+  } = useSortableData(filteredEvaluations, evaluationSortAccessors, { key: "candidate" });
 
   useEffect(() => {
     if (selectedEval && selectedEval.status === "PENDING") {
@@ -394,7 +313,7 @@ export default function EvaluationPage() {
         JSON.stringify(draft),
       );
     }
-  }, [scores, qualFeedback, overallComments]);
+  }, [selectedEval, scores, qualFeedback, overallComments]);
 
   const getScoreColor = (score) => {
     if (score >= 90) return "text-green-700 bg-green-100 border-green-300";
@@ -404,16 +323,13 @@ export default function EvaluationPage() {
     return "text-red-700 bg-red-100 border-red-300";
   };
 
-  // LOCK LOGIC: If it's completed, NO ONE can edit it.
-  // Determine if the logged-in user is the actual author/evaluator of this document
+  // Only the original evaluator can edit a pending evaluation or a completed
+  // evaluation that has been explicitly unlocked for resubmission.
   const currentUserId = user?.id || user?._id || user?.userId;
   const selectedEvaluatorId =
     selectedEval?.evaluatorId?._id || selectedEval?.evaluatorId;
   const isAuthor = String(selectedEvaluatorId || "") === String(currentUserId || "");
 
-  // LOCK LOGIC:
-  // 1. If it's completed, it's locked for EVERYONE.
-  // 2. If it's pending, ONLY the actual author can edit it. Admins cannot edit someone else's pending form.
   const isCompleted = selectedEval?.status === "COMPLETED";
   const isUnlocked = selectedEval?.isUnlocked === true;
 
@@ -437,7 +353,7 @@ export default function EvaluationPage() {
           <p className="text-gray-600 mt-2">
             {isAdmin
               ? "Monitor system-wide evaluations."
-              : "Complete your assigned panel evaluations here."}
+              : "Complete your assigned panel and supervisor evaluations here."}
           </p>
         </div>
       </div>
@@ -465,46 +381,54 @@ export default function EvaluationPage() {
             <table className="w-full text-left">
               <thead className="bg-gray-50 border-b border-gray-200 text-sm text-gray-600 uppercase tracking-wider">
                 <tr>
-                  <th className="p-4">Candidate</th>
-                  <th className="p-4">Session Info</th>
-                  {isAdmin && <th className="p-4">Evaluator</th>}
-                  <th className="p-4 text-center">Status</th>
-                  <th className="p-4 text-center">Final Score</th>
+                  <SortableTh className="p-4" sortKey="candidate" sortConfig={evaluationSortConfig} onSort={requestEvaluationSort}>Candidate</SortableTh>
+                  <SortableTh className="p-4" sortKey="session" sortConfig={evaluationSortConfig} onSort={requestEvaluationSort}>Session Info</SortableTh>
+                  {isAdmin && <SortableTh className="p-4" sortKey="evaluator" sortConfig={evaluationSortConfig} onSort={requestEvaluationSort}>Evaluator</SortableTh>}
+                  <SortableTh className="p-4 text-center" sortKey="status" sortConfig={evaluationSortConfig} onSort={requestEvaluationSort}>Status</SortableTh>
+                  <SortableTh className="p-4 text-center" sortKey="score" sortConfig={evaluationSortConfig} onSort={requestEvaluationSort}>Final Score</SortableTh>
                   <th className="p-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {evaluations
-                  .filter(
-                    (e) =>
-                      e.studentId?.name
-                        ?.toLowerCase()
-                        .includes(searchTerm.toLowerCase()) ||
-                      e.studentId?.matricNumber
-                        ?.toLowerCase()
-                        .includes(searchTerm.toLowerCase()),
-                  )
-                  .map((ev) => (
+                {sortedEvaluations.map((ev) => (
                     <tr key={ev._id} className="hover:bg-gray-50">
                       <td className="p-4">
                         <p className="font-bold text-gray-900">
-                          {ev.studentId?.name || "Unknown Student"}
+                          <UserProfileLink
+                            user={ev.studentId}
+                            fallback="Unknown Student"
+                            className="font-bold"
+                          />
                         </p>
                         <p className="text-xs font-mono text-gray-500">
                           {ev.studentId?.matricNumber || "No Matric"}
                         </p>
                       </td>
                       <td className="p-4">
-                        <span className="inline-block px-3 py-1 bg-indigo-50 text-indigo-700 rounded text-xs font-bold uppercase border border-indigo-100 mb-1">
-                          {ev.sessionType?.replace("_", " ")}
-                        </span>
+                        <div className="mb-1 flex flex-wrap items-center gap-2">
+                          <span className="inline-block px-3 py-1 bg-indigo-50 text-indigo-700 rounded text-xs font-bold uppercase border border-indigo-100">
+                            {ev.sessionType?.replaceAll("_", " ")}
+                          </span>
+                          <span
+                            className={`inline-block px-3 py-1 rounded text-xs font-bold uppercase border ${getEvaluationRoleBadgeClass(ev)}`}
+                          >
+                            {getEvaluationRoleLabel(ev)}
+                          </span>
+                        </div>
                         <p className="text-xs text-gray-500 font-semibold">
                           {ev.semester}
                         </p>
                       </td>
                       {isAdmin && (
                         <td className="p-4 text-sm font-semibold text-gray-700">
-                          {ev.evaluatorId?.name}
+                          <UserProfileLink
+                            user={ev.evaluatorId}
+                            fallback="Unknown Evaluator"
+                            className="font-semibold"
+                          />
+                          <p className="mt-1 text-[11px] font-bold uppercase text-gray-400">
+                            {getEvaluationRoleLabel(ev)}
+                          </p>
                         </td>
                       )}
                       <td className="p-4 text-center">
@@ -639,7 +563,11 @@ export default function EvaluationPage() {
                       Candidate's Name
                     </p>
                     <p className="font-bold text-gray-900 text-lg">
-                      {selectedEval.studentId?.name || "N/A"}
+                      <UserProfileLink
+                        user={selectedEval.studentId}
+                        fallback="N/A"
+                        className="font-bold text-lg"
+                      />
                     </p>
                   </div>
                   <div className="p-4 border-b border-gray-300 bg-gray-50">
@@ -669,11 +597,20 @@ export default function EvaluationPage() {
                   </div>
                   <div className="p-4 border-t md:border-r border-gray-300">
                     <p className="text-xs font-bold text-gray-500 uppercase mb-1">
-                      Examiner's Name
+                      Evaluator's Name
                     </p>
                     <p className="font-bold text-indigo-700">
-                      {selectedEval.evaluatorId?.name || "N/A"}
+                      <UserProfileLink
+                        user={selectedEval.evaluatorId}
+                        fallback="N/A"
+                        className="font-bold"
+                      />
                     </p>
+                    <span
+                      className={`mt-2 inline-block px-3 py-1 rounded text-xs font-bold uppercase border ${getEvaluationRoleBadgeClass(selectedEval)}`}
+                    >
+                      {getEvaluationRoleLabel(selectedEval)}
+                    </span>
                   </div>
                   <div className="p-4 border-t border-gray-300 bg-gray-50 flex items-center justify-between">
                     <div>
@@ -727,6 +664,54 @@ export default function EvaluationPage() {
                   )}
                 </div>
               )}
+
+              <div className="mb-8 bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden">
+                <div className="bg-gray-100 px-5 py-3 border-b border-gray-200 flex items-center justify-between gap-3">
+                  <span className="font-bold text-gray-800 uppercase text-sm tracking-widest flex items-center gap-2">
+                    <FileText className="w-4 h-4" /> Student Materials
+                  </span>
+                  <span className="text-xs font-bold text-gray-500">
+                    {getSessionDocuments(selectedEval).length} file(s)
+                  </span>
+                </div>
+
+                {getSessionDocuments(selectedEval).length > 0 ? (
+                  <div className="divide-y divide-gray-100">
+                    {getSessionDocuments(selectedEval).map((document) => (
+                      <div
+                        key={document._id || document.fileStorageId || document.url}
+                        className="p-4 flex flex-col md:flex-row md:items-center md:justify-between gap-3"
+                      >
+                        <div>
+                          <p className="font-bold text-gray-900">
+                            {document.title || "Student material"}
+                          </p>
+                          {getOriginalFileLabel(document) && (
+                            <p className="text-xs text-gray-500 mt-1 break-all">
+                              {getOriginalFileLabel(document)}
+                            </p>
+                          )}
+                          <p className="text-xs text-gray-500 mt-1">
+                            {document.type || "other"}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleMaterialOpen(document)}
+                          className="inline-flex items-center justify-center gap-2 px-4 py-2 bg-white border border-indigo-200 text-indigo-700 rounded-lg text-sm font-bold hover:bg-indigo-50"
+                        >
+                          <ExternalLink className="w-4 h-4" />
+                          Open
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="p-4 text-sm text-gray-500">
+                    No student materials are attached to this evaluation yet.
+                  </p>
+                )}
+              </div>
 
               <form id="evalForm" onSubmit={handleSubmit}>
                 {selectedEval && (
@@ -785,7 +770,7 @@ export default function EvaluationPage() {
                                             key={s.value}
                                             className="p-3 border-r last:border-r-0 border-gray-200 text-center font-bold text-gray-500 text-xs uppercase tracking-wider min-w-[150px]"
                                           >
-                                            {s.label} ({s.value})
+                                            {s.label} ({formatMarkLabel(s.value)})
                                           </th>
                                         ))}
                                       </tr>
@@ -802,31 +787,36 @@ export default function EvaluationPage() {
                                             });
 
                                           return (
-                                            <td
-                                              key={s.value}
-                                              className={`p-4 align-top transition-colors relative ${!isAdmin && !isLocked ? "cursor-pointer hover:bg-blue-50" : ""} ${isSelected ? "bg-indigo-50 border-t-4 border-t-indigo-600" : ""}`}
-                                              onClick={() =>
-                                                !isAdmin &&
-                                                !isLocked &&
-                                                handleScoreChange(
-                                                  crit.key,
-                                                  s.value,
-                                                )
-                                              }
-                                            >
+                        <td
+                          key={s.value}
+                          className={`p-4 align-top transition-colors relative ${canEdit ? "cursor-pointer hover:bg-blue-50" : ""} ${isSelected ? "bg-indigo-50 border-t-4 border-t-indigo-600" : ""}`}
+                          onClick={() => {
+                            if (canEdit) {
+                              handleScoreChange(crit.key, s.value);
+                            }
+                          }}
+                        >
                                               <div className="flex flex-col items-center">
+                                                <span
+                                                  className={`mb-2 px-2.5 py-1 rounded-full text-[11px] font-black ${
+                                                    isSelected
+                                                      ? "bg-indigo-600 text-white"
+                                                      : "bg-gray-900 text-white"
+                                                  }`}
+                                                >
+                                                  {formatMarkLabel(s.value)}
+                                                </span>
                                                 <input
                                                   type="radio"
                                                   name={crit.key}
                                                   required
                                                   disabled={!canEdit}
                                                   checked={isSelected}
-                                                  onChange={() =>
-                                                    handleScoreChange(
-                                                      crit.key,
-                                                      s.value,
-                                                    )
-                                                  }
+                              onChange={() => {
+                                if (canEdit) {
+                                  handleScoreChange(crit.key, s.value);
+                                }
+                              }}
                                                   className="w-5 h-5 accent-indigo-600 mb-3 cursor-pointer disabled:opacity-60"
                                                 />
                                                 <span
@@ -955,7 +945,6 @@ export default function EvaluationPage() {
                 {!isAdmin && !isLocked ? "Cancel" : "Close Document"}
               </button>
 
-              {/* ONLY show submit button if NOT locked */}
               {canEdit && (
                 <button
                   type="submit"

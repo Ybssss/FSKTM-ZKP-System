@@ -59,9 +59,7 @@ const parseAttendanceInput = (body = {}) => {
 
   return { timetableId, submittedToken };
 };
-// @desc    Generate QR code for timetable session
-// @route   POST /api/qr/generate/:timetableId
-// @access  Private (Panel, Admin)
+
 exports.generateQRCode = async (req, res) => {
   if (!["admin", "panel"].includes(req.user.role)) {
     return res.status(403).json({
@@ -72,9 +70,6 @@ exports.generateQRCode = async (req, res) => {
   try {
     const { timetableId } = req.params;
 
-    console.log("🎫 Generating QR code for timetable:", timetableId);
-
-    // Check if timetable exists
     const timetable = await Timetable.findById(timetableId)
       .populate("students", "name matricNumber email")
       .populate("panels", "name email userId");
@@ -99,11 +94,9 @@ exports.generateQRCode = async (req, res) => {
       });
     }
 
-    // Generate unique token for this session
     const token = crypto.randomInt(100000, 1000000).toString();
     const expiresAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
 
-    // Create QR code data (JSON format)
     const qrData = JSON.stringify({
       type: "FSKTM_ATTENDANCE",
       timetableId: String(timetable._id),
@@ -111,9 +104,6 @@ exports.generateQRCode = async (req, res) => {
       expiresAt: expiresAt.toISOString(),
     });
 
-    console.log("📊 QR Data:", qrData);
-
-    // Generate QR code as Data URL (base64 image)
     const qrCodeDataURL = await QRCode.toDataURL(qrData, {
       errorCorrectionLevel: "H",
       type: "image/png",
@@ -126,13 +116,11 @@ exports.generateQRCode = async (req, res) => {
       },
     });
 
-    // Save QR code token to timetable
+    // Persist the token on the timetable so later verification can compare the scanned payload.
     timetable.qrCode = token;
     timetable.qrExpiresAt = expiresAt;
     timetable.qrGeneratedAt = new Date();
     await timetable.save();
-
-    console.log("✅ QR code generated successfully");
 
     res.json({
       success: true,
@@ -148,7 +136,7 @@ exports.generateQRCode = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("❌ Generate QR code error:", error);
+    console.error("Generate QR code error:", error);
     res.status(500).json({
       success: false,
       message: "Error generating QR code",
@@ -157,9 +145,6 @@ exports.generateQRCode = async (req, res) => {
   }
 };
 
-// @desc    Verify QR code and mark attendance
-// @route   POST /api/qr/verify
-// @access  Public (for students scanning QR)
 exports.verifyQRCode = async (req, res) => {
   try {
     if (req.user.role !== "student") {
@@ -255,7 +240,7 @@ exports.verifyQRCode = async (req, res) => {
       attendance: populated,
     });
   } catch (error) {
-    console.error("❌ Verify QR code error:", error);
+    console.error("Verify QR code error:", error);
 
     if (error.code === 11000) {
       return res.json({
@@ -272,14 +257,9 @@ exports.verifyQRCode = async (req, res) => {
   }
 };
 
-// @desc    Get QR code for timetable
-// @route   GET /api/qr/:timetableId
-// @access  Private
 exports.getQRCode = async (req, res) => {
   try {
     const { timetableId } = req.params;
-
-    console.log("🔍 Getting QR code for timetable:", timetableId);
 
     const timetable = await Timetable.findById(timetableId);
 
@@ -297,7 +277,7 @@ exports.getQRCode = async (req, res) => {
       });
     }
 
-    // Regenerate QR code from saved token
+    // Rebuild the same payload so the client can display the current QR code again.
     const qrData = JSON.stringify({
       type: "FSKTM_ATTENDANCE",
       timetableId: String(timetable._id),
@@ -320,7 +300,7 @@ exports.getQRCode = async (req, res) => {
       expiresAt: timetable.qrExpiresAt,
     });
   } catch (error) {
-    console.error("❌ Get QR code error:", error);
+    console.error("Get QR code error:", error);
     res.status(500).json({
       success: false,
       message: "Error retrieving QR code",

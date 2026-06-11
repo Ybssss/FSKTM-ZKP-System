@@ -82,7 +82,7 @@ const timetableSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
-    // NEW: Student Documents for Pre-Review
+    // Student materials attached to the timetable session.
     studentDocuments: [
       {
         title: {
@@ -139,7 +139,7 @@ const timetableSchema = new mongoose.Schema(
       default: "Postgraduate Progress Presentation Schedule",
     },
 
-    // NEW: Panel Pre-Review Notes
+    // Panel notes saved before the live evaluation.
     panelNotes: [
       {
         panelId: {

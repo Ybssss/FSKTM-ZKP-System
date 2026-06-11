@@ -1,0 +1,413 @@
+Failed to log activity: Error: ActivityLog validation failed: userId: Cast to ObjectId failed for value "admin_samihah" (type string) at path "userId" because of "BSONError"
+    at ValidationError.inspect (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\error\validation.js:52:26)
+    at formatValue (node:internal/util/inspect:1148:19)
+    at inspect (node:internal/util/inspect:409:10)
+    at formatWithOptionsInternal (node:internal/util/inspect:2897:40)
+    at formatWithOptions (node:internal/util/inspect:2759:10)
+    at console.value (node:internal/console/constructor:377:14)
+    at console.error (node:internal/console/constructor:444:61)
+    at exports.logActivity (D:\STUDY\fyp project\fsktm-zkp-system\backend\src\utils\logger.js:24:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async exports.createUser (D:\STUDY\fyp project\fsktm-zkp-system\backend\src\controllers\userController.js:197:7) {
+  errors: {
+    userId: CastError: Cast to ObjectId failed for value "admin_samihah" (type string) at path "userId" because of "BSONError"
+        at SchemaObjectId.cast (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+        at SchemaType.applySetters (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1446:22)
+        at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1140:16)
+        at model.Document (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:178:12)
+        at model.Model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:127:12)
+        at new model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:4858:15)
+        at D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2784:20
+        at Array.map (<anonymous>)
+        at model.create (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2772:34) {
+      stringValue: '"admin_samihah"',
+      messageFormat: undefined,
+      kind: 'ObjectId',
+      value: 'admin_samihah',
+      path: 'userId',
+      reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+          at new ObjectId (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\bson\lib\bson.cjs:2538:23)
+          at castObjectId (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+          at SchemaObjectId.cast (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+          at SchemaType.applySetters (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+          at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1446:22)
+          at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1140:16)
+          at model.Document (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:178:12)
+          at model.Model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:127:12)
+          at new model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:4858:15)
+          at D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2784:20,
+      valueType: 'string'
+    }
+  },
+  _message: 'ActivityLog validation failed'
+}
+Failed to log activity: Error: ActivityLog validation failed: userId: Cast to ObjectId failed for value "admin_samihah" (type string) at path "userId" because of "BSONError"
+    at ValidationError.inspect (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\error\validation.js:52:26)
+    at formatValue (node:internal/util/inspect:1148:19)
+    at inspect (node:internal/util/inspect:409:10)
+    at formatWithOptionsInternal (node:internal/util/inspect:2897:40)
+    at formatWithOptions (node:internal/util/inspect:2759:10)
+    at console.value (node:internal/console/constructor:377:14)
+    at console.error (node:internal/console/constructor:444:61)
+    at exports.logActivity (D:\STUDY\fyp project\fsktm-zkp-system\backend\src\utils\logger.js:24:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async exports.createUser (D:\STUDY\fyp project\fsktm-zkp-system\backend\src\controllers\userController.js:197:7) {
+  errors: {
+    userId: CastError: Cast to ObjectId failed for value "admin_samihah" (type string) at path "userId" because of "BSONError"
+        at SchemaObjectId.cast (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+        at SchemaType.applySetters (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1446:22)
+        at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1140:16)
+        at model.Document (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:178:12)
+        at model.Model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:127:12)
+        at new model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:4858:15)
+        at D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2784:20
+        at Array.map (<anonymous>)
+        at model.create (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2772:34) {
+      stringValue: '"admin_samihah"',
+      messageFormat: undefined,
+      kind: 'ObjectId',
+      value: 'admin_samihah',
+      path: 'userId',
+      reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+          at new ObjectId (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\bson\lib\bson.cjs:2538:23)
+          at castObjectId (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+          at SchemaObjectId.cast (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+          at SchemaType.applySetters (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+          at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1446:22)
+          at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1140:16)
+          at model.Document (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:178:12)
+          at model.Model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:127:12)
+          at new model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:4858:15)
+          at D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2784:20,
+      valueType: 'string'
+    }
+  },
+  _message: 'ActivityLog validation failed'
+}
+Failed to log activity: Error: ActivityLog validation failed: userId: Cast to ObjectId failed for value "admin_samihah" (type string) at path "userId" because of "BSONError"
+    at ValidationError.inspect (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\error\validation.js:52:26)
+    at formatValue (node:internal/util/inspect:1148:19)
+    at inspect (node:internal/util/inspect:409:10)
+    at formatWithOptionsInternal (node:internal/util/inspect:2897:40)
+    at formatWithOptions (node:internal/util/inspect:2759:10)
+    at console.value (node:internal/console/constructor:377:14)
+    at console.error (node:internal/console/constructor:444:61)
+    at exports.logActivity (D:\STUDY\fyp project\fsktm-zkp-system\backend\src\utils\logger.js:24:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async exports.createUser (D:\STUDY\fyp project\fsktm-zkp-system\backend\src\controllers\userController.js:197:7) {
+  errors: {
+    userId: CastError: Cast to ObjectId failed for value "admin_samihah" (type string) at path "userId" because of "BSONError"
+        at SchemaObjectId.cast (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+        at SchemaType.applySetters (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1446:22)
+        at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1140:16)
+        at model.Document (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:178:12)
+        at model.Model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:127:12)
+        at new model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:4858:15)
+        at D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2784:20
+        at Array.map (<anonymous>)
+        at model.create (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2772:34) {
+      stringValue: '"admin_samihah"',
+      messageFormat: undefined,
+      kind: 'ObjectId',
+      value: 'admin_samihah',
+      path: 'userId',
+      reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+          at new ObjectId (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\bson\lib\bson.cjs:2538:23)
+          at castObjectId (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+          at SchemaObjectId.cast (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+          at SchemaType.applySetters (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+          at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1446:22)
+          at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1140:16)
+          at model.Document (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:178:12)
+          at model.Model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:127:12)
+          at new model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:4858:15)
+          at D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2784:20,
+      valueType: 'string'
+    }
+  },
+  _message: 'ActivityLog validation failed'
+}
+Failed to log activity: Error: ActivityLog validation failed: userId: Cast to ObjectId failed for value "admin_samihah" (type string) at path "userId" because of "BSONError"
+    at ValidationError.inspect (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\error\validation.js:52:26)
+    at formatValue (node:internal/util/inspect:1148:19)
+    at inspect (node:internal/util/inspect:409:10)
+    at formatWithOptionsInternal (node:internal/util/inspect:2897:40)
+    at formatWithOptions (node:internal/util/inspect:2759:10)
+    at console.value (node:internal/console/constructor:377:14)
+    at console.error (node:internal/console/constructor:444:61)
+    at exports.logActivity (D:\STUDY\fyp project\fsktm-zkp-system\backend\src\utils\logger.js:24:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async exports.createUser (D:\STUDY\fyp project\fsktm-zkp-system\backend\src\controllers\userController.js:197:7) {
+  errors: {
+    userId: CastError: Cast to ObjectId failed for value "admin_samihah" (type string) at path "userId" because of "BSONError"
+        at SchemaObjectId.cast (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+        at SchemaType.applySetters (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1446:22)
+        at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1140:16)
+        at model.Document (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:178:12)
+        at model.Model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:127:12)
+        at new model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:4858:15)
+        at D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2784:20
+        at Array.map (<anonymous>)
+        at model.create (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2772:34) {
+      stringValue: '"admin_samihah"',
+      messageFormat: undefined,
+      kind: 'ObjectId',
+      value: 'admin_samihah',
+      path: 'userId',
+      reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+          at new ObjectId (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\bson\lib\bson.cjs:2538:23)
+          at castObjectId (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+          at SchemaObjectId.cast (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+          at SchemaType.applySetters (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+          at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1446:22)
+          at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1140:16)
+          at model.Document (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:178:12)
+          at model.Model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:127:12)
+          at new model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:4858:15)
+          at D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2784:20,
+      valueType: 'string'
+    }
+  },
+  _message: 'ActivityLog validation failed'
+}
+❌ Server Error: SyntaxError: Expected property name or '}' in JSON at position 1 (line 1 column 2)
+    at JSON.parse (<anonymous>)
+    at parse (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\body-parser\lib\types\json.js:92:19)
+    at D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\body-parser\lib\read.js:128:18
+    at AsyncResource.runInAsyncScope (node:async_hooks:213:14)
+    at invokeCallback (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\raw-body\index.js:238:16)
+    at done (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\raw-body\index.js:227:7)
+    at IncomingMessage.onEnd (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\raw-body\index.js:287:7)
+    at IncomingMessage.emit (node:events:508:28)
+    at endReadableNT (node:internal/streams/readable:1701:12)
+    at process.processTicksAndRejections (node:internal/process/task_queues:89:21) {
+  expose: true,
+  statusCode: 400,
+  status: 400,
+  body: '{\\',
+  type: 'entity.parse.failed'
+}
+Failed to log activity: Error: ActivityLog validation failed: userId: Cast to ObjectId failed for value "admin_samihah" (type string) at path "userId" because of "BSONError"
+    at ValidationError.inspect (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\error\validation.js:52:26)
+    at formatValue (node:internal/util/inspect:1148:19)
+    at inspect (node:internal/util/inspect:409:10)
+    at formatWithOptionsInternal (node:internal/util/inspect:2897:40)
+    at formatWithOptions (node:internal/util/inspect:2759:10)
+    at console.value (node:internal/console/constructor:377:14)
+    at console.error (node:internal/console/constructor:444:61)
+    at exports.logActivity (D:\STUDY\fyp project\fsktm-zkp-system\backend\src\utils\logger.js:24:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async exports.createUser (D:\STUDY\fyp project\fsktm-zkp-system\backend\src\controllers\userController.js:197:7) {
+  errors: {
+    userId: CastError: Cast to ObjectId failed for value "admin_samihah" (type string) at path "userId" because of "BSONError"
+        at SchemaObjectId.cast (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+        at SchemaType.applySetters (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1446:22)
+        at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1140:16)
+        at model.Document (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:178:12)
+        at model.Model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:127:12)
+        at new model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:4858:15)
+        at D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2784:20
+        at Array.map (<anonymous>)
+        at model.create (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2772:34) {
+      stringValue: '"admin_samihah"',
+      messageFormat: undefined,
+      kind: 'ObjectId',
+      value: 'admin_samihah',
+      path: 'userId',
+      reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+          at new ObjectId (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\bson\lib\bson.cjs:2538:23)
+          at castObjectId (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+          at SchemaObjectId.cast (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+          at SchemaType.applySetters (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+          at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1446:22)
+          at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1140:16)
+          at model.Document (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:178:12)
+          at model.Model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:127:12)
+          at new model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:4858:15)
+          at D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2784:20,
+      valueType: 'string'
+    }
+  },
+  _message: 'ActivityLog validation failed'
+}
+Failed to log activity: Error: ActivityLog validation failed: userId: Cast to ObjectId failed for value "admin_samihah" (type string) at path "userId" because of "BSONError"
+    at ValidationError.inspect (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\error\validation.js:52:26)
+    at formatValue (node:internal/util/inspect:1148:19)
+    at inspect (node:internal/util/inspect:409:10)
+    at formatWithOptionsInternal (node:internal/util/inspect:2897:40)
+    at formatWithOptions (node:internal/util/inspect:2759:10)
+    at console.value (node:internal/console/constructor:377:14)
+    at console.error (node:internal/console/constructor:444:61)
+    at exports.logActivity (D:\STUDY\fyp project\fsktm-zkp-system\backend\src\utils\logger.js:24:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async exports.createUser (D:\STUDY\fyp project\fsktm-zkp-system\backend\src\controllers\userController.js:197:7) {
+  errors: {
+    userId: CastError: Cast to ObjectId failed for value "admin_samihah" (type string) at path "userId" because of "BSONError"
+        at SchemaObjectId.cast (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+        at SchemaType.applySetters (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1446:22)
+        at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1140:16)
+        at model.Document (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:178:12)
+        at model.Model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:127:12)
+        at new model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:4858:15)
+        at D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2784:20
+        at Array.map (<anonymous>)
+        at model.create (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2772:34) {
+      stringValue: '"admin_samihah"',
+      messageFormat: undefined,
+      kind: 'ObjectId',
+      value: 'admin_samihah',
+      path: 'userId',
+      reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+          at new ObjectId (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\bson\lib\bson.cjs:2538:23)
+          at castObjectId (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+          at SchemaObjectId.cast (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+          at SchemaType.applySetters (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+          at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1446:22)
+          at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1140:16)
+          at model.Document (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:178:12)
+          at model.Model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:127:12)
+          at new model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:4858:15)
+          at D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2784:20,
+      valueType: 'string'
+    }
+  },
+  _message: 'ActivityLog validation failed'
+}
+Failed to log activity: Error: ActivityLog validation failed: userId: Cast to ObjectId failed for value "admin_samihah" (type string) at path "userId" because of "BSONError"
+    at ValidationError.inspect (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\error\validation.js:52:26)
+    at formatValue (node:internal/util/inspect:1148:19)
+    at inspect (node:internal/util/inspect:409:10)
+    at formatWithOptionsInternal (node:internal/util/inspect:2897:40)
+    at formatWithOptions (node:internal/util/inspect:2759:10)
+    at console.value (node:internal/console/constructor:377:14)
+    at console.error (node:internal/console/constructor:444:61)
+    at exports.logActivity (D:\STUDY\fyp project\fsktm-zkp-system\backend\src\utils\logger.js:24:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async exports.createUser (D:\STUDY\fyp project\fsktm-zkp-system\backend\src\controllers\userController.js:197:7) {
+  errors: {
+    userId: CastError: Cast to ObjectId failed for value "admin_samihah" (type string) at path "userId" because of "BSONError"
+        at SchemaObjectId.cast (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+        at SchemaType.applySetters (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1446:22)
+        at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1140:16)
+        at model.Document (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:178:12)
+        at model.Model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:127:12)
+        at new model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:4858:15)
+        at D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2784:20
+        at Array.map (<anonymous>)
+        at model.create (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2772:34) {
+      stringValue: '"admin_samihah"',
+      messageFormat: undefined,
+      kind: 'ObjectId',
+      value: 'admin_samihah',
+      path: 'userId',
+      reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+          at new ObjectId (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\bson\lib\bson.cjs:2538:23)
+          at castObjectId (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+          at SchemaObjectId.cast (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+          at SchemaType.applySetters (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+          at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1446:22)
+          at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1140:16)
+          at model.Document (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:178:12)
+          at model.Model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:127:12)
+          at new model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:4858:15)
+          at D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2784:20,
+      valueType: 'string'
+    }
+  },
+  _message: 'ActivityLog validation failed'
+}
+Failed to log activity: Error: ActivityLog validation failed: userId: Cast to ObjectId failed for value "admin_samihah" (type string) at path "userId" because of "BSONError"
+    at ValidationError.inspect (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\error\validation.js:52:26)
+    at formatValue (node:internal/util/inspect:1148:19)
+    at inspect (node:internal/util/inspect:409:10)
+    at formatWithOptionsInternal (node:internal/util/inspect:2897:40)
+    at formatWithOptions (node:internal/util/inspect:2759:10)
+    at console.value (node:internal/console/constructor:377:14)
+    at console.error (node:internal/console/constructor:444:61)
+    at exports.logActivity (D:\STUDY\fyp project\fsktm-zkp-system\backend\src\utils\logger.js:24:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async exports.createUser (D:\STUDY\fyp project\fsktm-zkp-system\backend\src\controllers\userController.js:197:7) {
+  errors: {
+    userId: CastError: Cast to ObjectId failed for value "admin_samihah" (type string) at path "userId" because of "BSONError"
+        at SchemaObjectId.cast (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+        at SchemaType.applySetters (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1446:22)
+        at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1140:16)
+        at model.Document (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:178:12)
+        at model.Model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:127:12)
+        at new model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:4858:15)
+        at D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2784:20
+        at Array.map (<anonymous>)
+        at model.create (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2772:34) {
+      stringValue: '"admin_samihah"',
+      messageFormat: undefined,
+      kind: 'ObjectId',
+      value: 'admin_samihah',
+      path: 'userId',
+      reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+          at new ObjectId (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\bson\lib\bson.cjs:2538:23)
+          at castObjectId (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+          at SchemaObjectId.cast (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+          at SchemaType.applySetters (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+          at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1446:22)
+          at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1140:16)
+          at model.Document (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:178:12)
+          at model.Model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:127:12)
+          at new model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:4858:15)
+          at D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2784:20,
+      valueType: 'string'
+    }
+  },
+  _message: 'ActivityLog validation failed'
+}
+Failed to log activity: Error: ActivityLog validation failed: userId: Cast to ObjectId failed for value "admin_samihah" (type string) at path "userId" because of "BSONError"
+    at ValidationError.inspect (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\error\validation.js:52:26)
+    at formatValue (node:internal/util/inspect:1148:19)
+    at inspect (node:internal/util/inspect:409:10)
+    at formatWithOptionsInternal (node:internal/util/inspect:2897:40)
+    at formatWithOptions (node:internal/util/inspect:2759:10)
+    at console.value (node:internal/console/constructor:377:14)
+    at console.error (node:internal/console/constructor:444:61)
+    at exports.logActivity (D:\STUDY\fyp project\fsktm-zkp-system\backend\src\utils\logger.js:24:13)
+    at process.processTicksAndRejections (node:internal/process/task_queues:103:5)
+    at async exports.createUser (D:\STUDY\fyp project\fsktm-zkp-system\backend\src\controllers\userController.js:197:7) {
+  errors: {
+    userId: CastError: Cast to ObjectId failed for value "admin_samihah" (type string) at path "userId" because of "BSONError"
+        at SchemaObjectId.cast (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schema\objectId.js:253:11)
+        at SchemaType.applySetters (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+        at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1446:22)
+        at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1140:16)
+        at model.Document (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:178:12)
+        at model.Model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:127:12)
+        at new model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:4858:15)
+        at D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2784:20
+        at Array.map (<anonymous>)
+        at model.create (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2772:34) {
+      stringValue: '"admin_samihah"',
+      messageFormat: undefined,
+      kind: 'ObjectId',
+      value: 'admin_samihah',
+      path: 'userId',
+      reason: BSONError: input must be a 24 character hex string, 12 byte Uint8Array, or an integer
+          at new ObjectId (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\bson\lib\bson.cjs:2538:23)
+          at castObjectId (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\cast\objectid.js:25:12)
+          at SchemaObjectId.cast (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schema\objectId.js:251:12)
+          at SchemaType.applySetters (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\schemaType.js:1288:12)
+          at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1446:22)
+          at model.$set (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:1140:16)
+          at model.Document (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\document.js:178:12)
+          at model.Model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:127:12)
+          at new model (D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:4858:15)
+          at D:\STUDY\fyp project\fsktm-zkp-system\backend\node_modules\mongoose\lib\model.js:2784:20,
+      valueType: 'string'
+    }
+  },
+  _message: 'ActivityLog validation failed'
+}

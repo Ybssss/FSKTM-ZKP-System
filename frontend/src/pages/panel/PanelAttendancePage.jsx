@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { attendanceAPI, timetableAPI, userAPI } from '../../services/api';
 import { CalendarCheck, Users, Clock, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import UserProfileLink from '../../components/UserProfileLink';
+import SortableTh from '../../components/SortableTh';
+import useSortableData from '../../hooks/useSortableData';
 
 export default function PanelAttendancePage() {
   const [attendances, setAttendances] = useState([]);
@@ -8,22 +11,8 @@ export default function PanelAttendancePage() {
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedSession, setSelectedSession] = useState('all');
-  const [stats, setStats] = useState({
-    total: 0,
-    present: 0,
-    absent: 0,
-    late: 0
-  });
 
-  useEffect(() => {
-    fetchData();
-  }, []);
-
-  useEffect(() => {
-    calculateStats();
-  }, [attendances, selectedSession]);
-
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       setLoading(true);
       const [attendanceRes, sessionsRes, usersRes] = await Promise.all([
@@ -40,30 +29,23 @@ export default function PanelAttendancePage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const calculateStats = () => {
-    const filtered = selectedSession === 'all' 
-      ? attendances 
-      : attendances.filter(a => a.timetableId === selectedSession);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
-    setStats({
-      total: filtered.length,
-      present: filtered.filter(a => a.status === 'present').length,
-      absent: filtered.filter(a => a.status === 'absent').length,
-      late: filtered.filter(a => a.status === 'late').length
-    });
-  };
-
-  const getSessionName = (timetableId) => {
+  const getSessionName = useCallback((timetableId) => {
     const session = sessions.find(s => s._id === timetableId);
     return session?.title || 'Unknown Session';
-  };
+  }, [sessions]);
 
-  const getStudentName = (studentId) => {
+  const getStudentName = useCallback((studentId) => {
     const student = students.find(s => s._id === studentId);
     return student?.name || 'Unknown Student';
-  };
+  }, [students]);
+
+  const getStudent = (studentId) => students.find(s => s._id === studentId) || null;
 
   const getStatusBadge = (status) => {
     const styles = {
@@ -89,6 +71,27 @@ export default function PanelAttendancePage() {
   const filteredAttendances = selectedSession === 'all'
     ? attendances
     : attendances.filter(a => a.timetableId === selectedSession);
+  const stats = useMemo(() => ({
+    total: filteredAttendances.length,
+    present: filteredAttendances.filter(a => a.status === 'present').length,
+    absent: filteredAttendances.filter(a => a.status === 'absent').length,
+    late: filteredAttendances.filter(a => a.status === 'late').length
+  }), [filteredAttendances]);
+  const attendanceSortAccessors = useMemo(
+    () => ({
+      student: (attendance) => getStudentName(attendance.studentId),
+      session: (attendance) => getSessionName(attendance.timetableId),
+      status: (attendance) => attendance.status || '',
+      checkIn: (attendance) => attendance.checkInTime || '',
+      method: (attendance) => attendance.method || '',
+    }),
+    [getSessionName, getStudentName],
+  );
+  const {
+    sortedItems: sortedAttendances,
+    sortConfig: attendanceSortConfig,
+    requestSort: requestAttendanceSort,
+  } = useSortableData(filteredAttendances, attendanceSortAccessors, { key: 'student' });
 
   if (loading) {
     return (
@@ -100,7 +103,6 @@ export default function PanelAttendancePage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
           <CalendarCheck className="w-8 h-8" />
@@ -109,7 +111,6 @@ export default function PanelAttendancePage() {
         <p className="text-gray-600 mt-1">View and manage student attendance</p>
       </div>
 
-      {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <div className="bg-white rounded-lg shadow p-6">
           <div className="flex items-center justify-between">
@@ -177,21 +178,11 @@ export default function PanelAttendancePage() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-gray-50">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Student
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Session
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Status
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Check-in Time
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">
-                  Method
-                </th>
+                <SortableTh className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase" sortKey="student" sortConfig={attendanceSortConfig} onSort={requestAttendanceSort}>Student</SortableTh>
+                <SortableTh className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase" sortKey="session" sortConfig={attendanceSortConfig} onSort={requestAttendanceSort}>Session</SortableTh>
+                <SortableTh className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase" sortKey="status" sortConfig={attendanceSortConfig} onSort={requestAttendanceSort}>Status</SortableTh>
+                <SortableTh className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase" sortKey="checkIn" sortConfig={attendanceSortConfig} onSort={requestAttendanceSort}>Check-in Time</SortableTh>
+                <SortableTh className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase" sortKey="method" sortConfig={attendanceSortConfig} onSort={requestAttendanceSort}>Method</SortableTh>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
@@ -202,11 +193,15 @@ export default function PanelAttendancePage() {
                   </td>
                 </tr>
               ) : (
-                filteredAttendances.map((attendance) => (
+                sortedAttendances.map((attendance) => (
                   <tr key={attendance._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900">
-                        {getStudentName(attendance.studentId)}
+                        <UserProfileLink
+                          user={getStudent(attendance.studentId)}
+                          fallback={getStudentName(attendance.studentId)}
+                          className="font-medium"
+                        />
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -242,7 +237,7 @@ export default function PanelAttendancePage() {
       {filteredAttendances.length === 0 && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
           <p className="text-sm text-blue-800">
-            💡 <strong>Tip:</strong> Attendance records will appear here once students check in to sessions.
+            <strong>Tip:</strong> Attendance records will appear here once students check in to sessions.
             Students can mark attendance using QR codes or manual check-in.
           </p>
         </div>

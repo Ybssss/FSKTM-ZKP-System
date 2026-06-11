@@ -16,9 +16,8 @@ const sessionSchema = new mongoose.Schema(
 
     semester: { type: String, required: true },
 
-    // 🔴 ADDED DATE, TIME, AND VENUE FOR THE DASHBOARD
     date: { type: Date, required: true },
-    time: { type: String, required: true }, // e.g., "10:00 AM"
+    time: { type: String, required: true },
     venue: { type: String, default: "Online / Webex" },
 
     panel1Id: {

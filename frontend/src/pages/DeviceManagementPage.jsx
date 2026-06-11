@@ -62,8 +62,8 @@ export default function DeviceManagementPage() {
       const response = await authAPI.getMyDevices();
       setDevices(response.devices || []);
     } catch (error) {
-      console.error("❌ Fetch devices error:", error);
-      setError("Failed to load devices");
+      console.error("Fetch devices error:", error);
+      setError("Failed to load devices.");
     } finally {
       setLoading(false);
     }
@@ -79,18 +79,18 @@ export default function DeviceManagementPage() {
 
     try {
       await authAPI.removeDevice(deviceId);
-      alert(`✅ ${deviceName} removed successfully`);
+      alert(`${deviceName} removed successfully.`);
       fetchDevices();
     } catch (error) {
-      console.error("❌ Remove device error:", error);
-      alert("Failed to remove device");
+      console.error("Remove device error:", error);
+      alert("Failed to remove device.");
     }
   };
 
   const handleLogoutAllDevices = async () => {
     if (
       !window.confirm(
-        "⚠️ Logout from ALL devices? You will be logged out immediately.",
+        "Log out from all devices? You will be logged out immediately.",
       )
     )
       return;
@@ -98,11 +98,11 @@ export default function DeviceManagementPage() {
     try {
       // Assuming you have this endpoint, otherwise just remove all other devices and force logout locally
       await authAPI.logoutAllDevices();
-      alert("✅ Logged out from all devices");
+      alert("Logged out from all devices.");
       window.location.href = "/login";
     } catch (error) {
-      console.error("❌ Logout all error:", error);
-      alert("Failed to logout from all devices");
+      console.error("Logout all error:", error);
+      alert("Failed to log out from all devices.");
     }
   };
 
@@ -184,7 +184,6 @@ export default function DeviceManagementPage() {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">
@@ -267,14 +266,12 @@ export default function DeviceManagementPage() {
             >
               <div className="flex items-start justify-between">
                 <div className="flex items-start gap-4 flex-1">
-                  {/* Device Icon */}
                   <div
                     className={`p-3 rounded-lg ${device.isCurrent ? "bg-indigo-100 text-indigo-600" : "bg-gray-100 text-gray-600"}`}
                   >
                     {getDeviceIcon(device.deviceName)}
                   </div>
 
-                  {/* Device Info */}
                   <div className="flex-1">
                     <div className="flex flex-wrap items-center gap-2 mb-2">
                       <h3 className="font-semibold text-gray-900">
@@ -294,7 +291,6 @@ export default function DeviceManagementPage() {
 
                     <div className="space-y-1 text-sm text-gray-600">
                       <div className="flex items-center gap-2">
-                        {/* FIX: Checking device.trusted instead of device.trustStatus */}
                         {device.trusted ? (
                           <CheckCircle className="w-4 h-4 text-green-600" />
                         ) : (
@@ -315,7 +311,6 @@ export default function DeviceManagementPage() {
                   </div>
                 </div>
 
-                {/* Actions */}
                 <div>
                   {!device.isCurrent ? (
                     <button

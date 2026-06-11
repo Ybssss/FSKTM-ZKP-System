@@ -5,7 +5,7 @@ const path = require("path");
 const crypto = require("crypto");
 const { ec: EC } = require("elliptic");
 const jwt = require("jsonwebtoken");
-const User = require("../models/User"); // Ensure this path is correct
+const User = require("../models/User");
 const zkpService = require("../services/zkpService");
 
 const EC_INSTANCE = new EC("secp256k1");
@@ -55,7 +55,6 @@ const verifySchnorrProof = (proof, challenge, publicKeyHex) => {
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-fallback-secret-key";
 
-// 1. ZKP REGISTRATION CONTROLLER
 exports.registerZKP = async (req, res) => {
   try {
     const { userId, publicKey, registrationCode } = req.body;
@@ -97,8 +96,8 @@ exports.registerZKP = async (req, res) => {
       message: "ZKP registration completed successfully.",
     });
   } catch (error) {
-    console.error("🔴 ZKP Registration Error:", error.message);
-    console.error("🔴 Error Stack:", error.stack);
+    console.error("ZKP registration error:", error.message);
+    console.error(error.stack);
     res.status(500).json({
       success: false,
       message: error.message || "An internal server error occurred.",
@@ -278,7 +277,7 @@ exports.verifyDeviceProof = async (req, res) => {
         role: user.role,
         deviceId: finalDeviceId,
       },
-      process.env.JWT_SECRET,
+      JWT_SECRET,
       { expiresIn: "36500d" }, // 👈 100 Years = Never expires until manual logout
     );
 
@@ -357,6 +356,13 @@ exports.getTempPublicKey = async (req, res) => {
         .json({ success: false, message: "Pairing session not found." });
     }
 
+    if (String(user._id) !== String(req.user.id)) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only access your own pairing session.",
+      });
+    }
+
     if (!user.zkpPairingExpiresAt || new Date() > user.zkpPairingExpiresAt) {
       return res
         .status(400)
@@ -366,7 +372,7 @@ exports.getTempPublicKey = async (req, res) => {
     res.json({
       success: true,
       tempPublicKeyBase64: user.zkpPairingTempPublicKey,
-      expiresAt: user.zkpChallengeExpiry,
+      expiresAt: user.zkpPairingExpiresAt,
     });
   } catch (error) {
     console.error("Get Temp Public Key Error:", error);
@@ -391,6 +397,19 @@ exports.submitEncryptedKey = async (req, res) => {
       return res
         .status(404)
         .json({ success: false, message: "Pairing session not found." });
+    }
+
+    if (String(user._id) !== String(req.user.id)) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only complete your own pairing session.",
+      });
+    }
+
+    if (!user.zkpPairingExpiresAt || new Date() > user.zkpPairingExpiresAt) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Pairing session expired." });
     }
 
     user.zkpPairingPayload = encryptedPayload;
@@ -442,7 +461,7 @@ exports.pollEncryptedKey = async (req, res) => {
     user.zkpPairingCode = null;
     user.zkpPairingTempPublicKey = null;
     user.zkpPairingPayload = null;
-    user.zkpChallengeExpiry = null;
+    user.zkpPairingExpiresAt = null;
     await user.save();
 
     return res.json({

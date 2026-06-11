@@ -10,7 +10,6 @@ const PasswordlessLogin = () => {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
 
-  // NEW: Added state for trusting the device (defaults to true)
   const [trustDevice, setTrustDevice] = useState(true);
 
   // Update this to match your Express backend URL
@@ -37,7 +36,7 @@ const PasswordlessLogin = () => {
       let registrationResponse;
       try {
         registrationResponse = await startRegistration(options);
-      } catch (err) {
+      } catch {
         throw new Error(
           "Device registration cancelled or failed on the device.",
         );
@@ -81,7 +80,7 @@ const PasswordlessLogin = () => {
       let authenticationResponse;
       try {
         authenticationResponse = await startAuthentication(options);
-      } catch (err) {
+      } catch {
         throw new Error("Authentication cancelled or failed on the device.");
       }
 
@@ -145,7 +144,6 @@ const PasswordlessLogin = () => {
           />
         </div>
 
-        {/* NEW: Trust Device Checkbox */}
         <div className="mb-6 flex items-center">
           <input
             id="trust-device"

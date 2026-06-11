@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useCallback, useMemo, useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
   Calendar,
@@ -24,15 +24,8 @@ import {
   getDocumentFileName,
   openAuthenticatedFile,
 } from "../../utils/authenticatedFile";
-
-const getFinalRecommendation = (average) => {
-  if (!Number.isFinite(average)) return "Pending";
-  if (average >= 90) return "Pass without amendment";
-  if (average >= 80) return "Pass with minor amendment";
-  if (average >= 65) return "Pass with major amendment";
-  if (average >= 50) return "Re-evaluation required";
-  return "Fail";
-};
+import UserProfileLink from "../../components/UserProfileLink";
+import { buildPanelSessionOutcome } from "../../utils/sessionOutcome";
 
 export default function SessionDetailPage() {
   const { id } = useParams();
@@ -67,11 +60,7 @@ export default function SessionDetailPage() {
     file: null,
   });
 
-  useEffect(() => {
-    loadSessionData();
-  }, [id]);
-
-  const loadSessionData = async () => {
+  const loadSessionData = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -87,7 +76,7 @@ export default function SessionDetailPage() {
         try {
           const attendanceRes = await api.get(`/attendance/timetable/${id}`);
           setAttendanceRecords(attendanceRes.data.attendances || []);
-        } catch (error) {
+        } catch {
           console.warn("Could not load attendance records.");
         }
       }
@@ -108,7 +97,6 @@ export default function SessionDetailPage() {
           );
           const pastEvs = histRes.data.evaluations || [];
 
-          // 🔴 FIX: Strictly filter out the current session from the Historical Vault
           const pastCompleted = pastEvs
             .filter((e) => {
               const eSessionId =
@@ -125,23 +113,27 @@ export default function SessionDetailPage() {
             );
 
           setHistoricalEvals(pastCompleted);
-        } catch (error) {
+        } catch {
           console.warn("Could not load historical evals.");
         }
 
         try {
           const permRes = await api.get("/feedback/permissions/my");
           setPermissions(permRes.data.requests || []);
-        } catch (error) {
+        } catch {
           console.warn("Permissions route not mounted yet.");
         }
       }
-    } catch (error) {
+    } catch {
       alert("Failed to load session details");
     } finally {
       setLoading(false);
     }
-  };
+  }, [id, isStaff, isStudent]);
+
+  useEffect(() => {
+    loadSessionData();
+  }, [loadSessionData]);
 
   const handleRequestAccess = async (ev) => {
     try {
@@ -154,7 +146,7 @@ export default function SessionDetailPage() {
       if (res.data.success) {
         setPermissions([...permissions, res.data.permission]);
         alert(
-          "✅ Request sent successfully to the original author and admins.",
+          "Request sent successfully to the original author and admins.",
         );
       }
     } catch (err) {
@@ -194,7 +186,7 @@ export default function SessionDetailPage() {
       if (res.data.success) {
         setPermissions((prev) => [...prev, ...(res.data.permissions || [])]);
         alert(
-          `✅ ${res.data.createdCount} historical access request(s) created under batch ${res.data.batchId}.`,
+          `${res.data.createdCount} historical access request(s) created under batch ${res.data.batchId}.`,
         );
       }
     } catch (error) {
@@ -214,51 +206,8 @@ export default function SessionDetailPage() {
   };
 
   const sessionFinalResult = useMemo(() => {
-    const scoredEvaluations = evaluations.filter(
-      (evaluation) =>
-        evaluation.status === "COMPLETED" &&
-        evaluation.sessionType !== "PROGRESS_ASSESSMENT" &&
-        Number.isFinite(Number(evaluation.totalMarks)),
-    );
-
-    const expectedPanelCount = Math.max(
-      evaluations.length || 0,
-      session?.panels?.length || 0,
-      2,
-    );
-
-    if (!scoredEvaluations.length) {
-      return {
-        isScoredSession: evaluations.some(
-          (evaluation) => evaluation.sessionType !== "PROGRESS_ASSESSMENT",
-        ),
-        completedCount: 0,
-        expectedPanelCount,
-        isFinal: false,
-        average: null,
-        recommendation: "Pending panel submissions",
-      };
-    }
-
-    const average =
-      scoredEvaluations.reduce(
-        (sum, evaluation) => sum + Number(evaluation.totalMarks || 0),
-        0,
-      ) / scoredEvaluations.length;
-
-    const isFinal = scoredEvaluations.length >= expectedPanelCount;
-
-    return {
-      isScoredSession: true,
-      completedCount: scoredEvaluations.length,
-      expectedPanelCount,
-      isFinal,
-      average,
-      recommendation: isFinal
-        ? getFinalRecommendation(average)
-        : "Pending panel submissions",
-    };
-  }, [evaluations, session?.panels]);
+    return buildPanelSessionOutcome(evaluations);
+  }, [evaluations]);
 
   const toggleAttendance = async () => {
     if (attendanceActive) {
@@ -297,7 +246,7 @@ export default function SessionDetailPage() {
     try {
       new URL(normalizedUrl);
       return normalizedUrl;
-    } catch (_) {
+    } catch {
       return "";
     }
   };
@@ -454,7 +403,6 @@ export default function SessionDetailPage() {
         {isStudent ? "Back to Schedule" : "Back to Timetable"}
       </button>
 
-      {/* SESSION HEADER INFO */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <div className="flex flex-col sm:flex-row justify-between items-start mb-4">
           <div>
@@ -556,7 +504,11 @@ export default function SessionDetailPage() {
                 Candidate
               </p>
               <p className="font-semibold text-gray-900 leading-tight">
-                {session.student?.name || "TBD"}
+                <UserProfileLink
+                  user={session.student}
+                  fallback="TBD"
+                  className="font-semibold"
+                />
               </p>
               <p className="text-xs font-bold text-gray-500">
                 {session.student?.matricNumber}
@@ -566,7 +518,6 @@ export default function SessionDetailPage() {
         </div>
       </div>
 
-      {/* QUICK ACTIONS */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h2 className="text-lg font-bold text-gray-900 mb-4">Quick Actions</h2>
 
@@ -666,7 +617,11 @@ export default function SessionDetailPage() {
                   Panel {index + 1}
                 </p>
                 <p className="font-bold text-gray-900 mt-1">
-                  {panel.name || "Panel name unavailable"}
+                  <UserProfileLink
+                    user={panel}
+                    fallback="Panel name unavailable"
+                    className="font-bold"
+                  />
                 </p>
                 {panel.email && (
                   <p className="text-sm text-gray-600 mt-1">{panel.email}</p>
@@ -812,9 +767,11 @@ export default function SessionDetailPage() {
 
                   <p className="text-xs text-gray-500 mt-2">
                     Uploaded by{" "}
-                    {doc.uploadedBy?.name ||
-                      doc.uploadedBy?.userId ||
-                      "student"}{" "}
+                    <UserProfileLink
+                      user={doc.uploadedBy}
+                      fallback={doc.uploadedBy?.userId || "student"}
+                      className="font-semibold"
+                    />{" "}
                     {doc.uploadedAt
                       ? `on ${new Date(doc.uploadedAt).toLocaleDateString("en-MY")}`
                       : ""}
@@ -930,7 +887,11 @@ export default function SessionDetailPage() {
                 >
                   <div>
                     <p className="font-bold text-gray-900">
-                      {record.studentId?.name || "Student"}
+                      <UserProfileLink
+                        user={record.studentId}
+                        fallback="Student"
+                        className="font-bold"
+                      />
                     </p>
                     <p className="text-xs text-gray-500">
                       {record.studentId?.matricNumber || ""}
@@ -960,7 +921,6 @@ export default function SessionDetailPage() {
 
       {isStaff && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          {/* CURRENT SESSION EXAMINER SUBMISSIONS */}
           <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
             <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
               <ClipboardCheck className="w-5 h-5 text-indigo-600" /> Current
@@ -978,11 +938,11 @@ export default function SessionDetailPage() {
                 <div className="p-5 bg-indigo-50 border-b border-indigo-100 grid grid-cols-1 md:grid-cols-3 gap-4">
                   <div>
                     <p className="text-xs font-bold text-indigo-500 uppercase tracking-widest">
-                      Panel Marks
+                      Evaluator Submissions
                     </p>
                     <p className="text-lg font-black text-indigo-950">
                       {sessionFinalResult.completedCount}/
-                      {sessionFinalResult.expectedPanelCount} completed
+                      {sessionFinalResult.expectedEvaluatorCount} completed
                     </p>
                   </div>
                   <div>
@@ -1003,10 +963,10 @@ export default function SessionDetailPage() {
                   </div>
                   <div>
                     <p className="text-xs font-bold text-indigo-500 uppercase tracking-widest">
-                      Recommendation
+                      Outcome
                     </p>
                     <p className="text-sm font-black text-gray-900">
-                      {sessionFinalResult.recommendation}
+                      {sessionFinalResult.outcome}
                     </p>
                   </div>
                 </div>
@@ -1018,7 +978,11 @@ export default function SessionDetailPage() {
                 >
                   <div>
                     <p className="font-bold text-gray-900 text-lg">
-                      {ev.evaluatorId?.name || "Unknown Panel"}
+                      <UserProfileLink
+                        user={ev.evaluatorId}
+                        fallback="Unknown Panel"
+                        className="font-bold text-lg"
+                      />
                     </p>
                     <p className="text-sm text-gray-500">
                       {ev.evaluatorId?.email}
@@ -1041,7 +1005,6 @@ export default function SessionDetailPage() {
                           </p>
                         </div>
 
-                        {/* 🔴 NEW: Allows panel to view/update their current session eval */}
                         <button
                           onClick={() => goToEvaluation(ev._id)}
                           className="ml-2 flex items-center gap-1 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 px-4 py-2.5 rounded-lg font-bold text-sm transition-colors"
@@ -1076,7 +1039,6 @@ export default function SessionDetailPage() {
           id="historical-feedback-vault"
           className="bg-gray-900 rounded-xl shadow-lg border border-gray-700 overflow-hidden mt-8"
         >
-          {/* HISTORICAL FEEDBACK VAULT */}
           <div className="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
             <h2 className="text-lg font-bold text-white flex items-center gap-2">
               <History className="w-5 h-5 text-indigo-400" /> Historical
@@ -1114,7 +1076,11 @@ export default function SessionDetailPage() {
                       <p className="text-sm text-gray-400 mt-1">
                         Evaluator:{" "}
                         <span className="text-gray-300 font-semibold">
-                          {ev.evaluatorId?.name || "Unknown"}
+                          <UserProfileLink
+                            user={ev.evaluatorId}
+                            fallback="Unknown"
+                            className="font-semibold text-gray-300 hover:text-white"
+                          />
                         </span>
                       </p>
                       <p className="text-xs text-gray-500 mt-1">

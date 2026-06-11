@@ -16,7 +16,7 @@ export default function RegisterPage() {
   const { register } = useAuth();
 
   const [userId, setUserId] = useState("");
-  const [registrationCode, setRegistrationCode] = useState(""); // NEW STATE
+  const [registrationCode, setRegistrationCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -27,17 +27,12 @@ export default function RegisterPage() {
     setError("");
 
     try {
-      console.log("🔐 Starting registration for:", userId);
-
-      // Pass the registrationCode to the AuthContext
       await register(userId, registrationCode);
       localStorage.setItem("zkp-device-refresh", String(Date.now()));
       window.dispatchEvent(new Event("zkp-device-registered"));
-
-      console.log("✅ Registration successful!");
       setSuccess(true);
     } catch (error) {
-      console.error("❌ Registration error:", error);
+      console.error("Registration error:", error);
       setError(
         error.response?.data?.message ||
           error.message ||
@@ -84,7 +79,6 @@ export default function RegisterPage() {
               />
             </div>
 
-            {/* NEW: Registration Code Input */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Registration Code *
@@ -114,7 +108,7 @@ export default function RegisterPage() {
 
             <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
               <h3 className="font-semibold text-blue-900 mb-2 text-sm">
-                🔐 First-Time Setup
+                First-time setup
               </h3>
               <p className="text-xs text-blue-800 leading-relaxed">
                 For security, your first device binding requires an

@@ -7,7 +7,7 @@ import { X, Shield, CheckCircle, Loader } from 'lucide-react';
 const DevicePairingModal = ({ isOpen, onClose, userId, onSuccess }) => {
   const [step, setStep] = useState('idle'); // idle, generating, waiting, processing, success, error
   const [qrData, setQrData] = useState(null);
-  const [pairingCode, setPairingCode] = useState(''); // NEW: State to hold the 6-digit code for display
+  const [pairingCode, setPairingCode] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   
   const tempPrivateKeyRef = useRef(null);
@@ -15,7 +15,6 @@ const DevicePairingModal = ({ isOpen, onClose, userId, onSuccess }) => {
 
   useEffect(() => {
     if (isOpen && userId) {
-      // Reset state just in case it was opened previously
       setStep('idle');
       setQrData(null);
       setPairingCode('');
@@ -23,11 +22,10 @@ const DevicePairingModal = ({ isOpen, onClose, userId, onSuccess }) => {
       initializePairing();
     }
     
-    // Cleanup polling only when the modal is actually closed or unmounted
     return () => stopPolling();
     
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isOpen, userId]); // 🚨 REMOVED 'step' FROM HERE
+  }, [isOpen, userId]);
 
   const stopPolling = () => {
     if (pollingIntervalRef.current) {
@@ -41,16 +39,13 @@ const DevicePairingModal = ({ isOpen, onClose, userId, onSuccess }) => {
       setStep('generating');
       setErrorMessage('');
 
-      // 1. Generate the Temporary RSA-OAEP Key Pair for E2EE
       const ephemeralKeyPair = await zkp.generateEphemeralKeyPair();
       tempPrivateKeyRef.current = ephemeralKeyPair.privateKey;
       const tempPublicKeyBase64 = await zkp.exportEphemeralPublicKey(ephemeralKeyPair.publicKey);
 
-      // 2. Request pairing code AND send the temp public key to the server
       const { pairingCode: code, expiresAt } = await authAPI.requestPairingCode(userId, tempPublicKeyBase64);
       setPairingCode(code);
 
-      // 3. Prepare the data that goes into the QR code
       const qrPayload = JSON.stringify({
         userId,
         pairingCode: code,
@@ -60,7 +55,6 @@ const DevicePairingModal = ({ isOpen, onClose, userId, onSuccess }) => {
       setQrData(qrPayload);
       setStep('waiting');
 
-      // 4. Start polling for the encrypted key
       startPolling(userId, code, expiresAt);
 
     } catch (error) {
@@ -96,25 +90,22 @@ const DevicePairingModal = ({ isOpen, onClose, userId, onSuccess }) => {
           setStep('error');
         }
       }
-    }, 2500); // Poll every 2.5 seconds
+    }, 2500);
   };
 
   const processReceivedKey = async (encryptedPayloadBase64) => {
     try {
       setStep('processing');
 
-      // 1. Decrypt the payload using the temporary private key
       const rawPrivateKey = await zkp.decryptPayload(
         tempPrivateKeyRef.current,
         encryptedPayloadBase64
       );
 
-      // 2. Import and permanently save the user's actual ZKP private key
       await zkp.importPrivateKey(userId, rawPrivateKey);
 
       setStep('success');
 
-      // 3. Wait 1.5s so the user sees success, then trigger login
       setTimeout(() => {
         onSuccess(); 
         onClose();

@@ -2,9 +2,6 @@ const Attendance = require("../models/Attendance");
 const Timetable = require("../models/Timetable");
 const User = require("../models/User");
 
-// @desc    Mark attendance (manual or QR)
-// @route   POST /api/attendance
-// @access  Private (Panel, Admin)
 exports.markAttendance = async (req, res) => {
   if (!["admin", "panel"].includes(req.user.role)) {
     return res.status(403).json({
@@ -21,14 +18,6 @@ exports.markAttendance = async (req, res) => {
       status = "present",
     } = req.body;
 
-    console.log("📝 Marking attendance:", {
-      timetableId,
-      studentId,
-      verificationMethod,
-      status,
-    });
-
-    // Validate required fields
     if (!timetableId || !studentId) {
       return res.status(400).json({
         success: false,
@@ -36,30 +25,24 @@ exports.markAttendance = async (req, res) => {
       });
     }
 
-    // Check if timetable exists
     const timetable = await Timetable.findById(timetableId);
     if (!timetable) {
-      console.log("❌ Timetable not found:", timetableId);
       return res.status(404).json({
         success: false,
         message: "Timetable entry not found",
       });
     }
 
-    // Check if student exists
     const student = await User.findById(studentId);
     if (!student || student.role !== "student") {
-      console.log("❌ Student not found:", studentId);
       return res.status(404).json({
         success: false,
         message: "Student not found",
       });
     }
 
-    // Check if already marked
     const existing = await Attendance.findOne({ timetableId, studentId });
     if (existing) {
-      console.log("⚠️  Attendance already marked");
       return res.status(400).json({
         success: false,
         message: "Attendance already marked for this session",
@@ -67,7 +50,6 @@ exports.markAttendance = async (req, res) => {
       });
     }
 
-    // Create attendance record
     const attendance = await Attendance.create({
       studentId,
       timetableId,
@@ -77,9 +59,6 @@ exports.markAttendance = async (req, res) => {
       notes: notes || `Marked by ${req.user.name}`,
     });
 
-    console.log("✅ Attendance marked successfully");
-
-    // Populate the response
     const populated = await Attendance.findById(attendance._id)
       .populate("studentId", "name matricNumber")
       .populate("timetableId", "sessionType date venue");
@@ -89,7 +68,7 @@ exports.markAttendance = async (req, res) => {
       attendance: populated,
     });
   } catch (error) {
-    console.error("❌ Mark attendance error:", error);
+    console.error("Mark attendance error:", error);
     res.status(500).json({
       success: false,
       message: "Error marking attendance",
@@ -98,26 +77,19 @@ exports.markAttendance = async (req, res) => {
   }
 };
 
-// @desc    Get attendance by timetable
-// @route   GET /api/attendance/timetable/:id
-// @access  Private
 exports.getAttendanceByTimetable = async (req, res) => {
   try {
-    console.log("🔍 Fetching attendance for timetable:", req.params.id);
-
     const attendances = await Attendance.find({ timetableId: req.params.id })
       .populate("studentId", "name matricNumber email")
       .sort({ checkInTime: -1 });
 
-    console.log(`✅ Found ${attendances.length} attendance records`);
-
     res.json({
       success: true,
       count: attendances.length,
       attendances,
     });
   } catch (error) {
-    console.error("❌ Get attendance error:", error);
+    console.error("Get attendance error:", error);
     res.status(500).json({
       success: false,
       message: "Error fetching attendance",
@@ -126,26 +98,19 @@ exports.getAttendanceByTimetable = async (req, res) => {
   }
 };
 
-// @desc    Get my attendance (student)
-// @route   GET /api/attendance/my
-// @access  Private (Student)
 exports.getMyAttendance = async (req, res) => {
   try {
-    console.log("🔍 Fetching attendance for student:", req.user.name);
-
     const attendances = await Attendance.find({ studentId: req.user.id })
       .populate("timetableId", "sessionType date venue startTime endTime")
       .sort({ checkInTime: -1 });
 
-    console.log(`✅ Found ${attendances.length} attendance records`);
-
     res.json({
       success: true,
       count: attendances.length,
       attendances,
     });
   } catch (error) {
-    console.error("❌ Get my attendance error:", error);
+    console.error("Get my attendance error:", error);
     res.status(500).json({
       success: false,
       message: "Error fetching attendance",
@@ -154,14 +119,9 @@ exports.getMyAttendance = async (req, res) => {
   }
 };
 
-// @desc    Update attendance status
-// @route   PUT /api/attendance/:id
-// @access  Private (Panel, Admin)
 exports.updateAttendance = async (req, res) => {
   try {
     const { status, notes } = req.body;
-
-    console.log("📝 Updating attendance:", req.params.id);
 
     const attendance = await Attendance.findByIdAndUpdate(
       req.params.id,
@@ -178,14 +138,12 @@ exports.updateAttendance = async (req, res) => {
       });
     }
 
-    console.log("✅ Attendance updated");
-
     res.json({
       success: true,
       attendance,
     });
   } catch (error) {
-    console.error("❌ Update attendance error:", error);
+    console.error("Update attendance error:", error);
     res.status(500).json({
       success: false,
       message: "Error updating attendance",
@@ -194,13 +152,8 @@ exports.updateAttendance = async (req, res) => {
   }
 };
 
-// @desc    Delete attendance
-// @route   DELETE /api/attendance/:id
-// @access  Private (Admin)
 exports.deleteAttendance = async (req, res) => {
   try {
-    console.log("🗑️  Deleting attendance:", req.params.id);
-
     const attendance = await Attendance.findByIdAndDelete(req.params.id);
 
     if (!attendance) {
@@ -210,14 +163,12 @@ exports.deleteAttendance = async (req, res) => {
       });
     }
 
-    console.log("✅ Attendance deleted");
-
     res.json({
       success: true,
       message: "Attendance record deleted successfully",
     });
   } catch (error) {
-    console.error("❌ Delete attendance error:", error);
+    console.error("Delete attendance error:", error);
     res.status(500).json({
       success: false,
       message: "Error deleting attendance",
@@ -226,14 +177,9 @@ exports.deleteAttendance = async (req, res) => {
   }
 };
 
-// @desc    Get attendance statistics
-// @route   GET /api/attendance/stats
-// @access  Private
 exports.getAttendanceStats = async (req, res) => {
   try {
     const { studentId, startDate, endDate } = req.query;
-
-    console.log("📊 Calculating attendance statistics");
 
     const filter = {};
 
@@ -273,14 +219,12 @@ exports.getAttendanceStats = async (req, res) => {
         total > 0 ? Math.round((present / total) * 100 * 10) / 10 : 0,
     };
 
-    console.log("✅ Statistics calculated:", stats);
-
     res.json({
       success: true,
       stats,
     });
   } catch (error) {
-    console.error("❌ Get stats error:", error);
+    console.error("Get attendance stats error:", error);
     res.status(500).json({
       success: false,
       message: "Error calculating statistics",

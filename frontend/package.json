@@ -9,7 +9,9 @@
     "clean:mac": "rm -rf node_modules/.vite",
     "clean:win": "rmdir /s /q node_modules\\.vite",
     "build": "vite build",
+    "check": "npm run lint && npm run build",
     "lint": "eslint .",
+    "test:unit": "node --test src/hooks/useSortableData.test.js src/utils/authSession.test.js src/utils/timetableConflicts.test.js src/utils/historicalFeedback.test.js src/utils/sessionOutcome.test.js src/utils/studentDashboard.test.js src/utils/evaluationForm.test.js",
     "preview": "vite preview"
   },
   "dependencies": {

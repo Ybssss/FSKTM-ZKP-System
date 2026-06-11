@@ -1,6 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { timetableAPI } from '../../services/api';
 import { Calendar, Clock, MapPin, Users, Plus } from 'lucide-react';
+import UserProfileLink from '../../components/UserProfileLink';
+import SortableTh from '../../components/SortableTh';
+import useSortableData from '../../hooks/useSortableData';
 
 export default function TimetablePage() {
   const [sessions, setSessions] = useState([]);
@@ -32,6 +35,26 @@ export default function TimetablePage() {
     return colors[status] || colors.scheduled;
   };
 
+  const sessionSortAccessors = useMemo(
+    () => ({
+      date: (session) => `${session.date || ''} ${session.startTime || session.time || ''}`,
+      student: (session) => `${session.studentId?.name || ''} ${session.studentId?.matricNumber || ''}`,
+      type: (session) => session.sessionType || '',
+      venue: (session) => session.venue || '',
+      panel: (session) =>
+        (session.panelMembers || [])
+          .map((panel) => panel?.name || panel?.userId || panel)
+          .join(' '),
+      status: (session) => session.status || '',
+    }),
+    [],
+  );
+  const {
+    sortedItems: sortedSessions,
+    sortConfig: sessionSortConfig,
+    requestSort: requestSessionSort,
+  } = useSortableData(sessions, sessionSortAccessors, { key: 'date' });
+
   return (
     <>
       <div className="max-w-7xl mx-auto">
@@ -61,28 +84,16 @@ export default function TimetablePage() {
             <table className="w-full">
               <thead className="bg-gray-50 border-b border-gray-200">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">
-                    Date & Time
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">
-                    Student
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">
-                    Session Type
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">
-                    Venue
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">
-                    Panel
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase">
-                    Status
-                  </th>
+                  <SortableTh className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase" sortKey="date" sortConfig={sessionSortConfig} onSort={requestSessionSort}>Date & Time</SortableTh>
+                  <SortableTh className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase" sortKey="student" sortConfig={sessionSortConfig} onSort={requestSessionSort}>Student</SortableTh>
+                  <SortableTh className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase" sortKey="type" sortConfig={sessionSortConfig} onSort={requestSessionSort}>Session Type</SortableTh>
+                  <SortableTh className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase" sortKey="venue" sortConfig={sessionSortConfig} onSort={requestSessionSort}>Venue</SortableTh>
+                  <SortableTh className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase" sortKey="panel" sortConfig={sessionSortConfig} onSort={requestSessionSort}>Panel</SortableTh>
+                  <SortableTh className="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase" sortKey="status" sortConfig={sessionSortConfig} onSort={requestSessionSort}>Status</SortableTh>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {sessions.map((session) => (
+                {sortedSessions.map((session) => (
                   <tr key={session._id} className="hover:bg-gray-50">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2 text-sm">
@@ -98,7 +109,11 @@ export default function TimetablePage() {
                     </td>
                     <td className="px-6 py-4">
                       <div className="font-medium text-gray-900">
-                        {session.studentId?.name || 'N/A'}
+                        <UserProfileLink
+                          user={session.studentId}
+                          fallback="N/A"
+                          className="font-semibold"
+                        />
                       </div>
                       <div className="text-sm text-gray-600">
                         {session.studentId?.matricNumber || ''}

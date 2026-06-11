@@ -1,0 +1,6 @@
+[33mBoth esbuild and oxc options were set. oxc options will be used and esbuild options will be ignored.[39m
+Browserslist: browsers data (caniuse-lite) is 6 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+[33mBoth esbuild and oxc options were set. oxc options will be used and esbuild options will be ignored.[39m
+[33mBoth esbuild and oxc options were set. oxc options will be used and esbuild options will be ignored.[39m

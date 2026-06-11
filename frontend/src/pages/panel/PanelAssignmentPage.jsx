@@ -1,4 +1,3 @@
-// src/pages/panel/PanelAssignmentPage.jsx
 import React, { useState, useEffect } from "react";
 import {
   Users,
@@ -12,24 +11,21 @@ import {
   Square,
 } from "lucide-react";
 import api from "../../services/api";
+import UserProfileLink from "../../components/UserProfileLink";
 
 export default function PanelAssignmentPage() {
-  const [panels, setPanels] = useState([]);
   const [students, setStudents] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Search & Toggle States
   const [searchTerm, setSearchTerm] = useState("");
-  const [viewMode, setViewMode] = useState("unassigned"); // 'unassigned' | 'assigned'
+  const [viewMode, setViewMode] = useState("unassigned");
 
-  // Expertise Matching States
   const [researchTitle, setResearchTitle] = useState("");
   const [recommendations, setRecommendations] = useState([]);
   const [matchingExpertise, setMatchingExpertise] = useState(false);
   const [selectedStudentForMatching, setSelectedStudentForMatching] =
     useState(null);
 
-  // NEW: Track which panels are selected from the recommendations
   const [selectedPanels, setSelectedPanels] = useState([]);
 
   useEffect(() => {
@@ -40,14 +36,12 @@ export default function PanelAssignmentPage() {
     try {
       setLoading(true);
       const res = await api.get("/users/assignments");
-      setPanels(res.data.panels || []);
 
-      // Ensure we only look at actual students with a matric number
       const validStudents = (res.data.students || []).filter(
         (s) => s.matricNumber,
       );
       setStudents(validStudents);
-    } catch (error) {
+    } catch {
       alert("Failed to load users data");
     } finally {
       setLoading(false);
@@ -75,14 +69,12 @@ export default function PanelAssignmentPage() {
       setRecommendations([]);
       setSelectedPanels([]);
 
-      loadData(); // Refresh list
-    } catch (err) {
+      loadData();
+    } catch {
       alert("Failed to unassign.");
     }
   };
 
-  // NEW: Function to officially assign the selected panels
-  // NEW: Send both panels at the exact same time! (NO LOOPING)
   const handleConfirmAssignment = async () => {
     if (!selectedStudentForMatching) return;
     if (selectedPanels.length !== 2) {
@@ -90,23 +82,20 @@ export default function PanelAssignmentPage() {
     }
 
     try {
-      // Send the entire array of selected panels in ONE single request
       await api.post("/users/assign-panel", {
         studentId: selectedStudentForMatching._id,
-        panelIds: selectedPanels, // <-- Sending array ["id1", "id2"] directly
+        panelIds: selectedPanels,
       });
 
       alert(
         `Default panel assignment updated for ${selectedStudentForMatching.name}. Existing scheduled sessions and evaluations were not changed.`,
       );
 
-      // Reset UI states
       setSelectedPanels([]);
       setRecommendations([]);
       setSelectedStudentForMatching(null);
       setResearchTitle("");
 
-      // Refresh Data
       loadData();
     } catch (error) {
       console.error(error);
@@ -166,7 +155,6 @@ export default function PanelAssignmentPage() {
     }
   };
 
-  // NEW: Toggle selection of a panel card
   const togglePanelSelection = (panelId) => {
     if (selectedPanels.includes(panelId)) {
       setSelectedPanels(selectedPanels.filter((id) => id !== panelId));
@@ -178,7 +166,6 @@ export default function PanelAssignmentPage() {
     }
   };
 
-  // Filter Logic
   const unassignedStudents = students.filter(
     (s) => !s.assignedPanels || s.assignedPanels.length === 0,
   );
@@ -283,7 +270,13 @@ export default function PanelAssignmentPage() {
                   className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${selectedStudentForMatching?._id === student._id ? "border-indigo-500 bg-indigo-50" : "border-gray-100 hover:border-indigo-200 bg-white"}`}
                 >
                   <div className="flex justify-between items-start mb-1">
-                    <p className="font-bold text-gray-900">{student.name}</p>
+                    <p className="font-bold text-gray-900">
+                      <UserProfileLink
+                        user={student}
+                        className="font-bold"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </p>
                     <span className="text-xs font-mono font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
                       {student.userId || student.matricNumber}
                     </span>
@@ -317,7 +310,12 @@ export default function PanelAssignmentPage() {
                             key={i}
                             className="text-[10px] font-bold bg-green-100 text-green-800 px-2 py-0.5 rounded border border-green-200"
                           >
-                            {p.panelId?.name || p.name || "Panel"}
+                            <UserProfileLink
+                              user={p.panelId || p}
+                              fallback="Panel"
+                              className="font-bold"
+                              onClick={(e) => e.stopPropagation()}
+                            />
                           </span>
                         ))}
                       </div>
@@ -366,7 +364,10 @@ export default function PanelAssignmentPage() {
             {selectedStudentForMatching && (
               <p className="text-xs text-indigo-600 font-bold mt-2 flex items-center gap-1">
                 <CheckCircle className="w-3 h-3" /> Analyzing context for:{" "}
-                {selectedStudentForMatching.name}
+                <UserProfileLink
+                  user={selectedStudentForMatching}
+                  className="font-bold"
+                />
               </p>
             )}
           </div>
@@ -443,7 +444,12 @@ export default function PanelAssignmentPage() {
                             <h4
                               className={`font-bold ${isSelected ? "text-green-900" : "text-gray-900"}`}
                             >
-                              {rec.name}
+                              <UserProfileLink
+                                user={{ _id: rec.panelId, name: rec.name }}
+                                fallback="Panel"
+                                className={`font-bold ${isSelected ? "text-green-900" : "text-gray-900"}`}
+                                onClick={(e) => e.stopPropagation()}
+                              />
                             </h4>
                           </div>
                           <p className="text-xs text-gray-500 font-semibold mb-2 line-clamp-1">
@@ -499,13 +505,15 @@ export default function PanelAssignmentPage() {
             )}
           </div>
 
-          {/* NEW: Confirm Assignment Action Bar */}
           {selectedPanels.length > 0 && selectedStudentForMatching && (
             <div className="absolute bottom-6 left-6 right-6 bg-gray-900 rounded-xl shadow-2xl p-4 flex items-center justify-between border border-gray-700 animate-fade-in-up">
               <div>
                 <p className="text-gray-300 text-sm">Assigning to:</p>
                 <p className="text-white font-bold">
-                  {selectedStudentForMatching.name}
+                  <UserProfileLink
+                    user={selectedStudentForMatching}
+                    className="font-bold text-white hover:text-white"
+                  />
                 </p>
                 <p className="text-indigo-300 text-xs font-mono">
                   {selectedStudentForMatching.matricNumber}

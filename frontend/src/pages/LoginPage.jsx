@@ -5,17 +5,23 @@ import zkp from "../utils/zkp";
 import api from "../services/api";
 import { Shield, Smartphone, AlertCircle, Monitor, Lock } from "lucide-react";
 import DevicePairingModal from "../components/DevicePairingModal";
+import RecaptchaWidget from "../components/RecaptchaWidget";
 
 export default function LoginPage() {
   const navigate = useNavigate();
   const { login } = useAuth();
+  const recaptchaSiteKey = String(
+    import.meta.env.VITE_RECAPTCHA_SITE_KEY || "",
+  ).trim();
+  const recaptchaEnabled = Boolean(recaptchaSiteKey);
 
   const [userId, setUserId] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showPairingModal, setShowPairingModal] = useState(false);
-
   const [trustDevice, setTrustDevice] = useState(true);
+  const [recaptchaToken, setRecaptchaToken] = useState("");
+  const [recaptchaResetNonce, setRecaptchaResetNonce] = useState(0);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -23,18 +29,24 @@ export default function LoginPage() {
       setError(
         "Your access from this device was remotely revoked. Cryptographic keys have been securely erased from this browser to protect your account.",
       );
+    } else if (params.get("expired") === "true") {
+      setError(
+        "Your previous session expired or became invalid. Please login again to continue.",
+      );
+    }
+
+    if (params.get("revoked") === "true" || params.get("expired") === "true") {
       window.history.replaceState({}, document.title, "/login");
     }
   }, []);
 
-  // Idiot-proof warning when unchecking the box
   const handleTrustChange = (e) => {
     const isChecked = e.target.checked;
     if (!isChecked) {
       const confirm = window.confirm(
-        "🚨 WARNING: If you uncheck this, your ZKP keys will be deleted when you log out. If this is your ONLY device, you will be permanently locked out until an Admin resets your account. Are you sure you are on a public/shared computer?",
+        "If you uncheck this, your ZKP keys will be deleted when you log out. If this is your only device, you will be locked out until an administrator resets your account. Confirm that you are on a public or shared computer before continuing.",
       );
-      if (!confirm) return; // Revert if they click Cancel
+      if (!confirm) return;
     }
     setTrustDevice(isChecked);
   };
@@ -42,6 +54,7 @@ export default function LoginPage() {
   const handleStandardZkpLogin = async (userIdToUse = userId) => {
     setLoading(true);
     setError("");
+    let challengeAttempted = false;
 
     try {
       const checkResponse = await api.post("/auth/check-registration", {
@@ -79,15 +92,21 @@ export default function LoginPage() {
         return;
       }
 
-      // Save trust status to local storage for persistence
+      if (recaptchaEnabled && !recaptchaToken) {
+        setError("Complete the reCAPTCHA verification before logging in.");
+        setLoading(false);
+        return;
+      }
+
+      // Persist the device trust choice before the login flow stores or reuses local keys.
       localStorage.setItem("zkp_trust_device", trustDevice ? "true" : "false");
       localStorage.setItem(
         `zkp_trust_device_${userIdToUse}`,
         trustDevice ? "true" : "false",
       );
 
-      // 🔴 FIX: Explicitly passing 'trustDevice' to the Context
-      const result = await login(userIdToUse, trustDevice);
+      challengeAttempted = true;
+      const result = await login(userIdToUse, trustDevice, recaptchaToken);
 
       if (result.user.role === "student") {
         navigate("/student/dashboard");
@@ -109,6 +128,9 @@ export default function LoginPage() {
       );
     } finally {
       setLoading(false);
+      if (recaptchaEnabled && challengeAttempted) {
+        setRecaptchaResetNonce((value) => value + 1);
+      }
     }
   };
 
@@ -143,7 +165,6 @@ export default function LoginPage() {
               placeholder="Enter your user ID (e.g., STU001, admin)"
               required
               disabled={loading}
-              /* 🔴 FIX: Removed 'uppercase' class. Added inline style and HTML5 overrides to ensure pure case-sensitivity */
               style={{ textTransform: "none" }}
               autoCapitalize="none"
               autoComplete="off"
@@ -176,14 +197,14 @@ export default function LoginPage() {
                   {trustDevice ? (
                     <>
                       <span className="font-medium text-green-700">
-                        ✓ Keys will be saved
+                        Keys will be saved
                       </span>{" "}
                       - Recommended for personal computers.
                     </>
                   ) : (
                     <>
                       <span className="font-medium text-orange-700">
-                        ⚠ Keys deleted on logout
+                        Keys deleted on logout
                       </span>{" "}
                       - Recommended for public/shared computers.
                     </>
@@ -192,6 +213,22 @@ export default function LoginPage() {
               </div>
             </label>
           </div>
+
+          {recaptchaEnabled && (
+            <div className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+              <p className="text-sm font-medium text-gray-800 mb-3">
+                Human verification
+              </p>
+              <RecaptchaWidget
+                siteKey={recaptchaSiteKey}
+                onTokenChange={setRecaptchaToken}
+                resetNonce={recaptchaResetNonce}
+              />
+              <p className="mt-2 text-xs text-gray-500">
+                Required before the system issues a login challenge.
+              </p>
+            </div>
+          )}
 
           {error && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start gap-3">
@@ -218,7 +255,9 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={loading || !userId}
+            disabled={
+              loading || !userId || (recaptchaEnabled && !recaptchaToken)
+            }
             className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-gray-300 transition-colors flex items-center justify-center gap-2"
           >
             {loading ? (

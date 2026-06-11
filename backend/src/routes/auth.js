@@ -2,11 +2,12 @@ const express = require("express");
 const router = express.Router();
 const authController = require("../controllers/authController");
 const { authenticateToken, requireRole } = require("../middleware/auth");
-const User = require("../models/User"); // Required for the admin routes at the bottom
+const {
+  authChallengeLimiter,
+  requireChallengeRecaptcha,
+} = require("../middleware/authChallengeProtection");
+const User = require("../models/User");
 
-// ==========================================
-// PUBLIC ZKP ROUTES
-// ==========================================
 router.post("/check-registration", authController.checkRegistration);
 router.post("/register", authController.registerZKP);
 router.post("/register-zkp", authController.registerZKP);
@@ -15,30 +16,31 @@ router.post(
   authController.generateRegistrationChallenge,
 );
 router.post("/register/verify", authController.verifyRegistration);
-router.post("/challenge", authController.generateLoginChallenge);
+router.post(
+  "/challenge",
+  authChallengeLimiter,
+  requireChallengeRecaptcha,
+  authController.generateLoginChallenge,
+);
 router.post("/verify", authController.verifyDeviceProof);
 router.post("/login-zkp", authController.loginWithZKP);
-router.post("/login/challenge", authController.generateLoginChallenge);
+router.post(
+  "/login/challenge",
+  authChallengeLimiter,
+  requireChallengeRecaptcha,
+  authController.generateLoginChallenge,
+);
 router.post("/login/verify", authController.verifyDeviceProof);
-// ==========================================
-// SECURE DEVICE PAIRING ROUTES
-// ==========================================
-// 1. PC asks for a code
+// Device pairing routes
 router.post("/pairing/request", authController.requestPairingCode);
 router.post("/pairing/key", authenticateToken, authController.getTempPublicKey);
-// 2. Phone sends encrypted key (Needs to be logged in!)
-
 router.post(
   "/pairing/submit",
   authenticateToken,
   authController.submitEncryptedKey,
 );
-// 3. PC polls for the key
 router.post("/pairing/poll", authController.pollEncryptedKey);
 
-// ==========================================
-// PROTECTED USER ROUTES
-// ==========================================
 router.get("/me", authenticateToken, authController.getMe);
 router.get("/my-devices", authenticateToken, authController.getMyDevices);
 router.delete(
@@ -47,7 +49,6 @@ router.delete(
   authController.removeDevice,
 );
 
-// Logout (Clear challenge and session data)
 router.post("/logout", authenticateToken, async (req, res) => {
   try {
     await User.findByIdAndUpdate(req.user.id, {
@@ -77,9 +78,6 @@ router.post("/logout-all-devices", authenticateToken, async (req, res) => {
 
 router.put("/update-keys", authenticateToken, authController.updateKeys);
 router.get("/verify", authenticateToken, authController.verifyAuth);
-// ==========================================
-// ADMIN ONLY ROUTES
-// ==========================================
 router.post(
   "/admin/reset-zkp/:userId",
   authenticateToken,

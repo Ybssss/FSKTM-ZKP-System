@@ -1,12 +1,12 @@
 const User = require("../models/User");
 
 const SAFE_USER_SELECT =
-  "name userId email role matricNumber program yearOfStudy profession researchTitle researchAbstract supervisorId assignedStudents assignedPanels expertiseTags zkpRegistered createdAt updatedAt";
+  "name userId email role matricNumber program yearOfStudy profession profileImageUrl researchTitle researchAbstract supervisorId assignedStudents assignedPanels expertiseTags zkpRegistered createdAt updatedAt";
 const { logActivity } = require("../utils/logger");
 const {
   getEmailConfigStatus,
   sendRegistrationEmail,
-} = require("../utils/mailer"); // ✅ Import Mailer
+} = require("../utils/mailer");
 
 const queueRegistrationEmail = ({
   email,
@@ -69,7 +69,7 @@ exports.getAllUsers = async (req, res) => {
   try {
     const users = await User.find()
       .select(SAFE_USER_SELECT)
-      .populate({ path: "supervisorId", select: "name email userId" }) // 👈 Explicitly populate SV
+      .populate({ path: "supervisorId", select: "name email userId" })
       .lean()
       .sort({ createdAt: -1 });
 
@@ -278,14 +278,14 @@ exports.getAssignments = async (req, res) => {
   try {
     const students = await User.find({ role: "student" })
       .select(
-        "name email userId matricNumber program researchTitle researchAbstract supervisorId assignedPanels",
+        "name email userId matricNumber program profileImageUrl researchTitle researchAbstract supervisorId assignedPanels",
       )
       .populate("supervisorId", "name email")
       .populate("assignedPanels.panelId", "name email expertiseTags");
 
     const panels = await User.find({
       role: { $in: ["panel", "admin"] },
-    }).select("name email userId expertiseTags assignedStudents");
+    }).select("name email userId profileImageUrl expertiseTags assignedStudents");
 
     res.status(200).json({
       success: true,

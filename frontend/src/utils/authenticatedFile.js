@@ -10,7 +10,7 @@ const apiPathFromUrl = (url) => {
     const parsed = new URL(raw);
     const apiIndex = parsed.pathname.indexOf("/api/");
     if (apiIndex >= 0) return `${parsed.pathname.slice(apiIndex + 4)}${parsed.search}`;
-  } catch (_) {
+  } catch {
     return "";
   }
 
@@ -25,7 +25,7 @@ const filenameFromDisposition = (value) => {
   if (!match) return "";
   try {
     return decodeURIComponent(match[1]);
-  } catch (_) {
+  } catch {
     return match[1];
   }
 };

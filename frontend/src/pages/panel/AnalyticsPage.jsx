@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { analyticsAPI, evaluationAPI } from '../../services/api';
+import { analyticsAPI } from '../../services/api';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { TrendingUp, Users, FileCheck, Award } from 'lucide-react';
 import { CardSkeleton, ListSkeleton } from '../../components/common/LoadingSkeleton';
@@ -191,12 +191,12 @@ export default function AnalyticsPage() {
   );
 }
 
-function StatCard({ title, value, icon: Icon, color, trend }) {
+function StatCard({ title, value, icon, color, trend }) {
   return (
     <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
       <div className="flex items-center justify-between mb-4">
         <div className={`${color} p-3 rounded-lg`}>
-          <Icon className="w-6 h-6 text-white" />
+          {React.createElement(icon, { className: "w-6 h-6 text-white" })}
         </div>
         <span className="text-green-600 text-sm font-semibold">{trend}</span>
       </div>
