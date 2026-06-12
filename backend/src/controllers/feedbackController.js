@@ -717,11 +717,19 @@ exports.respondToRequest = async (req, res) => {
   try {
     const responderId = getAuthUserId(req);
     const { requestId, action } = req.body;
+    const responseNote = cleanText(req.body.responseNote || "", 1000);
 
     if (!["APPROVED", "REJECTED"].includes(action)) {
       return res.status(400).json({
         success: false,
         message: "Invalid action. Use APPROVED or REJECTED.",
+      });
+    }
+
+    if (action === "REJECTED" && !responseNote) {
+      return res.status(400).json({
+        success: false,
+        message: "Rejection feedback is required.",
       });
     }
 
@@ -760,19 +768,22 @@ exports.respondToRequest = async (req, res) => {
       });
     }
 
-    const updatedRequest = await PermissionRequest.findByIdAndUpdate(
+    const updatedRequest = await detailedPermissionPopulate(
+      PermissionRequest.findByIdAndUpdate(
       requestId,
       {
         $set: {
           status: action,
           approvedBy: action === "APPROVED" ? responderId : null,
           approvedAt: action === "APPROVED" ? new Date() : null,
+          responseNote: responseNote || null,
         },
       },
       {
         new: true,
         runValidators: true,
       },
+    ),
     );
 
     if (isUnlockRequest && action === "APPROVED") {
@@ -788,7 +799,7 @@ exports.respondToRequest = async (req, res) => {
     res.json({
       success: true,
       message: `Request has been ${action}.`,
-      request: updatedRequest,
+      request: normalizePermissionRecord(updatedRequest),
     });
   } catch (error) {
     res.status(500).json({

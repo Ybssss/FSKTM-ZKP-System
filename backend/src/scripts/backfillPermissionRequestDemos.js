@@ -79,7 +79,6 @@ async function main() {
         ownerId: normalizeId(evaluation.evaluatorId),
         studentId: normalizeId(evaluation.studentId),
         currentSessionId: normalizeId(currentSession._id),
-        batchId: currentSession.batchId || null,
       };
     })
     .filter(Boolean);
@@ -130,7 +129,6 @@ async function main() {
           "Demo pending request: panel needs historical context from this student's completed evaluation before the current session.",
         scope: "SINGLE_EVALUATION",
         currentSessionId: pendingTarget.currentSessionId,
-        batchId: pendingTarget.batchId,
       });
     }
 
@@ -148,7 +146,6 @@ async function main() {
           "Demo approved request: panel can review a historical evaluation and student context for continuity.",
         scope: "SINGLE_EVALUATION",
         currentSessionId: approvedTarget.currentSessionId,
-        batchId: approvedTarget.batchId,
         approvedBy: approvedTarget.ownerId,
         approvedAt: new Date(),
       });

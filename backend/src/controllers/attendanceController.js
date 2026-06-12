@@ -2,6 +2,49 @@ const Attendance = require("../models/Attendance");
 const Timetable = require("../models/Timetable");
 const User = require("../models/User");
 
+const toSessionBoundary = (dateValue, timeValue, fallbackHour = 23, fallbackMinute = 59) => {
+  const boundary = new Date(dateValue);
+
+  if (Number.isNaN(boundary.getTime())) {
+    return null;
+  }
+
+  const parsedTime = String(timeValue || "")
+    .trim()
+    .match(/^(\d{1,2}):(\d{2})(?:\s*([AaPp][Mm]))?$/);
+
+  if (!parsedTime) {
+    boundary.setHours(fallbackHour, fallbackMinute, 59, 999);
+    return boundary;
+  }
+
+  let [, rawHours, rawMinutes, meridiem] = parsedTime;
+  let hours = Number(rawHours);
+  const minutes = Number(rawMinutes);
+
+  if (meridiem) {
+    const upperMeridiem = meridiem.toUpperCase();
+    if (upperMeridiem === "PM" && hours < 12) hours += 12;
+    if (upperMeridiem === "AM" && hours === 12) hours = 0;
+  }
+
+  boundary.setHours(hours, minutes, 59, 999);
+  return boundary;
+};
+
+const buildDerivedAbsentRecord = (studentId, timetable) => ({
+  _id: `derived-absent-${timetable._id}`,
+  studentId,
+  timetableId: timetable,
+  checkInTime: null,
+  status: "absent",
+  verificationMethod: "automatic",
+  notes: "No attendance was recorded for this completed session.",
+  createdAt: timetable.date,
+  updatedAt: timetable.date,
+  isDerivedAbsent: true,
+});
+
 exports.markAttendance = async (req, res) => {
   if (!["admin", "panel"].includes(req.user.role)) {
     return res.status(403).json({
@@ -100,14 +143,57 @@ exports.getAttendanceByTimetable = async (req, res) => {
 
 exports.getMyAttendance = async (req, res) => {
   try {
-    const attendances = await Attendance.find({ studentId: req.user.id })
-      .populate("timetableId", "sessionType date venue startTime endTime")
-      .sort({ checkInTime: -1 });
+    const studentId = req.user.id || req.user._id;
+    const now = new Date();
+
+    const [attendances, completedTimetables] = await Promise.all([
+      Attendance.find({ studentId })
+        .populate({
+          path: "timetableId",
+          select: "sessionType title batchName date venue startTime endTime rubricId",
+          populate: { path: "rubricId", select: "name" },
+        })
+        .sort({ checkInTime: -1 })
+        .lean(),
+      Timetable.find({ students: studentId })
+        .populate("rubricId", "name")
+        .lean(),
+    ]);
+
+    const attendanceByTimetableId = new Map(
+      attendances
+        .filter((record) => record?.timetableId?._id)
+        .map((record) => [String(record.timetableId._id), record]),
+    );
+
+    const derivedAbsentRecords = completedTimetables
+      .filter((timetable) => timetable?._id)
+      .filter((timetable) => !attendanceByTimetableId.has(String(timetable._id)))
+      .filter((timetable) => {
+        const sessionBoundary = toSessionBoundary(
+          timetable.date,
+          timetable.endTime || timetable.startTime,
+        );
+        return sessionBoundary && sessionBoundary <= now;
+      })
+      .map((timetable) => buildDerivedAbsentRecord(studentId, timetable));
+
+    const mergedAttendances = [...attendances, ...derivedAbsentRecords].sort(
+      (left, right) => {
+        const leftTime = new Date(
+          left.checkInTime || left.timetableId?.date || left.createdAt || 0,
+        ).getTime();
+        const rightTime = new Date(
+          right.checkInTime || right.timetableId?.date || right.createdAt || 0,
+        ).getTime();
+        return rightTime - leftTime;
+      },
+    );
 
     res.json({
       success: true,
-      count: attendances.length,
-      attendances,
+      count: mergedAttendances.length,
+      attendances: mergedAttendances,
     });
   } catch (error) {
     console.error("Get my attendance error:", error);

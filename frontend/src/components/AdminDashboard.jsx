@@ -57,10 +57,29 @@ const AdminDashboard = () => {
   };
 
   const handleAction = async (requestId, action) => {
-    if (!window.confirm(`Are you sure you want to ${action} this request?`))
+    let responseNote = "";
+
+    if (action === "REJECTED") {
+      const feedback = window.prompt(
+        "Enter rejection feedback for the requester:",
+        "",
+      );
+      if (feedback === null) return;
+      responseNote = feedback.trim();
+      if (!responseNote) {
+        alert("Rejection feedback is required.");
+        return;
+      }
+    } else if (!window.confirm(`Are you sure you want to ${action} this request?`)) {
       return;
+    }
+
     try {
-      await api.post("/feedback/permissions/respond", { requestId, action });
+      await api.post("/feedback/permissions/respond", {
+        requestId,
+        action,
+        responseNote,
+      });
       loadRequests();
     } catch (error) {
       alert(error.response?.data?.message || "Failed to process request.");

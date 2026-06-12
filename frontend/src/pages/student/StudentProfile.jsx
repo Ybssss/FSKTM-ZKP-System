@@ -43,6 +43,8 @@ const formatDateTime = (value) => {
   });
 };
 
+const normalizeProfileImageUrl = (value = "") => String(value || "").trim();
+
 export default function StudentProfile() {
   const { id: viewedUserId } = useParams();
   const { user } = useAuth();
@@ -56,6 +58,7 @@ export default function StudentProfile() {
   const [researchAbstract, setResearchAbstract] = useState("");
   const [savingResearch, setSavingResearch] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [profileImagePreview, setProfileImagePreview] = useState("");
 
   useEffect(() => {
     fetchProfile();
@@ -72,7 +75,11 @@ export default function StudentProfile() {
         : await userAPI.getMyProfile();
       const freshUser = res.user || {};
 
-      setProfileData(freshUser);
+      setProfileData({
+        ...freshUser,
+        profileImageUrl: normalizeProfileImageUrl(freshUser.profileImageUrl),
+      });
+      setProfileImagePreview("");
       setResearchTitle(freshUser.researchTitle || "");
       setResearchAbstract(freshUser.researchAbstract || "");
       setIsEditingResearch(false);
@@ -248,13 +255,23 @@ export default function StudentProfile() {
     try {
       setUploadingImage(true);
       setMessage({ type: "", text: "" });
+      setProfileImagePreview(normalizeProfileImageUrl(profileImageUrl));
       const res = await userAPI.updateProfileImage(displayUserId, profileImageUrl);
-      setProfileData(res.user || displayUser);
+      const persistedProfileImageUrl = normalizeProfileImageUrl(
+        res.user?.profileImageUrl ?? profileImageUrl,
+      );
+      setProfileData((prev) => ({
+        ...(prev || displayUser),
+        ...(res.user || {}),
+        profileImageUrl: persistedProfileImageUrl,
+      }));
+      setProfileImagePreview("");
       setMessage({
         type: "success",
         text: res.message || "Profile image updated successfully.",
       });
     } catch (error) {
+      setProfileImagePreview("");
       setMessage({
         type: "error",
         text:
@@ -297,6 +314,9 @@ export default function StudentProfile() {
     reader.readAsDataURL(file);
   };
 
+  const activeProfileImageUrl =
+    profileImagePreview || normalizeProfileImageUrl(displayUser.profileImageUrl);
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -338,13 +358,16 @@ export default function StudentProfile() {
           <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
             <div className="bg-indigo-600 h-24" />
             <div className="px-6 pb-6 relative">
-              <div className="w-20 h-20 bg-white rounded-full p-1 absolute -top-10 left-6 shadow-md">
-                {displayUser.profileImageUrl ? (
-                  <img
-                    src={displayUser.profileImageUrl}
-                    alt={`${displayUser.name || "User"} profile`}
-                    className="w-full h-full rounded-full object-cover"
-                  />
+              <div className="w-20 h-20 bg-white rounded-full p-1.5 absolute -top-10 left-6 shadow-md border border-gray-100">
+                {activeProfileImageUrl ? (
+                  <div className="w-full h-full rounded-full overflow-hidden bg-gray-50 flex items-center justify-center">
+                    <img
+                      key={activeProfileImageUrl}
+                      src={activeProfileImageUrl}
+                      alt={`${displayUser.name || "User"} profile`}
+                      className="w-full h-full rounded-full object-contain p-1"
+                    />
+                  </div>
                 ) : (
                   <div className="w-full h-full bg-indigo-100 rounded-full flex items-center justify-center text-indigo-600 text-3xl font-bold">
                     {displayUser.name?.charAt(0) || "U"}
@@ -398,7 +421,7 @@ export default function StudentProfile() {
                       <Camera className="w-4 h-4" />
                       {uploadingImage ? "Uploading..." : "Upload Image"}
                     </label>
-                    {displayUser.profileImageUrl && (
+                    {activeProfileImageUrl && (
                       <button
                         type="button"
                         onClick={() => updateProfileImage("")}

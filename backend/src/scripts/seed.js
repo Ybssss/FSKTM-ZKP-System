@@ -1721,7 +1721,6 @@ const seedDatabase = async () => {
         reason,
         scope: "SINGLE_EVALUATION",
         currentSessionId: target.currentSession._id,
-        batchId: target.currentSession.batchId || null,
       };
 
       if (status === "APPROVED") {

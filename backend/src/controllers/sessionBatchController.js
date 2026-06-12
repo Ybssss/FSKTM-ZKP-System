@@ -44,6 +44,20 @@ const normalizeDateOnly = (value) => {
   return raw.includes("T") ? raw.slice(0, 10) : raw;
 };
 
+const buildBatchId = (batchName, date) => {
+  const normalizedName = String(batchName || "")
+    .normalize("NFKD")
+    .replace(/[^A-Za-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toUpperCase()
+    .slice(0, 100);
+  const normalizedDate = normalizeDateOnly(date).replace(/-/g, "");
+  return cleanText(
+    `${normalizedName || "BATCH"}${normalizedDate ? `-${normalizedDate}` : ""}`,
+    150,
+  );
+};
+
 exports.createBatch = async (req, res) => {
   try {
     if (req.user.role !== "admin") {
@@ -67,7 +81,6 @@ exports.createBatch = async (req, res) => {
 
     if (
       !batchName ||
-      !batchId ||
       (!sessionType && !rubricId) ||
       !date ||
       !startTime ||
@@ -76,7 +89,7 @@ exports.createBatch = async (req, res) => {
       return res.status(400).json({
         success: false,
         message:
-          "Batch name, batch ID, session type, date, start time, and Google Meet link are required.",
+          "Batch name, session type, date, start time, and Google Meet link are required.",
       });
     }
 
@@ -87,7 +100,8 @@ exports.createBatch = async (req, res) => {
 
     const batch = await SessionBatch.create({
       batchName: cleanText(batchName, 100),
-      batchId: cleanText(batchId, 150),
+      batchId:
+        cleanText(batchId || "", 150) || buildBatchId(batchName, date),
       academicSession: cleanText(academicSession || "", 100),
       scheduleTitle: cleanText(
         scheduleTitle || "Postgraduate Progress Presentation Schedule",

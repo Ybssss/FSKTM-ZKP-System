@@ -64,8 +64,14 @@ export const getScoreDescription = (criterion, score) => {
     return criterion[score.descriptionKey];
   }
 
-  if (score.value === getCriterionMaxScore(criterion) && criterion?.exemplary) {
-    return criterion.exemplary;
+  if (score.value === getCriterionMaxScore(criterion)) {
+    if (criterion?.outstanding) {
+      return criterion.outstanding;
+    }
+
+    if (criterion?.exemplary) {
+      return criterion.exemplary;
+    }
   }
 
   return "No description provided.";

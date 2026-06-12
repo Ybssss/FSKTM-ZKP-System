@@ -2,34 +2,14 @@ import React, { useState, useEffect } from "react";
 import { rubricAPI } from "../../services/api";
 import { ClipboardList, Search, ChevronDown, ChevronUp } from "lucide-react";
 import UserProfileLink from "../../components/UserProfileLink";
+import {
+  formatMarkLabel,
+  getCriterionMaxScore,
+  getScoreDescription,
+  getScoreScale,
+} from "../../utils/evaluationForm";
 
-const SCORE_DESCRIPTORS = {
-  5: { label: "Outstanding", field: "outstanding" },
-  4: { label: "Exemplary", field: "exemplary" },
-  3: { label: "Proficient", field: "proficient" },
-  2: { label: "Satisfactory", field: "satisfactory" },
-  1: { label: "Foundational", field: "foundational" },
-  0: { label: "Novice", field: "novice" },
-};
-
-const getCriterionMaxScore = (criterion) => {
-  const maxScore = Math.floor(Number(criterion?.maxScore ?? 5));
-  return Number.isFinite(maxScore) && maxScore > 0 ? Math.min(maxScore, 5) : 5;
-};
-
-const getScoreScale = (criterion) =>
-  Array.from({ length: getCriterionMaxScore(criterion) + 1 }, (_, index) => {
-    const value = getCriterionMaxScore(criterion) - index;
-    return {
-      value,
-      ...(SCORE_DESCRIPTORS[value] || {
-        label: `Score ${value}`,
-        field: "",
-      }),
-    };
-  });
-
-const formatMarkLabel = (value) => `${value} ${value === 1 ? "mark" : "marks"}`;
+const formatSessionType = (value = "") => String(value).replaceAll("_", " ");
 
 export default function StudentRubrics() {
   const [rubrics, setRubrics] = useState([]);
@@ -135,7 +115,7 @@ export default function StudentRubrics() {
                           {rubric.name}
                         </h3>
                         <span className="px-2 py-1 bg-indigo-100 text-indigo-700 text-xs font-semibold rounded">
-                          {rubric.sessionType?.replaceAll("_", " ") || "Rubric"}
+                          {formatSessionType(rubric.sessionType) || "Rubric"}
                         </span>
                       </div>
                       {rubric.description && (
@@ -210,28 +190,52 @@ export default function StudentRubrics() {
 
                           {criterion.type !== "qualitative" && (
                             <div className="mt-4 border-t border-gray-100 pt-4">
-                              <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">
-                                Marking Scale
-                              </p>
+                              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                                <p className="text-xs font-bold text-gray-500 uppercase tracking-widest">
+                                  Marking Scale
+                                </p>
+                                <span className="text-xs font-semibold text-gray-500">
+                                  {getCriterionMaxScore(criterion) + 1} score slots
+                                </span>
+                              </div>
 
-                              <div className="space-y-2">
-                                {getScoreScale(criterion).map((score) => (
-                                  <div
-                                    key={score.value}
-                                    className="grid grid-cols-1 md:grid-cols-[80px_140px_1fr] gap-2 p-3 bg-gray-50 rounded-lg border border-gray-100 text-sm"
-                                  >
-                                    <div className="font-black text-indigo-700">
-                                      {formatMarkLabel(score.value)}
-                                    </div>
-                                    <div className="font-bold text-gray-900">
-                                      {score.label}
-                                    </div>
-                                    <div className="text-gray-700">
-                                      {criterion[score.field] ||
-                                        "No description provided."}
-                                    </div>
-                                  </div>
-                                ))}
+                              <div className="overflow-x-auto rounded-lg border border-gray-200">
+                                <table className="w-full min-w-[900px] table-fixed text-left text-sm">
+                                  <thead>
+                                    <tr className="bg-white border-b border-gray-200">
+                                      {getScoreScale(criterion).map((score) => (
+                                        <th
+                                          key={score.value}
+                                          className="p-3 border-r last:border-r-0 border-gray-200 text-center font-bold text-gray-500 text-xs uppercase tracking-wider"
+                                        >
+                                          {score.label} ({formatMarkLabel(score.value)})
+                                        </th>
+                                      ))}
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    <tr className="divide-x divide-gray-200">
+                                      {getScoreScale(criterion).map((score) => (
+                                        <td
+                                          key={score.value}
+                                          className="align-top bg-gray-50 p-4"
+                                        >
+                                          <div className="flex min-h-[172px] flex-col items-center text-center">
+                                            <span className="mb-3 rounded-full bg-gray-900 px-2.5 py-1 text-[11px] font-black text-white">
+                                              {formatMarkLabel(score.value)}
+                                            </span>
+                                            <span className="mb-3 rounded bg-gray-100 px-2 py-1 text-[11px] font-black text-gray-600">
+                                              Max {getCriterionMaxScore(criterion)}
+                                            </span>
+                                            <p className="text-xs leading-relaxed text-gray-700">
+                                              {getScoreDescription(criterion, score)}
+                                            </p>
+                                          </div>
+                                        </td>
+                                      ))}
+                                    </tr>
+                                  </tbody>
+                                </table>
                               </div>
                             </div>
                           )}

@@ -37,6 +37,18 @@ const addMinutes = (time, minutes) => {
   if (base === null) return "";
   return minutesToTime(base + Number(minutes || 0));
 };
+
+const buildBatchId = (batchName, date) => {
+  const normalizedName = String(batchName || "")
+    .normalize("NFKD")
+    .replace(/[^A-Za-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toUpperCase()
+    .slice(0, 100);
+  const normalizedDate = normalizeDateKey(date).replace(/-/g, "");
+  return `${normalizedName || "BATCH"}${normalizedDate ? `-${normalizedDate}` : ""}`;
+};
+
 const assignedPanelValue = (assignment) => assignment?.panelId || assignment;
 const sortSessionsBySchedule = (items = []) =>
   [...items].sort((a, b) => {
@@ -96,6 +108,13 @@ export default function TimetableManagementPage() {
   const [batchForm, setBatchForm] = useState({});
 
   const isExistingBatchMode = batchMode === "existing";
+  const derivedBatchId = useMemo(
+    () => buildBatchId(bulkConfig.batchName, bulkConfig.date),
+    [bulkConfig.batchName, bulkConfig.date],
+  );
+  const visibleBatchId = isExistingBatchMode
+    ? bulkConfig.batchId || selectedBatchId || derivedBatchId
+    : derivedBatchId;
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -298,6 +317,12 @@ export default function TimetableManagementPage() {
     return panels.find((panel) => String(panel._id) === panelId) || value;
   }, [panels]);
 
+  const resolveStudent = useCallback((value) => {
+    const studentId = idOf(value);
+    if (!studentId) return null;
+    return students.find((student) => String(student._id) === studentId) || value;
+  }, [students]);
+
   const assignedPanelNames = useCallback((student) =>
     (student.assignedPanels || [])
       .slice(0, 2)
@@ -464,9 +489,14 @@ export default function TimetableManagementPage() {
     try {
       const selectedRubric = rubrics.find((r) => r._id === bulkConfig.rubricId);
       const sessionType = selectedRubric?.sessionType || "PROPOSAL_DEFENSE";
+      if (batchMode === "new" && !bulkConfig.batchName.trim()) {
+        alert("Batch name is required.");
+        setSaving(false);
+        return;
+      }
       const finalBatchId = isExistingBatchMode
         ? selectedBatchId
-        : bulkConfig.batchId.trim() || `${bulkConfig.batchName.trim()}-${bulkConfig.date}`;
+        : derivedBatchId;
 
       if (batchMode === "new") {
         await sessionBatchAPI.create({
@@ -790,7 +820,7 @@ export default function TimetableManagementPage() {
       )}
 
       {activeTab === "bulk" && isAdmin && (
-        <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-6">
+        <div className="grid grid-cols-1 xl:grid-cols-[440px_minmax(0,1fr)] 2xl:grid-cols-[480px_minmax(0,1fr)] gap-6">
           <div className="space-y-4">
             <div className="bg-white rounded-xl border shadow-sm p-5">
               <h2 className="text-lg font-bold mb-4">Batch Mode</h2>
@@ -902,7 +932,14 @@ export default function TimetableManagementPage() {
             <div className="bg-white rounded-xl border shadow-sm p-5 space-y-3">
               <h2 className="text-lg font-bold">Batch Details</h2>
               <input value={bulkConfig.batchName} disabled={isExistingBatchMode} onChange={(e) => updateBulkConfig({ batchName: e.target.value })} placeholder="Batch Name, e.g. PIXEL" className="w-full p-2 border rounded-lg disabled:bg-gray-100" />
-              <input value={bulkConfig.batchId} disabled={isExistingBatchMode} onChange={(e) => updateBulkConfig({ batchId: e.target.value })} placeholder="Batch ID" className="w-full p-2 border rounded-lg disabled:bg-gray-100" />
+              <div className="w-full p-2 border rounded-lg bg-gray-50 text-sm disabled:bg-gray-100">
+                <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500 mb-1">
+                  {isExistingBatchMode ? "Batch ID" : "Batch ID (Auto-generated)"}
+                </p>
+                <p className="font-mono font-semibold text-gray-800 break-all">
+                  {visibleBatchId}
+                </p>
+              </div>
               <input type="date" value={bulkConfig.date} disabled={isExistingBatchMode} onChange={(e) => updateBulkConfig({ date: e.target.value })} className="w-full p-2 border rounded-lg disabled:bg-gray-100" />
               <input type="time" value={bulkConfig.startTime} disabled={isExistingBatchMode} onChange={(e) => updateBulkConfig({ startTime: e.target.value })} className="w-full p-2 border rounded-lg disabled:bg-gray-100" />
               <div className="grid grid-cols-2 gap-2">
@@ -983,7 +1020,17 @@ export default function TimetableManagementPage() {
                   Need Panels {students.length - studentsWithDefaultPanels}
                 </span>
               </div>
-              <div className="max-h-96 overflow-y-auto space-y-2 pr-1">
+              <p className="mb-3 text-xs text-gray-500">
+                Select from this list only. Profile links remain available after the student is placed in the review panel.
+              </p>
+              <div className="rounded-lg border border-gray-200 overflow-hidden">
+                <div className="grid grid-cols-[88px_minmax(0,1.25fr)_minmax(0,1fr)_74px] gap-3 px-3 py-2 text-[10px] font-black uppercase tracking-wide text-gray-500 bg-gray-50 border-b border-gray-200">
+                  <span>ID</span>
+                  <span>Student</span>
+                  <span>Default Panels</span>
+                  <span className="text-right">State</span>
+                </div>
+              <div className="max-h-[40rem] overflow-y-auto divide-y divide-gray-100">
                 {filteredBulkStudents.length === 0 && (
                   <div className="p-4 text-center text-sm text-gray-500 bg-gray-50 rounded-lg border border-dashed">
                     No students match this search.
@@ -991,12 +1038,13 @@ export default function TimetableManagementPage() {
                 )}
                 {filteredBulkStudents.map((student) => {
                   const defaultPanels = assignedPanelNames(student);
+                  const isSelected = selectedStudentIds.includes(student._id);
 
                   return (
-                    <div
+                    <button
                       key={student._id}
-                      role="button"
-                      tabIndex={0}
+                      type="button"
+                      aria-pressed={selectedStudentIds.includes(student._id)}
                       onClick={() => toggleStudentForBulk(student)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
@@ -1004,22 +1052,49 @@ export default function TimetableManagementPage() {
                           toggleStudentForBulk(student);
                         }
                       }}
-                      className={`w-full text-left p-3 rounded-lg border cursor-pointer ${selectedStudentIds.includes(student._id) ? "bg-indigo-50 border-indigo-300" : "bg-white border-gray-200 hover:bg-gray-50"}`}
+                      title={student.researchTitle || student.name || "Student"}
+                      className={`w-full grid grid-cols-[88px_minmax(0,1.25fr)_minmax(0,1fr)_74px] gap-3 px-3 py-3 text-left cursor-pointer transition-colors ${
+                        isSelected
+                          ? "bg-indigo-50"
+                          : "bg-white hover:bg-gray-50"
+                      }`}
                     >
-                      <p className="font-bold text-gray-900">
-                        <UserProfileLink
-                          user={student}
-                          className="font-bold"
-                          onClick={(e) => e.stopPropagation()}
-                        />
-                      </p>
-                      <p className="text-xs text-gray-500">{student.matricNumber || student.userId}</p>
-                      <p className={`text-[11px] mt-1 font-semibold ${defaultPanels.length === 2 ? "text-green-700" : "text-amber-700"}`}>
-                        Panels: {defaultPanels.length ? defaultPanels.join(" / ") : "Not assigned"}
-                      </p>
-                    </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-gray-900 break-all">
+                          {student.matricNumber || student.userId || "-"}
+                        </p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-bold text-sm text-gray-900 truncate">
+                          {student.name || student.userId || "Student"}
+                        </p>
+                        <p className="text-[11px] text-gray-500 truncate">
+                          {student.researchTitle || "No research title"}
+                        </p>
+                      </div>
+                      <div className="min-w-0">
+                        <p className={`text-[11px] font-semibold truncate ${defaultPanels.length === 2 ? "text-green-700" : "text-amber-700"}`}>
+                          {defaultPanels.length ? defaultPanels.join(" / ") : "Not assigned"}
+                        </p>
+                        <p className="text-[11px] text-gray-500 truncate">
+                          {student.email || "-"}
+                        </p>
+                      </div>
+                      <div className="flex justify-end">
+                        <span
+                          className={`shrink-0 rounded-full border px-2 py-1 text-[10px] font-bold uppercase ${
+                            isSelected
+                              ? "border-indigo-200 bg-indigo-100 text-indigo-700"
+                              : "border-gray-200 bg-gray-50 text-gray-500"
+                          }`}
+                        >
+                          {isSelected ? "Selected" : "Add"}
+                        </span>
+                      </div>
+                    </button>
                   );
                 })}
+              </div>
               </div>
             </div>
           </div>
@@ -1041,9 +1116,32 @@ export default function TimetableManagementPage() {
                   <div key={row.key} draggable onDragStart={() => setDragIndex(index)} onDragOver={(e) => e.preventDefault()} onDrop={() => { if (dragIndex !== null) moveRow(dragIndex, index); setDragIndex(null); }} className={`p-4 grid grid-cols-1 lg:grid-cols-[44px_90px_1fr_140px_180px_120px] gap-3 items-center ${errors.length ? "bg-red-50 border-l-4 border-red-500" : row.type === "existing" ? "bg-blue-50/30" : "bg-white"}`}>
                     <div className="flex items-center gap-2 text-gray-500"><GripVertical className="w-5 h-5" /><span className="font-bold">#{row.slotNo}</span></div>
                     <div><p className="font-bold text-gray-900">{row.startTime}</p><p className="text-xs text-gray-500">to {row.endTime}</p></div>
-                    <div><p className="font-bold text-gray-900">{row.studentName}</p><p className="text-xs text-gray-500">{row.matricNumber} · {row.type === "existing" ? "Scheduled" : "New Draft"}</p>{errors.map((err) => <p key={err} className="text-xs text-red-700 font-semibold mt-1 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> {err}</p>)}</div>
+                    <div>
+                      <p className="font-bold text-gray-900">
+                        <UserProfileLink
+                          user={resolveStudent(row.studentId)}
+                          fallback={row.studentName}
+                          className="font-bold"
+                        />
+                      </p>
+                      <p className="text-xs text-gray-500">{row.matricNumber} · {row.type === "existing" ? "Scheduled" : "New Draft"}</p>
+                      {errors.map((err) => <p key={err} className="text-xs text-red-700 font-semibold mt-1 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> {err}</p>)}
+                    </div>
                     <div><p className="text-xs text-gray-500 uppercase font-bold">Date</p><p className="font-semibold">{row.date}</p></div>
-                    <div className="text-sm"><p>{row.panel1Name}</p><p>{row.panel2Name}</p></div>
+                    <div className="text-sm">
+                      <p>
+                        <UserProfileLink
+                          user={resolvePanel(row.panel1Id)}
+                          fallback={row.panel1Name}
+                        />
+                      </p>
+                      <p>
+                        <UserProfileLink
+                          user={resolvePanel(row.panel2Id)}
+                          fallback={row.panel2Name}
+                        />
+                      </p>
+                    </div>
                     <div className="flex gap-1 justify-end">
                       <button onClick={() => moveRow(index, index - 1)} className="px-2 py-1 border rounded">↑</button>
                       <button onClick={() => moveRow(index, index + 1)} className="px-2 py-1 border rounded">↓</button>

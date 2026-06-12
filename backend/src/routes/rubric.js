@@ -48,8 +48,14 @@ const buildRubricPayload = (body) => {
           weight: Number(criterion.weight || 0),
           maxScore: normalizeMaxScore(criterion.maxScore, type),
           description: cleanText(criterion.description || "", 1000),
-          outstanding: cleanText(criterion.outstanding || "", 2000),
-          exemplary: cleanText(criterion.exemplary || "", 2000),
+          outstanding: cleanText(
+            criterion.outstanding || criterion.exemplary || "",
+            2000,
+          ),
+          exemplary: cleanText(
+            criterion.exemplary || criterion.outstanding || "",
+            2000,
+          ),
           proficient: cleanText(criterion.proficient || "", 2000),
           satisfactory: cleanText(criterion.satisfactory || "", 2000),
           foundational: cleanText(criterion.foundational || "", 2000),

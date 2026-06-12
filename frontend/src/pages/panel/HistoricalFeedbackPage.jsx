@@ -62,6 +62,35 @@ const getStudent = (item) => {
 
 const getRubric = (item) => getEvaluation(item)?.rubricId;
 
+const getHistoricalSortTimestamp = (item) => {
+  const evaluation = getEvaluation(item);
+  const session = getSession(item);
+  return new Date(
+    item?.approvedAt ||
+      item?.updatedAt ||
+      session?.date ||
+      evaluation?.updatedAt ||
+      evaluation?.createdAt ||
+      item?.createdAt ||
+      0,
+  ).getTime();
+};
+
+const sortHistoricalItemsByTime = (items = []) =>
+  [...items].sort(
+    (left, right) =>
+      getHistoricalSortTimestamp(right) - getHistoricalSortTimestamp(left),
+  );
+
+const PERMISSION_SCOPE_LABELS = {
+  SINGLE_EVALUATION: "Single Evaluation",
+  STUDENT_HISTORY: "Student History",
+  UNLOCK_EVALUATION: "Unlock Evaluation",
+};
+
+const getPermissionScopeLabel = (scope) =>
+  PERMISSION_SCOPE_LABELS[scope] || scope || "Single Evaluation";
+
 export default function HistoricalFeedbackPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -83,38 +112,72 @@ export default function HistoricalFeedbackPage() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
+      const historicalAccessRequestsOnly = (request) =>
+        request?.scope !== "UNLOCK_EVALUATION";
 
-      const res = await api.get("/feedback/search");
+      const searchPromise = api.get("/feedback/search");
+      const incomingPendingPromise = canManagePermissions
+        ? api.get("/feedback/permissions/incoming?status=PENDING")
+        : Promise.resolve({ data: { requests: [] } });
+      const incomingApprovedPromise = canManagePermissions
+        ? api.get("/feedback/permissions/incoming?status=APPROVED")
+        : Promise.resolve({ data: { requests: [] } });
+      const myPermissionsPromise = canManagePermissions
+        ? api.get("/feedback/permissions/my")
+        : Promise.resolve({ data: { requests: [] } });
+
+      const [res, pendingRes, approvedRes, myRes] = await Promise.all([
+        searchPromise,
+        incomingPendingPromise,
+        incomingApprovedPromise,
+        myPermissionsPromise,
+      ]);
+
       const allHistorical = res.data.evaluations || [];
-      const accessibleCompleted = allHistorical.filter(
-        (evaluation) => evaluation.status === "COMPLETED" || evaluation.accessGranted === true,
+      const myHistoricalRequests = (myRes.data.requests || []).filter(
+        historicalAccessRequestsOnly,
       );
-      const lockedHistorical = allHistorical.filter(
-        (evaluation) => evaluation.accessGranted === false,
+      const approvedMyEvaluationIds = new Set(
+        myHistoricalRequests
+          .filter((request) => request.status === "APPROVED")
+          .map((request) => String(getPermissionTargetId(request))),
+      );
+
+      const accessibleCompleted = sortHistoricalItemsByTime(
+        allHistorical.filter(
+          (evaluation) =>
+            evaluation.status === "COMPLETED" ||
+            evaluation.accessGranted === true ||
+            approvedMyEvaluationIds.has(String(getId(evaluation))),
+        ),
+      );
+      const lockedHistorical = sortHistoricalItemsByTime(
+        allHistorical.filter(
+          (evaluation) =>
+            evaluation.accessGranted === false &&
+            !approvedMyEvaluationIds.has(String(getId(evaluation))),
+        ),
       );
 
       setEvaluations(accessibleCompleted);
       setLockedEvals(lockedHistorical);
 
       if (canManagePermissions) {
-        const historicalAccessRequestsOnly = (request) =>
-          request?.scope !== "UNLOCK_EVALUATION";
-
-        const [pendingRes, approvedRes, myRes] = await Promise.all([
-          api.get("/feedback/permissions/incoming?status=PENDING"),
-          api.get("/feedback/permissions/incoming?status=APPROVED"),
-          api.get("/feedback/permissions/my"),
-        ]);
-
         setIncomingRequests(
-          (pendingRes.data.requests || []).filter(historicalAccessRequestsOnly),
+          sortHistoricalItemsByTime(
+            (pendingRes.data.requests || []).filter(
+              historicalAccessRequestsOnly,
+            ),
+          ),
         );
         setApprovedRequests(
-          (approvedRes.data.requests || []).filter(historicalAccessRequestsOnly),
+          sortHistoricalItemsByTime(
+            (approvedRes.data.requests || []).filter(
+              historicalAccessRequestsOnly,
+            ),
+          ),
         );
-        setMyRequests(
-          (myRes.data.requests || []).filter(historicalAccessRequestsOnly),
-        );
+        setMyRequests(sortHistoricalItemsByTime(myHistoricalRequests));
       }
     } catch (error) {
       console.error("Error loading historical data:", error);
@@ -176,12 +239,16 @@ export default function HistoricalFeedbackPage() {
       session?.batchName,
       session?.batchId,
       session?.academicSession,
+      item?.currentSessionId?.title,
+      item?.currentSessionId?.batchName,
+      item?.currentSessionId?.batchId,
       getPersonName(evaluation?.evaluatorId, ""),
       getPersonName(item?.requestingPanelId, ""),
       getPersonName(item?.owningPanelId, ""),
       item?.scope,
       item?.status,
       item?.reason,
+      item?.responseNote,
     ]
       .filter(Boolean)
       .join(" ")
@@ -195,23 +262,23 @@ export default function HistoricalFeedbackPage() {
   }, [buildSearchText, searchTerm]);
 
   const visibleEvaluations = useMemo(
-    () => filterItems(evaluations),
+    () => sortHistoricalItemsByTime(filterItems(evaluations)),
     [evaluations, filterItems],
   );
   const visibleLocked = useMemo(
-    () => filterItems(lockedEvals),
+    () => sortHistoricalItemsByTime(filterItems(lockedEvals)),
     [lockedEvals, filterItems],
   );
   const visiblePending = useMemo(
-    () => filterItems(incomingRequests),
+    () => sortHistoricalItemsByTime(filterItems(incomingRequests)),
     [incomingRequests, filterItems],
   );
   const visibleApproved = useMemo(
-    () => filterItems(approvedRequests),
+    () => sortHistoricalItemsByTime(filterItems(approvedRequests)),
     [approvedRequests, filterItems],
   );
   const visibleMyRequests = useMemo(
-    () => filterItems(myRequests),
+    () => sortHistoricalItemsByTime(filterItems(myRequests)),
     [myRequests, filterItems],
   );
 
@@ -250,13 +317,35 @@ export default function HistoricalFeedbackPage() {
     }
   };
 
-  const handleRespondToRequest = async (requestId, action) => {
-    if (!window.confirm(`Are you sure you want to ${action.toLowerCase()} this request?`)) {
+  const handleRespondToRequest = async (request, action) => {
+    let responseNote = "";
+
+    if (action === "REJECTED") {
+      const feedback = window.prompt(
+        "Enter rejection feedback for the requester:",
+        request?.responseNote || "",
+      );
+      if (feedback === null) return;
+      responseNote = feedback.trim();
+
+      if (!responseNote) {
+        alert("Rejection feedback is required.");
+        return;
+      }
+    } else if (
+      !window.confirm(
+        `Are you sure you want to ${action.toLowerCase()} this request?`,
+      )
+    ) {
       return;
     }
 
     try {
-      await api.post("/feedback/permissions/respond", { requestId, action });
+      await api.post("/feedback/permissions/respond", {
+        requestId: getId(request),
+        action,
+        responseNote,
+      });
       loadData();
     } catch (error) {
       alert(error.response?.data?.message || error.response?.data?.error || "Failed to respond.");
@@ -366,13 +455,25 @@ export default function HistoricalFeedbackPage() {
             </div>
 
             {locked && request && (
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">
-                  Your Request Reason
-                </p>
-                <p className="text-sm text-gray-800 break-words">
-                  {request.reason || "-"}
-                </p>
+              <div className="space-y-3">
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                    Your Request Reason
+                  </p>
+                  <p className="text-sm text-gray-800 break-words">
+                    {request.reason || "-"}
+                  </p>
+                </div>
+                {request.responseNote && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-3">
+                    <p className="text-[10px] font-bold uppercase tracking-wide text-red-600">
+                      Decision Feedback
+                    </p>
+                    <p className="text-sm text-red-900 break-words">
+                      {request.responseNote}
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -417,6 +518,41 @@ export default function HistoricalFeedbackPage() {
     const student = getStudent(request);
     const currentSession = request.currentSessionId;
     const rubric = getRubric(request);
+    const scopeLabel = getPermissionScopeLabel(request.scope);
+    const showRequestGroup =
+      request.scope === "STUDENT_HISTORY" && Boolean(request.batchId);
+    const requestContextFields = [
+      currentSession?.title
+        ? { label: "Requesting Session", value: currentSession.title }
+        : null,
+      currentSession?.batchName || currentSession?.batchId
+        ? {
+            label: "Requesting Batch",
+            value: currentSession.batchName || currentSession.batchId,
+          }
+        : null,
+    ].filter(Boolean);
+    const details = [
+      {
+        label: "Student",
+        value: `${getPersonName(student)} ${
+          student?.matricNumber ? `(${student.matricNumber})` : ""
+        }`,
+      },
+      { label: "Historical Session", value: session?.title },
+      { label: "Historical Batch", value: session?.batchName || session?.batchId },
+      {
+        label: "Historical Date",
+        value: `${formatDate(session?.date)} · ${session?.startTime || "-"} - ${session?.endTime || "-"}`,
+      },
+      { label: "Rubric / Type", value: rubric?.name || evaluation?.sessionType },
+      {
+        label: "Original Owner",
+        value: getPersonName(request.owningPanelId || evaluation?.evaluatorId),
+      },
+      { label: "Access Holder", value: getPersonName(request.requestingPanelId) },
+      ...requestContextFields,
+    ];
 
     return (
       <div className="p-4 sm:p-5 border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
@@ -435,30 +571,40 @@ export default function HistoricalFeedbackPage() {
                 {request.status}
               </span>
               <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-blue-100 text-blue-700">
-                {request.scope || "SINGLE_EVALUATION"}
+                {scopeLabel}
               </span>
-              {request.batchId && (
+              {showRequestGroup && (
                 <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-purple-100 text-purple-700">
-                  Request batch {request.batchId}
+                  Appeal Group {request.batchId}
                 </span>
               )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-              <InfoLine label="Student" value={`${getPersonName(student)} ${student?.matricNumber ? `(${student.matricNumber})` : ""}`} />
-              <InfoLine label="Historical Session" value={session?.title} />
-              <InfoLine label="Historical Batch" value={session?.batchName || session?.batchId} />
-              <InfoLine label="Historical Date" value={`${formatDate(session?.date)} · ${session?.startTime || "-"} - ${session?.endTime || "-"}`} />
-              <InfoLine label="Rubric / Type" value={rubric?.name || evaluation?.sessionType} />
-              <InfoLine label="Original Owner" value={getPersonName(request.owningPanelId || evaluation?.evaluatorId)} />
-              <InfoLine label="Access Holder" value={getPersonName(request.requestingPanelId)} />
-              <InfoLine label="Current Session" value={currentSession?.title || "-"} />
-              <InfoLine label="Current Batch" value={currentSession?.batchName || currentSession?.batchId || "-"} />
+              {details.map((detail) => (
+                <InfoLine
+                  key={`${detail.label}-${detail.value || "-"}`}
+                  label={detail.label}
+                  value={detail.value}
+                />
+              ))}
             </div>
 
-            <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-              <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Reason</p>
-              <p className="text-sm text-gray-800 break-words">{request.reason || "-"}</p>
+            <div className="space-y-3">
+              <div className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Reason</p>
+                <p className="text-sm text-gray-800 break-words">{request.reason || "-"}</p>
+              </div>
+              {request.responseNote && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-3">
+                  <p className="text-[10px] font-bold text-red-600 uppercase tracking-wide">
+                    Decision Feedback
+                  </p>
+                  <p className="text-sm text-red-900 break-words">
+                    {request.responseNote}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -466,13 +612,13 @@ export default function HistoricalFeedbackPage() {
             {mode === "pending" && (
               <>
                 <button
-                  onClick={() => handleRespondToRequest(request._id, "APPROVED")}
+                  onClick={() => handleRespondToRequest(request, "APPROVED")}
                   className="px-3 py-2 rounded-lg bg-green-600 text-white text-sm font-bold hover:bg-green-700 flex items-center gap-2"
                 >
                   <CheckCircle className="w-4 h-4" /> Approve
                 </button>
                 <button
-                  onClick={() => handleRespondToRequest(request._id, "REJECTED")}
+                  onClick={() => handleRespondToRequest(request, "REJECTED")}
                   className="px-3 py-2 rounded-lg bg-red-600 text-white text-sm font-bold hover:bg-red-700 flex items-center gap-2"
                 >
                   <XCircle className="w-4 h-4" /> Reject

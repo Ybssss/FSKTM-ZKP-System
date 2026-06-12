@@ -112,6 +112,7 @@ export default function UsersPage() {
     originalRole: "",
     matricNumber: "",
     program: "",
+    profession: "",
     researchTitle: "",
     supervisorId: "",
     expertiseTags: [],
@@ -147,6 +148,7 @@ export default function UsersPage() {
       originalRole: targetUser.role,
       matricNumber: targetUser.matricNumber || "",
       program: targetUser.program || "",
+      profession: targetUser.profession || "",
       researchTitle: targetUser.researchTitle || "",
       supervisorId:
         targetUser.supervisorId?._id || targetUser.supervisorId || "",
@@ -178,6 +180,7 @@ export default function UsersPage() {
 
         payload.userId = cleanMatric;
         payload.matricNumber = cleanMatric;
+        payload.profession = "";
         payload.expertiseTags = [];
       } else if (payload.role === "panel" || payload.role === "admin") {
         if (!payload.userId.trim()) {
@@ -188,6 +191,7 @@ export default function UsersPage() {
         // Preserve panel/admin User ID casing exactly as typed by admin.
         // Only remove spaces because this ID is used for login.
         payload.userId = payload.userId.replace(/\s+/g, "").trim();
+        payload.profession = String(payload.profession || "").trim();
         payload.expertiseTags = Array.isArray(payload.expertiseTags)
           ? payload.expertiseTags
               .map((tag) => String(tag).trim())
@@ -241,7 +245,9 @@ export default function UsersPage() {
         payload.matricNumber = payload.matricNumber
           .replace(/\s+/g, "")
           .toUpperCase();
+        payload.profession = "";
       } else if (payload.role === "panel" || payload.role === "admin") {
+        payload.profession = String(payload.profession || "").trim();
         delete payload.researchTitle;
         delete payload.program;
       }
@@ -403,6 +409,7 @@ export default function UsersPage() {
               originalRole: "",
               matricNumber: "",
               program: "",
+              profession: "",
               researchTitle: "",
               supervisorId: "",
               expertiseTags: [],
@@ -564,6 +571,13 @@ export default function UsersPage() {
                       </span>
 
                       {(u.role === "panel" || u.role === "admin") &&
+                        u.profession && (
+                          <p className="mt-2 text-xs font-semibold text-gray-600">
+                            {u.profession}
+                          </p>
+                        )}
+
+                      {(u.role === "panel" || u.role === "admin") &&
                         u.expertiseTags &&
                         u.expertiseTags.length > 0 && (
                           <div className="mt-2 flex flex-wrap gap-1 w-56">
@@ -678,6 +692,8 @@ export default function UsersPage() {
                       role: e.target.value,
                       userId:
                         e.target.value === "student" ? "" : formData.userId,
+                      profession:
+                        e.target.value === "student" ? "" : formData.profession,
                     })
                   }
                   className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500 bg-white"
@@ -792,6 +808,20 @@ export default function UsersPage() {
                       onChange={(e) =>
                         setFormData({ ...formData, userId: e.target.value })
                       }
+                      className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">
+                      Position / Profession
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.profession}
+                      onChange={(e) =>
+                        setFormData({ ...formData, profession: e.target.value })
+                      }
+                      placeholder="e.g. DS13 Pensyarah Kanan — Jabatan Multimedia"
                       className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
@@ -975,21 +1005,37 @@ export default function UsersPage() {
               )}
 
               {(formData.role === "panel" || formData.role === "admin") && (
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-1">
-                    Expertise / Specialty
-                  </label>
-                  <p className="text-[10px] text-gray-500 font-bold uppercase mb-2">
-                    Type a specialty and press ENTER to add it.
-                  </p>
-                  <TagInput
-                    tags={formData.expertiseTags}
-                    setTags={(newTags) =>
-                      setFormData({ ...formData, expertiseTags: newTags })
-                    }
-                    placeholder="e.g. Artificial Intelligence"
-                  />
-                </div>
+                <>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">
+                      Position / Profession
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.profession}
+                      onChange={(e) =>
+                        setFormData({ ...formData, profession: e.target.value })
+                      }
+                      placeholder="e.g. DS13 Pensyarah Kanan — Jabatan Multimedia"
+                      className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">
+                      Expertise / Specialty
+                    </label>
+                    <p className="text-[10px] text-gray-500 font-bold uppercase mb-2">
+                      Type a specialty and press ENTER to add it.
+                    </p>
+                    <TagInput
+                      tags={formData.expertiseTags}
+                      setTags={(newTags) =>
+                        setFormData({ ...formData, expertiseTags: newTags })
+                      }
+                      placeholder="e.g. Artificial Intelligence"
+                    />
+                  </div>
+                </>
               )}
 
               <div className="pt-4 flex justify-end gap-3 border-t mt-6">

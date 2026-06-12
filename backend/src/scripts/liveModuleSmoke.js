@@ -1038,6 +1038,7 @@ async function main() {
       const rejectRes = await adminClient.post("/feedback/permissions/respond", {
         requestId: unlockPermissionId,
         action: "REJECTED",
+        responseNote: "Live smoke rejection note.",
       });
 
       if (!rejectRes.data?.success || rejectRes.data.request?.status !== "REJECTED") {

@@ -58,6 +58,7 @@ export default function EvaluationPage() {
 
   const [selectedEval, setSelectedEval] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [dismissedEvaluationId, setDismissedEvaluationId] = useState("");
 
   const [scores, setScores] = useState({});
   const [qualFeedback, setQualFeedback] = useState({});
@@ -220,6 +221,7 @@ export default function EvaluationPage() {
   };
 
   const openEvaluationModal = useCallback((ev) => {
+    setDismissedEvaluationId("");
     setSelectedEval(ev);
 
     if (!urlId || urlId !== ev._id) {
@@ -254,15 +256,21 @@ export default function EvaluationPage() {
   }, [location.state, navigate, urlId]);
 
   useEffect(() => {
-    if (urlId && evaluations.length > 0 && !selectedEval) {
+    if (
+      urlId &&
+      evaluations.length > 0 &&
+      !selectedEval &&
+      String(urlId) !== String(dismissedEvaluationId)
+    ) {
       const targetEval = evaluations.find((ev) => ev._id === urlId);
       if (targetEval) {
         openEvaluationModal(targetEval);
       }
     }
-  }, [urlId, evaluations, selectedEval, openEvaluationModal]);
+  }, [urlId, evaluations, selectedEval, dismissedEvaluationId, openEvaluationModal]);
 
   const closeModal = () => {
+    setDismissedEvaluationId(selectedEval?._id || urlId || "");
     setSelectedEval(null);
     setScores({});
     setQualFeedback({});

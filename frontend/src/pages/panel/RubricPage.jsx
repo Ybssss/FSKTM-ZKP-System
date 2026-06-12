@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import api from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
+import { getScoreDescription as getRubricScoreDescription } from "../../utils/evaluationForm";
 
 const toSessionTypeCode = (value = "") =>
   String(value)
@@ -695,8 +696,10 @@ export default function RubricPage() {
                                     {score.label} ({formatMarkLabel(score.value)})
                                   </p>
                                   <p className="text-xs text-gray-700">
-                                    {criterion[score.field] ||
-                                      "No description provided."}
+                                    {getRubricScoreDescription(criterion, {
+                                      value: score.value,
+                                      descriptionKey: score.field,
+                                    })}
                                   </p>
                                 </div>
                               );

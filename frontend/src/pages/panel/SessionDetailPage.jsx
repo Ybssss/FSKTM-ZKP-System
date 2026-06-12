@@ -60,6 +60,17 @@ export default function SessionDetailPage() {
     file: null,
   });
 
+  const getHistoricalTimestamp = useCallback((evaluation, request) => {
+    return new Date(
+      request?.approvedAt ||
+        request?.updatedAt ||
+        evaluation?.sessionId?.date ||
+        evaluation?.updatedAt ||
+        evaluation?.createdAt ||
+        0,
+    ).getTime();
+  }, []);
+
   const loadSessionData = useCallback(async () => {
     try {
       setLoading(true);
@@ -92,10 +103,24 @@ export default function SessionDetailPage() {
         const studentId = foundSession.student._id || foundSession.student;
 
         try {
-          const histRes = await api.get(
-            `/feedback/search?studentId=${studentId}`,
-          );
+          const [histRes, permRes] = await Promise.all([
+            api.get(`/feedback/search?studentId=${studentId}`),
+            api.get("/feedback/permissions/my"),
+          ]);
+
           const pastEvs = histRes.data.evaluations || [];
+          const loadedPermissions = permRes.data.requests || [];
+          const approvedPermissionIds = new Set(
+            loadedPermissions
+              .filter((permission) => permission.status === "APPROVED")
+              .map((permission) => {
+                const target =
+                  typeof permission.targetEvaluationId === "object"
+                    ? permission.targetEvaluationId?._id
+                    : permission.targetEvaluationId;
+                return String(target || "");
+              }),
+          );
 
           const pastCompleted = pastEvs
             .filter((e) => {
@@ -103,25 +128,36 @@ export default function SessionDetailPage() {
                 e.sessionId?._id?.toString() || e.sessionId?.toString();
               return (
                 eSessionId !== id.toString() &&
-                (e.status === "COMPLETED" || e.accessGranted === false)
+                (e.status === "COMPLETED" ||
+                  e.accessGranted === false ||
+                  approvedPermissionIds.has(String(e._id)))
               );
             })
-            .sort(
-              (a, b) =>
-                new Date(b.updatedAt || b.date) -
-                new Date(a.updatedAt || a.date),
-            );
+            .sort((a, b) => {
+              const requestA = loadedPermissions.find((permission) => {
+                const target =
+                  typeof permission.targetEvaluationId === "object"
+                    ? permission.targetEvaluationId?._id
+                    : permission.targetEvaluationId;
+                return String(target || "") === String(a._id);
+              });
+              const requestB = loadedPermissions.find((permission) => {
+                const target =
+                  typeof permission.targetEvaluationId === "object"
+                    ? permission.targetEvaluationId?._id
+                    : permission.targetEvaluationId;
+                return String(target || "") === String(b._id);
+              });
+              return (
+                getHistoricalTimestamp(b, requestB) -
+                getHistoricalTimestamp(a, requestA)
+              );
+            });
 
           setHistoricalEvals(pastCompleted);
+          setPermissions(loadedPermissions);
         } catch {
-          console.warn("Could not load historical evals.");
-        }
-
-        try {
-          const permRes = await api.get("/feedback/permissions/my");
-          setPermissions(permRes.data.requests || []);
-        } catch {
-          console.warn("Permissions route not mounted yet.");
+          console.warn("Could not load historical evals or permissions.");
         }
       }
     } catch {
@@ -129,7 +165,7 @@ export default function SessionDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [id, isStaff, isStudent]);
+  }, [getHistoricalTimestamp, id, isStaff, isStudent]);
 
   useEffect(() => {
     loadSessionData();
@@ -1058,8 +1094,12 @@ export default function SessionDetailPage() {
               {historicalEvals.map((ev) => {
                 const isOwner =
                   ev.evaluatorId?._id === user.id || ev.evaluatorId === user.id;
-                const isGranted = isAdmin || isOwner;
                 const request = getRequestForEvaluation(ev._id);
+                const isGranted =
+                  isAdmin ||
+                  isOwner ||
+                  ev.accessGranted === true ||
+                  request?.status === "APPROVED";
 
                 return (
                   <div
@@ -1126,29 +1166,41 @@ export default function SessionDetailPage() {
                       )}
                     </div>
 
-                    <div className="flex items-center gap-3">
-                      {isGranted || request?.status === "APPROVED" ? (
-                        <button
-                          onClick={() => goToEvaluation(ev._id)}
-                          className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-md"
-                        >
-                          <Eye className="w-4 h-4" /> View Full Report
-                        </button>
-                      ) : request?.status === "PENDING" ? (
-                        <span className="px-5 py-2.5 bg-gray-800 text-yellow-500 font-bold rounded-lg border border-gray-700 flex items-center gap-2">
-                          <Clock className="w-4 h-4" /> Request Pending...
-                        </span>
-                      ) : request?.status === "REJECTED" ? (
-                        <span className="px-5 py-2.5 bg-gray-800 text-red-500 font-bold rounded-lg border border-gray-700 flex items-center gap-2">
-                          <ShieldAlert className="w-4 h-4" /> Access Denied
-                        </span>
-                      ) : (
-                        <button
-                          onClick={() => handleRequestAccess(ev)}
-                          className="px-5 py-2.5 bg-gray-800 text-indigo-400 font-bold rounded-lg hover:bg-gray-700 border border-gray-700 transition-colors flex items-center gap-2"
-                        >
-                          <Lock className="w-4 h-4" /> Request Access
-                        </button>
+                    <div className="flex flex-col items-start md:items-end gap-3">
+                      <div className="flex items-center gap-3">
+                        {isGranted || request?.status === "APPROVED" ? (
+                          <button
+                            onClick={() => goToEvaluation(ev._id)}
+                            className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-md"
+                          >
+                            <Eye className="w-4 h-4" /> View Full Report
+                          </button>
+                        ) : request?.status === "PENDING" ? (
+                          <span className="px-5 py-2.5 bg-gray-800 text-yellow-500 font-bold rounded-lg border border-gray-700 flex items-center gap-2">
+                            <Clock className="w-4 h-4" /> Request Pending...
+                          </span>
+                        ) : request?.status === "REJECTED" ? (
+                          <span className="px-5 py-2.5 bg-gray-800 text-red-500 font-bold rounded-lg border border-gray-700 flex items-center gap-2">
+                            <ShieldAlert className="w-4 h-4" /> Access Denied
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleRequestAccess(ev)}
+                            className="px-5 py-2.5 bg-gray-800 text-indigo-400 font-bold rounded-lg hover:bg-gray-700 border border-gray-700 transition-colors flex items-center gap-2"
+                          >
+                            <Lock className="w-4 h-4" /> Request Access
+                          </button>
+                        )}
+                      </div>
+                      {request?.status === "REJECTED" && request?.responseNote && (
+                        <div className="max-w-sm rounded-lg border border-red-900 bg-red-950/40 px-4 py-3">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-red-300">
+                            Rejection Feedback
+                          </p>
+                          <p className="mt-1 text-sm text-red-100">
+                            {request.responseNote}
+                          </p>
+                        </div>
                       )}
                     </div>
                   </div>

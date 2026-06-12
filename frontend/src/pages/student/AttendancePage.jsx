@@ -12,6 +12,75 @@ import {
   Camera,
 } from "lucide-react";
 
+const STATUS_STYLES = {
+  present: {
+    card: "bg-green-50 border-green-200",
+    badge: "bg-green-100 text-green-800",
+    icon: "text-green-600",
+  },
+  absent: {
+    card: "bg-red-50 border-red-200",
+    badge: "bg-red-100 text-red-800",
+    icon: "text-red-600",
+  },
+  late: {
+    card: "bg-amber-50 border-amber-200",
+    badge: "bg-amber-100 text-amber-800",
+    icon: "text-amber-600",
+  },
+  excused: {
+    card: "bg-blue-50 border-blue-200",
+    badge: "bg-blue-100 text-blue-800",
+    icon: "text-blue-600",
+  },
+};
+
+const STATUS_ICONS = {
+  present: CheckCircle,
+  late: Clock,
+  excused: Calendar,
+  absent: XCircle,
+};
+
+const formatSessionDate = (value) => {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("en-MY", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  });
+};
+
+const formatAttendanceTimestamp = (record) => {
+  const value = record.checkInTime || record.createdAt;
+  if (!value) return "No attendance recorded";
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "No attendance recorded";
+
+  return date.toLocaleString("en-MY", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+};
+
+const formatSessionWindow = (record) => {
+  const startTime = record.timetableId?.startTime || "";
+  const endTime = record.timetableId?.endTime || "";
+
+  if (startTime && endTime) {
+    return `${startTime} - ${endTime}`;
+  }
+
+  return startTime || endTime || "Time not set";
+};
+
+const getSessionTitle = (record) =>
+  record.timetableId?.title ||
+  record.timetableId?.sessionType?.replaceAll("_", " ") ||
+  "Session";
+
 export default function AttendancePage() {
   const [attendanceRecords, setAttendanceRecords] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -271,46 +340,60 @@ export default function AttendancePage() {
         <div className="p-6">
           {attendanceRecords.length > 0 ? (
             <div className="space-y-3">
-              {attendanceRecords.map((record) => (
+              {attendanceRecords.map((record) => {
+                const statusKey = record.status || "absent";
+                const styles = STATUS_STYLES[statusKey] || STATUS_STYLES.absent;
+                const Icon = STATUS_ICONS[statusKey] || XCircle;
+
+                return (
                 <div
                   key={record._id}
-                  className={`flex items-center justify-between p-4 rounded-lg border-2 ${record.status === "present" ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"}`}
+                  className={`flex items-start justify-between gap-4 p-4 rounded-lg border-2 ${styles.card}`}
                 >
                   <div className="flex items-center gap-4">
-                    {record.status === "present" ? (
-                      <CheckCircle className="w-6 h-6 text-green-600" />
-                    ) : (
-                      <XCircle className="w-6 h-6 text-red-600" />
-                    )}
+                    <Icon className={`w-6 h-6 ${styles.icon}`} />
                     <div>
                       <h3 className="font-semibold text-gray-900">
-                        {record.timetableId?.title || "Session"}
+                        {getSessionTitle(record)}
                       </h3>
-                      <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                        <span className="flex items-center gap-1">
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        {record.timetableId?.batchName && (
+                          <span className="rounded border border-indigo-100 bg-indigo-50 px-2.5 py-1 text-[11px] font-bold text-indigo-700">
+                            Batch: {record.timetableId.batchName}
+                          </span>
+                        )}
+                        {record.timetableId?.rubricId?.name && (
+                          <span className="rounded border border-gray-200 bg-white px-2.5 py-1 text-[11px] font-bold text-gray-700">
+                            Rubric: {record.timetableId.rubricId.name}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-4 mt-3 text-xs text-gray-500">
+                        <span className="flex items-center gap-1 font-semibold">
                           <Calendar className="w-3 h-3" />
-                          {new Date(
-                            record.timetableId?.date,
-                          ).toLocaleDateString()}
+                          {formatSessionDate(record.timetableId?.date)}
+                        </span>
+                        <span className="flex items-center gap-1 font-semibold">
+                          <Clock className="w-3 h-3" />
+                          {formatSessionWindow(record)}
                         </span>
                         <span className="flex items-center gap-1">
                           <Clock className="w-3 h-3" />
-                          {new Date(
-                            record.checkInTime || record.createdAt,
-                          ).toLocaleString()}
+                          {formatAttendanceTimestamp(record)}
                         </span>
                       </div>
                     </div>
                   </div>
                   <div className="text-right">
                     <span
-                      className={`px-3 py-1 rounded-lg text-sm font-semibold ${record.status === "present" ? "bg-green-100 text-green-800" : "bg-red-100 text-red-800"}`}
+                      className={`px-3 py-1 rounded-lg text-sm font-semibold ${styles.badge}`}
                     >
                       {record.status.toUpperCase()}
                     </span>
                   </div>
                 </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="text-center py-12">

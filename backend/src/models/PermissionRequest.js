@@ -74,6 +74,11 @@ const permissionRequestSchema = new mongoose.Schema(
       type: String,
       default: "Need to review historical context for current evaluation.",
     },
+
+    responseNote: {
+      type: String,
+      default: null,
+    },
   },
   { timestamps: true },
 );

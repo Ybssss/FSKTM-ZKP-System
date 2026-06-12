@@ -89,6 +89,7 @@ exports.createUser = async (req, res) => {
       role,
       matricNumber,
       program,
+      profession,
       researchTitle,
       researchAbstract,
       supervisorId,
@@ -151,6 +152,11 @@ exports.createUser = async (req, res) => {
             .map((tag) => tag.trim())
             .filter(Boolean)
         : [];
+    const cleanProfession = String(profession || "")
+      .normalize("NFKC")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 160);
 
     const newUser = new User({
       userId: cleanUserId,
@@ -179,6 +185,7 @@ exports.createUser = async (req, res) => {
       }),
 
       ...(["panel", "admin"].includes(role) && {
+        profession: cleanProfession,
         expertiseTags: cleanExpertiseTags,
       }),
     });
@@ -332,7 +339,14 @@ exports.updateUser = async (req, res) => {
               .slice(0, 5000)
           : undefined,
       supervisorId,
-      profession,
+      profession:
+        profession !== undefined
+          ? String(profession || "")
+              .normalize("NFKC")
+              .replace(/\s+/g, " ")
+              .trim()
+              .slice(0, 160)
+          : undefined,
       expertiseTags,
     };
 

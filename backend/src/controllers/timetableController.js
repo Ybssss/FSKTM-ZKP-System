@@ -115,6 +115,20 @@ const toNonNegativeInt = (value, fallback = 0) => {
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 };
 
+const buildBatchId = (batchName, date) => {
+  const normalizedName = String(batchName || "")
+    .normalize("NFKD")
+    .replace(/[^A-Za-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .toUpperCase()
+    .slice(0, 100);
+  const normalizedDate = normalizeDateOnly(date).replace(/-/g, "");
+  return cleanText(
+    `${normalizedName || "BATCH"}${normalizedDate ? `-${normalizedDate}` : ""}`,
+    150,
+  );
+};
+
 const sameId = (a, b) => idString(a) && idString(a) === idString(b);
 
 const sessionHasUser = (values = [], userId) =>
@@ -533,10 +547,16 @@ exports.createBulkTimetables = async (req, res) => {
       return res.status(404).json({ success: false, message: "Selected batch was not found." });
     }
 
+    const requestedBatchName = cleanText(batchName || "", 100);
+    const requestedBatchId = cleanText(batchId || "", 150);
     const effectiveDate = normalizeDateOnly(date || selectedBatch?.date);
     const effectiveStartTime = cleanText(startTime || selectedBatch?.startTime || "09:00", 20);
-    const effectiveBatchId = cleanText(batchId || selectedBatch?.batchId || `${batchName}-${effectiveDate}`, 150);
-    const effectiveBatchName = cleanText(batchName || selectedBatch?.batchName || effectiveBatchId, 100);
+    const effectiveBatchId = selectedBatch
+      ? cleanText(selectedBatch.batchId, 150)
+      : requestedBatchId || buildBatchId(requestedBatchName, effectiveDate);
+    const effectiveBatchName = selectedBatch
+      ? cleanText(selectedBatch.batchName || effectiveBatchId, 100)
+      : requestedBatchName || effectiveBatchId;
     const effectiveVenue = cleanText(googleMeetLink || venue || selectedBatch?.googleMeetLink || "", 500);
     const effectiveAcademicSession = cleanText(academicSession || selectedBatch?.academicSession || "", 100);
     const effectiveScheduleTitle = cleanText(
