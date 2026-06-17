@@ -119,7 +119,7 @@ const normalizeSearchText = (value = "") =>
   String(value || "").toLowerCase().trim();
 const tokenizeSearchText = (value = "") =>
   normalizeSearchText(value)
-    .split(/[\s/()_-]+/)
+    .split(/[\s/()-]+/)
     .map((token) => token.trim())
     .filter(Boolean);
 const buildEvaluationSearchData = (evaluation) => {
