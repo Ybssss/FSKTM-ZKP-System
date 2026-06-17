@@ -410,11 +410,15 @@ export default function HistoricalFeedbackPage() {
     const student = getStudent(evaluation);
     const rubric = getRubric(evaluation);
     const request = locked ? getRequestForEvaluation(evaluation._id) : null;
+    const isCompletedEvaluation =
+      String(evaluation?.status || "").toUpperCase() === "COMPLETED";
+    const isAwaitingCompletion = locked && !isCompletedEvaluation;
     const isPending = request?.status === "PENDING";
     const isApproved = request?.status === "APPROVED";
     const isRejected = request?.status === "REJECTED";
 
     const handleLockedAction = () => {
+      if (isAwaitingCompletion) return;
       if (isPending) return;
       if (isApproved) {
         openEvaluationReport(evaluation);
@@ -453,6 +457,11 @@ export default function HistoricalFeedbackPage() {
               {locked && (
                 <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-red-100 text-red-700 flex items-center gap-1">
                   <Lock className="w-3 h-3" /> Locked
+                </span>
+              )}
+              {isAwaitingCompletion && (
+                <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-gray-200 text-gray-700 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" /> Awaiting Completion
                 </span>
               )}
               {request && (
@@ -495,6 +504,17 @@ export default function HistoricalFeedbackPage() {
               <InfoLine label="Materials" value={`${session?.studentDocuments?.length || 0} file(s)`} />
             </div>
 
+            {isAwaitingCompletion && (
+              <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                <p className="text-[10px] font-bold uppercase tracking-wide text-gray-500">
+                  Access Status
+                </p>
+                <p className="text-sm text-gray-800 break-words">
+                  Historical access can only be requested after this evaluation is completed.
+                </p>
+              </div>
+            )}
+
             {locked && request && (
               <div className="space-y-3">
                 <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
@@ -529,17 +549,21 @@ export default function HistoricalFeedbackPage() {
               onClick={() =>
                 locked ? handleLockedAction() : openEvaluationReport(evaluation)
               }
-              disabled={isPending}
+              disabled={isPending || isAwaitingCompletion}
               className={`px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 ${
                 isPending
                   ? "bg-yellow-100 text-yellow-800 cursor-not-allowed"
+                  : isAwaitingCompletion
+                    ? "bg-gray-200 text-gray-500 cursor-not-allowed"
                   : locked
                   ? "bg-indigo-600 text-white hover:bg-indigo-700"
                   : "bg-gray-900 text-white hover:bg-gray-800"
               }`}
             >
               {locked ? <Unlock className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              {isPending
+              {isAwaitingCompletion
+                ? "Not Completed"
+                : isPending
                 ? "Pending"
                 : isRejected
                   ? "Request Again"
@@ -619,19 +643,12 @@ export default function HistoricalFeedbackPage() {
         value: `${formatDate(session?.date)} · ${session?.startTime || "-"} - ${session?.endTime || "-"}`,
       },
       {
-        label: "Rubric / Session",
-        content:
-          session?.title && getSessionId(request) ? (
-            <button
-              type="button"
-              onClick={() => openSessionDetail(request)}
-              className="text-indigo-700 hover:text-indigo-900 hover:underline"
-            >
-              {getEvaluationDisplayLabel(request)}
-            </button>
-          ) : (
-            getEvaluationDisplayLabel(request)
-          ),
+        label: "Rubric / Type",
+        value:
+          getRubricDisplayName(
+            getRubric(request),
+            evaluation?.sessionType || session?.sessionType,
+          ) || "Evaluation",
       },
       {
         label: "Original Owner",
