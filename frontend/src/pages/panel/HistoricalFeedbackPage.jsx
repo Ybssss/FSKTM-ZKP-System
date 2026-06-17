@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   CheckCircle,
   Eye,
-  FileText,
   Lock,
   Search,
   Shield,
@@ -12,18 +12,10 @@ import {
 } from "lucide-react";
 import api from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
-import {
-  getDocumentFileName,
-  openAuthenticatedFile,
-} from "../../utils/authenticatedFile";
 import UserProfileLink from "../../components/UserProfileLink";
 import {
-  getReportCriteria,
-  getReportQualitativeCriteria,
   getScoreBadgeClass,
   getScoreBadgeLabel,
-  readMapValue,
-  scoreLabel,
 } from "../../utils/historicalFeedback";
 
 const getId = (value) => (typeof value === "object" ? value?._id : value);
@@ -61,6 +53,19 @@ const getStudent = (item) => {
 };
 
 const getRubric = (item) => getEvaluation(item)?.rubricId;
+const getEvaluationDisplayLabel = (item) => {
+  const evaluation = getEvaluation(item);
+  const rubric = getRubric(item);
+  const session = getSession(item);
+
+  return (
+    session?.title ||
+    rubric?.name ||
+    evaluation?.sessionType?.replaceAll("_", " ") ||
+    session?.sessionType?.replaceAll("_", " ") ||
+    "Evaluation"
+  );
+};
 
 const getHistoricalSortTimestamp = (item) => {
   const evaluation = getEvaluation(item);
@@ -92,9 +97,20 @@ const getPermissionScopeLabel = (scope) =>
   PERMISSION_SCOPE_LABELS[scope] || scope || "Single Evaluation";
 
 export default function HistoricalFeedbackPage() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const canManagePermissions = user?.role === "panel" || isAdmin;
+  const allowedTabs = [
+    "my-access",
+    "locked",
+    "requests",
+    "approved",
+    "my-requests",
+  ];
+  const initialTab = new URLSearchParams(location.search).get("tab");
+  const initialSearchTerm = new URLSearchParams(location.search).get("q") || "";
 
   const [evaluations, setEvaluations] = useState([]);
   const [lockedEvals, setLockedEvals] = useState([]);
@@ -102,9 +118,10 @@ export default function HistoricalFeedbackPage() {
   const [approvedRequests, setApprovedRequests] = useState([]);
   const [myRequests, setMyRequests] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("my-access");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [selectedEvaluation, setSelectedEvaluation] = useState(null);
+  const [activeTab, setActiveTab] = useState(
+    allowedTabs.includes(initialTab) ? initialTab : "my-access",
+  );
+  const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const [requestModalData, setRequestModalData] = useState(null);
   const [requestReason, setRequestReason] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
@@ -112,9 +129,6 @@ export default function HistoricalFeedbackPage() {
   const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const historicalAccessRequestsOnly = (request) =>
-        request?.scope !== "UNLOCK_EVALUATION";
-
       const searchPromise = api.get("/feedback/search");
       const incomingPendingPromise = canManagePermissions
         ? api.get("/feedback/permissions/incoming?status=PENDING")
@@ -134,11 +148,9 @@ export default function HistoricalFeedbackPage() {
       ]);
 
       const allHistorical = res.data.evaluations || [];
-      const myHistoricalRequests = (myRes.data.requests || []).filter(
-        historicalAccessRequestsOnly,
-      );
+      const myPermissionRequests = myRes.data.requests || [];
       const approvedMyEvaluationIds = new Set(
-        myHistoricalRequests
+        myPermissionRequests
           .filter((request) => request.status === "APPROVED")
           .map((request) => String(getPermissionTargetId(request))),
       );
@@ -164,20 +176,12 @@ export default function HistoricalFeedbackPage() {
 
       if (canManagePermissions) {
         setIncomingRequests(
-          sortHistoricalItemsByTime(
-            (pendingRes.data.requests || []).filter(
-              historicalAccessRequestsOnly,
-            ),
-          ),
+          sortHistoricalItemsByTime(pendingRes.data.requests || []),
         );
         setApprovedRequests(
-          sortHistoricalItemsByTime(
-            (approvedRes.data.requests || []).filter(
-              historicalAccessRequestsOnly,
-            ),
-          ),
+          sortHistoricalItemsByTime(approvedRes.data.requests || []),
         );
-        setMyRequests(sortHistoricalItemsByTime(myHistoricalRequests));
+        setMyRequests(sortHistoricalItemsByTime(myPermissionRequests));
       }
     } catch (error) {
       console.error("Error loading historical data:", error);
@@ -191,22 +195,22 @@ export default function HistoricalFeedbackPage() {
     loadData();
   }, [loadData]);
 
-  const handleOpenMaterial = async (document) => {
-    try {
-      await openAuthenticatedFile(document);
-    } catch (error) {
-      alert(
-        error.response?.data?.message ||
-          error.response?.data?.error ||
-          "Failed to open material.",
-      );
-    }
-  };
+  const buildReturnUrl = useCallback(() => {
+    const params = new URLSearchParams();
+    if (activeTab && activeTab !== "my-access") params.set("tab", activeTab);
+    if (searchTerm.trim()) params.set("q", searchTerm.trim());
+    const query = params.toString();
+    return `${location.pathname}${query ? `?${query}` : ""}`;
+  }, [activeTab, location.pathname, searchTerm]);
 
-  const getOriginalFileLabel = (document) => {
-    const fileName = getDocumentFileName(document);
-    return fileName && fileName !== document?.title ? fileName : "";
-  };
+  const openEvaluationReport = useCallback((item) => {
+    const evaluationId = getId(getEvaluation(item));
+    if (!evaluationId) return;
+
+    navigate(`/panel/evaluation/${evaluationId}`, {
+      state: { returnUrl: buildReturnUrl() },
+    });
+  }, [buildReturnUrl, navigate]);
 
   const formatDate = (value) => {
     if (!value) return "-";
@@ -234,6 +238,7 @@ export default function HistoricalFeedbackPage() {
       evaluation?.sessionType,
       evaluation?.status,
       rubric?.name,
+      getEvaluationDisplayLabel(item),
       session?.title,
       session?.sessionType,
       session?.batchName,
@@ -389,7 +394,7 @@ export default function HistoricalFeedbackPage() {
     const handleLockedAction = () => {
       if (isPending) return;
       if (isApproved) {
-        setSelectedEvaluation(evaluation);
+        openEvaluationReport(evaluation);
         return;
       }
 
@@ -407,7 +412,7 @@ export default function HistoricalFeedbackPage() {
           <div className="space-y-3 flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-700">
-                {evaluation.sessionType || session?.sessionType || "Evaluation"}
+                {getEvaluationDisplayLabel(evaluation)}
               </span>
               <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-gray-100 text-gray-700">
                 {evaluation.semester || session?.academicSession || "No semester"}
@@ -486,7 +491,7 @@ export default function HistoricalFeedbackPage() {
             )}
             <button
               onClick={() =>
-                locked ? handleLockedAction() : setSelectedEvaluation(evaluation)
+                locked ? handleLockedAction() : openEvaluationReport(evaluation)
               }
               disabled={isPending}
               className={`px-3 py-2 rounded-lg text-sm font-bold flex items-center gap-2 ${
@@ -517,7 +522,6 @@ export default function HistoricalFeedbackPage() {
     const session = getSession(request);
     const student = getStudent(request);
     const currentSession = request.currentSessionId;
-    const rubric = getRubric(request);
     const scopeLabel = getPermissionScopeLabel(request.scope);
     const showRequestGroup =
       request.scope === "STUDENT_HISTORY" && Boolean(request.batchId);
@@ -545,7 +549,7 @@ export default function HistoricalFeedbackPage() {
         label: "Historical Date",
         value: `${formatDate(session?.date)} · ${session?.startTime || "-"} - ${session?.endTime || "-"}`,
       },
-      { label: "Rubric / Type", value: rubric?.name || evaluation?.sessionType },
+              { label: "Rubric / Session", value: getEvaluationDisplayLabel(request) },
       {
         label: "Original Owner",
         value: getPersonName(request.owningPanelId || evaluation?.evaluatorId),
@@ -628,7 +632,7 @@ export default function HistoricalFeedbackPage() {
             {mode === "approved" && (
               <>
                 <button
-                  onClick={() => setSelectedEvaluation(evaluation)}
+                  onClick={() => openEvaluationReport(evaluation)}
                   className="px-3 py-2 rounded-lg bg-gray-900 text-white text-sm font-bold hover:bg-gray-800 flex items-center gap-2"
                 >
                   <Eye className="w-4 h-4" /> View Report
@@ -758,140 +762,6 @@ export default function HistoricalFeedbackPage() {
             </ScrollPanel>
           )}
         </>
-      )}
-
-      {selectedEvaluation && (
-        <div className="fixed inset-0 bg-black/70 z-[100] p-3 sm:p-6 flex items-center justify-center backdrop-blur-sm">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-6xl w-full max-h-[92vh] overflow-hidden flex flex-col">
-            <div className="bg-indigo-950 text-white p-5 sm:p-6 flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-bold uppercase tracking-[0.25em] text-indigo-200">
-                  Historical Vault • View Report
-                </p>
-                <h2 className="text-xl sm:text-2xl font-black mt-1">
-                  {getRubric(selectedEvaluation)?.name || selectedEvaluation.sessionType || "Evaluation Report"}
-                </h2>
-                <p className="text-sm text-indigo-200 mt-1">
-                  {getSession(selectedEvaluation)?.title || selectedEvaluation.sessionType} • {selectedEvaluation.semester || getSession(selectedEvaluation)?.academicSession || "-"}
-                </p>
-              </div>
-              <button onClick={() => setSelectedEvaluation(null)} className="p-2 rounded-xl bg-white/10 hover:bg-white/20 shrink-0">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="overflow-y-auto p-4 sm:p-6 space-y-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-                <div className="rounded-xl border bg-gray-50 p-4">
-                  <InfoLine label="Student" value={`${getPersonName(getStudent(selectedEvaluation))} ${getStudent(selectedEvaluation)?.matricNumber ? `(${getStudent(selectedEvaluation).matricNumber})` : ""}`} />
-                </div>
-                <div className="rounded-xl border bg-gray-50 p-4">
-                  <InfoLine label="Evaluator" value={getPersonName(selectedEvaluation.evaluatorId)} />
-                </div>
-                <div className="rounded-xl border bg-gray-50 p-4">
-                  <InfoLine label="Session / Batch" value={`${getSession(selectedEvaluation)?.batchName || getSession(selectedEvaluation)?.batchId || "No batch"}`} />
-                </div>
-                <div className="rounded-xl border bg-gray-50 p-4">
-                  <InfoLine label="Date / Time" value={`${formatDate(getSession(selectedEvaluation)?.date)} · ${getSession(selectedEvaluation)?.startTime || "-"} - ${getSession(selectedEvaluation)?.endTime || "-"}`} />
-                </div>
-              </div>
-
-              {selectedEvaluation.sessionType === "PROGRESS_ASSESSMENT" ? (
-                <div className="grid grid-cols-1 gap-4">
-                  <div className="rounded-xl border border-blue-100 bg-blue-50 p-4">
-                    <p className="text-xs font-black uppercase tracking-wide text-blue-800 mb-2">Summary of Research Progress</p>
-                    <p className="text-sm text-blue-950 whitespace-pre-wrap leading-relaxed">{selectedEvaluation.summaryOfProgress || "-"}</p>
-                  </div>
-                  <div className="rounded-xl border border-amber-100 bg-amber-50 p-4">
-                    <p className="text-xs font-black uppercase tracking-wide text-amber-800 mb-2">Comments for Improvement</p>
-                    <p className="text-sm text-amber-950 whitespace-pre-wrap leading-relaxed">{selectedEvaluation.commentsForImprovement || "-"}</p>
-                  </div>
-                  <div className="rounded-xl border border-green-100 bg-green-50 p-4">
-                    <p className="text-xs font-black uppercase tracking-wide text-green-800 mb-2">Overall Suggestions</p>
-                    <p className="text-sm text-green-950 whitespace-pre-wrap leading-relaxed">{selectedEvaluation.overallSuggestions || "-"}</p>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="rounded-xl border overflow-hidden">
-                    <div className="px-4 py-3 bg-gray-50 border-b flex items-center justify-between">
-                      <p className="font-black text-gray-900">Scored Criteria</p>
-                      <span className={`px-3 py-1 rounded-full text-sm font-black ${getScoreBadgeClass(selectedEvaluation)}`}>
-                        Final Score: {getScoreBadgeLabel(selectedEvaluation)}
-                      </span>
-                    </div>
-                    <div className="divide-y max-h-[45vh] overflow-y-auto">
-                      {getReportCriteria(selectedEvaluation).length === 0 ? (
-                        <div className="p-4 text-sm text-gray-500">No scored criteria found.</div>
-                      ) : (
-                        getReportCriteria(selectedEvaluation).map((criterion) => {
-                          const score = readMapValue(selectedEvaluation.scores, criterion.key);
-                          return (
-                            <div key={criterion.key} className="p-4 grid grid-cols-1 lg:grid-cols-[1fr_130px_120px] gap-3 items-start">
-                              <div>
-                                <p className="font-bold text-gray-900">{criterion.title}</p>
-                                <p className="text-xs text-gray-500 mt-1">Weight: {criterion.weight || 0}% • Max: {criterion.maxScore || 5}</p>
-                              </div>
-                              <div className="rounded-lg bg-indigo-50 border border-indigo-100 p-3 text-center">
-                                <p className="text-[10px] font-black text-indigo-500 uppercase">Score</p>
-                                <p className="text-lg font-black text-indigo-900">{score ?? "-"}</p>
-                              </div>
-                              <div className="rounded-lg bg-gray-50 border p-3 text-center">
-                                <p className="text-[10px] font-black text-gray-500 uppercase">Level</p>
-                                <p className="text-xs font-bold text-gray-900">{scoreLabel(score)}</p>
-                              </div>
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border bg-gray-50 p-4">
-                    <p className="font-black text-gray-900 mb-3">Panel Feedback</p>
-                    {getReportQualitativeCriteria(selectedEvaluation).length > 0 && (
-                      <div className="space-y-3 mb-4">
-                        {getReportQualitativeCriteria(selectedEvaluation).map((criterion) => (
-                          <div key={criterion.key} className="rounded-lg bg-white border p-3">
-                            <p className="text-xs font-black text-gray-500 uppercase">{criterion.title}</p>
-                            <p className="text-sm text-gray-800 whitespace-pre-wrap mt-1">{readMapValue(selectedEvaluation.qualitativeFeedback, criterion.key) || "-"}</p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    <p className="text-xs font-black text-gray-500 uppercase mb-1">Overall Comments</p>
-                    <p className="text-sm text-gray-800 whitespace-pre-wrap leading-relaxed">{selectedEvaluation.overallComments || "-"}</p>
-                  </div>
-                </>
-              )}
-
-              <div className="rounded-xl border border-blue-200 bg-blue-50 p-4">
-                <p className="font-black text-blue-900 flex items-center gap-2"><FileText className="w-4 h-4" /> Student Submitted Materials</p>
-                {(getSession(selectedEvaluation)?.studentDocuments || []).length === 0 ? (
-                  <p className="text-sm text-blue-800 mt-2">No material attached.</p>
-                ) : (
-                  <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {(getSession(selectedEvaluation)?.studentDocuments || []).map((doc) => (
-                      <button
-                        key={doc._id || doc.url}
-                        type="button"
-                        onClick={() => handleOpenMaterial(doc)}
-                        className="block w-full text-left p-3 bg-white rounded-lg border text-sm font-bold text-blue-700 hover:underline"
-                      >
-                        {doc.title} <span className="text-blue-400">• {doc.type || "material"}</span>
-                        {getOriginalFileLabel(doc) && (
-                          <span className="block text-xs text-blue-500 mt-1 break-all">
-                            {getOriginalFileLabel(doc)}
-                          </span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
       )}
 
       {requestModalData && (

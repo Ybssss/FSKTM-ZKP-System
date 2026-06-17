@@ -7,6 +7,10 @@ const {
   getEmailConfigStatus,
   sendRegistrationEmail,
 } = require("../utils/mailer");
+const {
+  buildSupervisorConflictMessage,
+  hasSupervisorPanelConflict,
+} = require("../utils/supervisorConflictValidation");
 
 const queueRegistrationEmail = ({
   email,
@@ -323,6 +327,14 @@ exports.updateUser = async (req, res) => {
       expertiseTags,
     } = req.body;
 
+    const existingUser = await User.findById(id).select(
+      "role name supervisorId assignedPanels",
+    );
+    if (!existingUser)
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+
     const updateData = {
       name,
       email,
@@ -358,15 +370,33 @@ exports.updateUser = async (req, res) => {
       updateData.role = role;
     }
 
+    const nextRole = updateData.role || existingUser.role;
+    const nextSupervisorId =
+      updateData.supervisorId !== undefined
+        ? updateData.supervisorId
+        : existingUser.supervisorId;
+    const nextAssignedPanels = existingUser.assignedPanels || [];
+
+    if (
+      nextRole === "student" &&
+      hasSupervisorPanelConflict({
+        supervisorId: nextSupervisorId,
+        panelIds: nextAssignedPanels,
+      })
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: buildSupervisorConflictMessage({
+          studentName: existingUser.name,
+          context: "existing default panel assignment",
+        }),
+      });
+    }
+
     const user = await User.findByIdAndUpdate(id, updateData, {
       new: true,
       runValidators: true,
     });
-
-    if (!user)
-      return res
-        .status(404)
-        .json({ success: false, message: "User not found" });
 
     res.status(200).json({ success: true, user });
   } catch (error) {

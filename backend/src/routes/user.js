@@ -7,6 +7,10 @@ const {
   cleanProfileImageUrl,
   mergeStaffStudents,
 } = require("../utils/userProfileUtils");
+const {
+  buildSupervisorConflictMessage,
+  hasSupervisorPanelConflict,
+} = require("../utils/supervisorConflictValidation");
 
 const STAFF_STUDENT_SELECT =
   "name userId email matricNumber program profileImageUrl researchTitle researchAbstract supervisorId";
@@ -406,6 +410,11 @@ router.post("/assign-panel", async (req, res) => {
       return res
         .status(404)
         .json({ success: false, message: "Student not found" });
+    if (student.role !== "student") {
+      return res
+        .status(400)
+        .json({ success: false, message: "Panel assignments can only be set for students." });
+    }
 
     let panelsToProcess = panelIds ? panelIds : panelId ? [panelId] : [];
     if (panelsToProcess.length === 0)
@@ -414,6 +423,21 @@ router.post("/assign-panel", async (req, res) => {
         .json({ success: false, message: "No panels provided to assign" });
     if (panelsToProcess.length > 2)
       panelsToProcess = panelsToProcess.slice(0, 2);
+
+    if (
+      hasSupervisorPanelConflict({
+        supervisorId: student.supervisorId,
+        panelIds: panelsToProcess,
+      })
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: buildSupervisorConflictMessage({
+          studentName: student.name,
+          context: "default panel assignment",
+        }),
+      });
+    }
 
     if (student.assignedPanels && student.assignedPanels.length > 0) {
       const oldPanelIds = student.assignedPanels.map(

@@ -1027,6 +1027,21 @@ async function main() {
         await PermissionRequest.findByIdAndDelete(unlockPermissionId);
       });
 
+      const myUnlockRequestsRes = await requesterClient.get(
+        "/feedback/permissions/my",
+      );
+
+      if (
+        !myUnlockRequestsRes.data?.success ||
+        !(myUnlockRequestsRes.data.requests || []).some(
+          (request) => toId(request) === unlockPermissionId,
+        )
+      ) {
+        throw new Error(
+          "Unlock request did not appear in the requester's My Requests listing.",
+        );
+      }
+
       const incomingUnlockRes = await adminClient.get(
         "/feedback/permissions/incoming?status=PENDING",
       );

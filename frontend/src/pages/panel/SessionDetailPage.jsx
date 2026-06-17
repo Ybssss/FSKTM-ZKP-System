@@ -60,6 +60,22 @@ export default function SessionDetailPage() {
     file: null,
   });
 
+  const mergePermissions = useCallback((incoming = []) => {
+    setPermissions((previous) => {
+      const merged = [...incoming, ...previous];
+      const seen = new Set();
+
+      return merged.filter((permission) => {
+        const permissionId =
+          typeof permission === "object" ? permission?._id : permission;
+        const key = String(permissionId || "");
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
+    });
+  }, []);
+
   const getHistoricalTimestamp = useCallback((evaluation, request) => {
     return new Date(
       request?.approvedAt ||
@@ -180,7 +196,7 @@ export default function SessionDetailPage() {
 
       const res = await api.post("/feedback/permissions/request", payload);
       if (res.data.success) {
-        setPermissions([...permissions, res.data.permission]);
+        mergePermissions([res.data.permission]);
         alert(
           "Request sent successfully to the original author and admins.",
         );
@@ -220,7 +236,7 @@ export default function SessionDetailPage() {
       );
 
       if (res.data.success) {
-        setPermissions((prev) => [...prev, ...(res.data.permissions || [])]);
+        mergePermissions(res.data.permissions || []);
         alert(
           `${res.data.createdCount} historical access request(s) created under batch ${res.data.batchId}.`,
         );

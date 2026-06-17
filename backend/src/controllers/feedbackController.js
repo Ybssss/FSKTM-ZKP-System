@@ -63,6 +63,23 @@ const normalizePermissionRecord = (request) => {
   return doc;
 };
 
+const getNormalizedPermissionsByIds = async (ids = []) => {
+  const cleanIds = ids.map((id) => String(id || "")).filter(Boolean);
+  if (!cleanIds.length) return [];
+
+  const requests = await detailedPermissionPopulate(
+    PermissionRequest.find({
+      _id: { $in: cleanIds },
+    }),
+  );
+
+  const byId = new Map(
+    requests.map((request) => [String(request._id), normalizePermissionRecord(request)]),
+  );
+
+  return cleanIds.map((id) => byId.get(id)).filter(Boolean);
+};
+
 const detailedPermissionPopulate = (query) =>
   query
     .populate("requestingPanelId", EVALUATOR_SELECT)
@@ -440,10 +457,14 @@ exports.requestAccess = async (req, res) => {
       ),
     });
 
+    const [normalizedPermission] = await getNormalizedPermissionsByIds([
+      permission._id,
+    ]);
+
     res.json({
       success: true,
       message: "Permission requested successfully.",
-      permission,
+      permission: normalizedPermission || normalizePermissionRecord(permission),
     });
   } catch (error) {
     console.error("Request access error:", error);
@@ -572,6 +593,9 @@ exports.requestStudentHistoryAccess = async (req, res) => {
     const permissions = await PermissionRequest.insertMany(permissionDocs, {
       ordered: false,
     });
+    const normalizedPermissions = await getNormalizedPermissionsByIds(
+      permissions.map((permission) => permission._id),
+    );
 
     res.json({
       success: true,
@@ -579,7 +603,7 @@ exports.requestStudentHistoryAccess = async (req, res) => {
       batchId,
       createdCount: permissions.length,
       skippedCount: requestableEvaluations.length - permissions.length,
-      permissions,
+      permissions: normalizedPermissions,
     });
   } catch (error) {
     console.error("Request student history access error:", error);
@@ -668,10 +692,14 @@ exports.requestUnlockEvaluation = async (req, res) => {
       ),
     });
 
+    const [normalizedPermission] = await getNormalizedPermissionsByIds([
+      permission._id,
+    ]);
+
     res.json({
       success: true,
       message: "Unlock request sent to administration.",
-      permission,
+      permission: normalizedPermission || normalizePermissionRecord(permission),
     });
   } catch (error) {
     console.error("Request unlock error:", error);

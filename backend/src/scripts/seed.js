@@ -970,7 +970,7 @@ const seedDatabase = async () => {
       {
         studentEmail: "meiling@student.uthm.edu.my",
         startTime: "10:05",
-        panels: [createdPanels[3]._id, createdPanels[4]._id],
+        panels: [createdPanels[1]._id, createdPanels[4]._id],
       },
       {
         studentEmail: "aina@student.uthm.edu.my",
@@ -980,12 +980,12 @@ const seedDatabase = async () => {
       {
         studentEmail: "danish@student.uthm.edu.my",
         startTime: "11:10",
-        panels: [createdPanels[1]._id, createdPanels[3]._id],
+        panels: [createdPanels[2]._id, createdPanels[3]._id],
       },
       {
         studentEmail: "priya@student.uthm.edu.my",
         startTime: "12:15",
-        panels: [createdPanels[2]._id, drSamihahId],
+        panels: [createdPanels[3]._id, drSamihahId],
       },
       {
         studentEmail: "jiawei@student.uthm.edu.my",
@@ -995,7 +995,7 @@ const seedDatabase = async () => {
       {
         studentEmail: "hafiz@student.uthm.edu.my",
         startTime: "14:00",
-        panels: [drSamihahId, createdPanels[4]._id],
+        panels: [drSamihahId, createdPanels[3]._id],
       },
       {
         studentEmail: "amira@student.uthm.edu.my",

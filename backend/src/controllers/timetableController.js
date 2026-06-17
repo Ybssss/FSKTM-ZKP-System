@@ -19,6 +19,10 @@ const {
   rangesOverlap,
   validateItems,
 } = require("../utils/timetableValidation");
+const {
+  buildSupervisorConflictMessage,
+  hasSupervisorPanelConflict,
+} = require("../utils/supervisorConflictValidation");
 
 let fileStorage = {};
 try {
@@ -314,6 +318,43 @@ const assertPanelReplacementWindow = (existingSession, nextPanels) => {
 
 const validateAgainstExisting = async ({ items, excludeSessionIds = [] }) => {
   validateItems(items);
+
+  const studentIds = [...new Set(items.map((item) => item.studentId).filter(Boolean))];
+  if (studentIds.length) {
+    const students = await User.find({ _id: { $in: studentIds } })
+      .select("name supervisorId")
+      .lean();
+    const studentsById = new Map(
+      students.map((student) => [idString(student._id), student]),
+    );
+
+    const supervisorConflictErrors = items
+      .map((item) => {
+        const student = studentsById.get(item.studentId);
+        if (!student) return null;
+        if (
+          !hasSupervisorPanelConflict({
+            supervisorId: student.supervisorId,
+            panelIds: item.panelIds,
+          })
+        ) {
+          return null;
+        }
+
+        return buildSupervisorConflictMessage({
+          studentName: student.name,
+          context: item.title || "session assignment",
+        });
+      })
+      .filter(Boolean);
+
+    if (supervisorConflictErrors.length) {
+      const err = new Error(supervisorConflictErrors.join("\n"));
+      err.statusCode = 400;
+      err.validationErrors = supervisorConflictErrors;
+      throw err;
+    }
+  }
 
   const dates = [...new Set(items.map((item) => item.date).filter(Boolean))];
   if (!dates.length) return;

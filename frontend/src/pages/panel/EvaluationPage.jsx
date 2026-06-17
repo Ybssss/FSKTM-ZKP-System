@@ -44,6 +44,52 @@ import {
 
 const getSessionDocuments = (evaluation) =>
   evaluation?.sessionId?.studentDocuments || [];
+const getSessionId = (evaluation) =>
+  evaluation?.sessionId?._id || evaluation?.sessionId || "";
+const parseTimeToMinutes = (value = "") => {
+  const match = String(value || "").trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return null;
+  return hours * 60 + minutes;
+};
+const getEvaluationSessionLabel = (evaluation) =>
+  evaluation?.sessionId?.title ||
+  evaluation?.rubricId?.name ||
+  evaluation?.sessionType?.replaceAll("_", " ") ||
+  "Evaluation";
+const getEvaluationScheduleSortValue = (evaluation) => {
+  const rawDate = evaluation?.sessionId?.date;
+  if (!rawDate) return 0;
+
+  const parsedDate = new Date(rawDate);
+  if (Number.isNaN(parsedDate.getTime())) return 0;
+
+  const dayStart = new Date(parsedDate);
+  dayStart.setHours(0, 0, 0, 0);
+
+  const startMinutes = parseTimeToMinutes(evaluation?.sessionId?.startTime);
+  return dayStart.getTime() + (startMinutes ?? 0) * 60 * 1000;
+};
+const formatScheduleDate = (value) => {
+  if (!value) return "-";
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) return "-";
+  return parsedDate.toLocaleDateString("en-MY", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+const getEvaluationScheduleLabel = (evaluation) => {
+  const startTime = evaluation?.sessionId?.startTime || "-";
+  const endTime = evaluation?.sessionId?.endTime || "-";
+  if (!evaluation?.sessionId?.startTime && !evaluation?.sessionId?.endTime) {
+    return "No time set";
+  }
+  return `${startTime} - ${endTime}`;
+};
 
 export default function EvaluationPage() {
   const { user } = useAuth();
@@ -54,6 +100,9 @@ export default function EvaluationPage() {
   const location = useLocation();
 
   const [evaluations, setEvaluations] = useState([]);
+  const [unlockRequestsByEvaluationId, setUnlockRequestsByEvaluationId] = useState(
+    {},
+  );
   const [loading, setLoading] = useState(true);
 
   const [selectedEval, setSelectedEval] = useState(null);
@@ -68,8 +117,28 @@ export default function EvaluationPage() {
     try {
       setLoading(true);
 
-      const res = await api.get("/evaluations");
-      let loadedEvaluations = res.data.data || res.data.evaluations || [];
+      const [evaluationsRes, permissionsRes] = await Promise.all([
+        api.get("/evaluations"),
+        api.get("/feedback/permissions/my"),
+      ]);
+      let loadedEvaluations =
+        evaluationsRes.data.data || evaluationsRes.data.evaluations || [];
+      const unlockRequests = (permissionsRes.data.requests || []).filter(
+        (request) => request?.scope === "UNLOCK_EVALUATION",
+      );
+      const latestUnlockRequestsByEvaluationId = unlockRequests.reduce(
+        (accumulator, request) => {
+          const targetEvaluationId =
+            request?.targetEvaluationId?._id || request?.targetEvaluationId;
+
+          if (!targetEvaluationId) return accumulator;
+          if (accumulator[String(targetEvaluationId)]) return accumulator;
+
+          accumulator[String(targetEvaluationId)] = request;
+          return accumulator;
+        },
+        {},
+      );
 
       if (
         urlId &&
@@ -94,6 +163,7 @@ export default function EvaluationPage() {
       }
 
       setEvaluations(loadedEvaluations);
+      setUnlockRequestsByEvaluationId(latestUnlockRequestsByEvaluationId);
     } catch (error) {
       console.error("Error loading evaluation data:", error);
     } finally {
@@ -129,6 +199,7 @@ export default function EvaluationPage() {
         alert(
           "Unlock request sent to the administration. You will be able to edit once approved.",
         );
+        loadEvaluations();
       }
     } catch (err) {
       alert(
@@ -185,6 +256,12 @@ export default function EvaluationPage() {
   const getOriginalFileLabel = (document) => {
     const fileName = getDocumentFileName(document);
     return fileName && fileName !== document?.title ? fileName : "";
+  };
+
+  const openSessionDetail = (evaluation) => {
+    const sessionId = getSessionId(evaluation);
+    if (!sessionId) return;
+    navigate(`/panel/sessions/${sessionId}`);
   };
 
   const handleSubmit = async (e) => {
@@ -269,6 +346,19 @@ export default function EvaluationPage() {
     }
   }, [urlId, evaluations, selectedEval, dismissedEvaluationId, openEvaluationModal]);
 
+  useEffect(() => {
+    if (!selectedEval?._id) return;
+    const refreshedEvaluation = evaluations.find(
+      (evaluation) => String(evaluation._id) === String(selectedEval._id),
+    );
+    if (refreshedEvaluation) {
+      setSelectedEval((previous) => ({
+        ...previous,
+        ...refreshedEvaluation,
+      }));
+    }
+  }, [evaluations, selectedEval?._id]);
+
   const closeModal = () => {
     setDismissedEvaluationId(selectedEval?._id || urlId || "");
     setSelectedEval(null);
@@ -300,7 +390,8 @@ export default function EvaluationPage() {
   const evaluationSortAccessors = useMemo(
     () => ({
       candidate: (ev) => `${ev.studentId?.name || ""} ${ev.studentId?.matricNumber || ""}`,
-      session: (ev) => `${ev.sessionType || ""} ${getEvaluationRoleLabel(ev)} ${ev.semester || ""}`,
+      session: (ev) => `${getEvaluationSessionLabel(ev)} ${getEvaluationRoleLabel(ev)} ${ev.semester || ""}`,
+      schedule: (ev) => getEvaluationScheduleSortValue(ev),
       evaluator: (ev) => `${ev.evaluatorId?.name || ""} ${getEvaluationRoleLabel(ev)}`,
       status: (ev) => ev.status || "",
       score: (ev) => getEvaluationDisplayedTotal(ev),
@@ -340,6 +431,12 @@ export default function EvaluationPage() {
 
   const isCompleted = selectedEval?.status === "COMPLETED";
   const isUnlocked = selectedEval?.isUnlocked === true;
+  const selectedUnlockRequest =
+    unlockRequestsByEvaluationId[String(selectedEval?._id || "")] || null;
+  const hasPendingUnlockRequest =
+    selectedUnlockRequest?.status === "PENDING";
+  const hasRejectedUnlockRequest =
+    selectedUnlockRequest?.status === "REJECTED";
 
   const isLocked = isCompleted && !isUnlocked;
   const canEdit =
@@ -391,6 +488,7 @@ export default function EvaluationPage() {
                 <tr>
                   <SortableTh className="p-4" sortKey="candidate" sortConfig={evaluationSortConfig} onSort={requestEvaluationSort}>Candidate</SortableTh>
                   <SortableTh className="p-4" sortKey="session" sortConfig={evaluationSortConfig} onSort={requestEvaluationSort}>Session Info</SortableTh>
+                  <SortableTh className="p-4" sortKey="schedule" sortConfig={evaluationSortConfig} onSort={requestEvaluationSort}>Schedule</SortableTh>
                   {isAdmin && <SortableTh className="p-4" sortKey="evaluator" sortConfig={evaluationSortConfig} onSort={requestEvaluationSort}>Evaluator</SortableTh>}
                   <SortableTh className="p-4 text-center" sortKey="status" sortConfig={evaluationSortConfig} onSort={requestEvaluationSort}>Status</SortableTh>
                   <SortableTh className="p-4 text-center" sortKey="score" sortConfig={evaluationSortConfig} onSort={requestEvaluationSort}>Final Score</SortableTh>
@@ -414,8 +512,8 @@ export default function EvaluationPage() {
                       </td>
                       <td className="p-4">
                         <div className="mb-1 flex flex-wrap items-center gap-2">
-                          <span className="inline-block px-3 py-1 bg-indigo-50 text-indigo-700 rounded text-xs font-bold uppercase border border-indigo-100">
-                            {ev.sessionType?.replaceAll("_", " ")}
+                          <span className="inline-block px-3 py-1 bg-indigo-50 text-indigo-700 rounded text-xs font-bold border border-indigo-100">
+                            {getEvaluationSessionLabel(ev)}
                           </span>
                           <span
                             className={`inline-block px-3 py-1 rounded text-xs font-bold uppercase border ${getEvaluationRoleBadgeClass(ev)}`}
@@ -425,6 +523,24 @@ export default function EvaluationPage() {
                         </div>
                         <p className="text-xs text-gray-500 font-semibold">
                           {ev.semester}
+                        </p>
+                        {ev.sessionId?.title && getSessionId(ev) && (
+                          <button
+                            type="button"
+                            onClick={() => openSessionDetail(ev)}
+                            className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-indigo-700 hover:text-indigo-900 hover:underline"
+                          >
+                            {ev.sessionId.title}
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </td>
+                      <td className="p-4">
+                        <p className="text-sm font-semibold text-gray-900">
+                          {formatScheduleDate(ev.sessionId?.date)}
+                        </p>
+                        <p className="mt-1 text-xs font-semibold text-gray-500">
+                          {getEvaluationScheduleLabel(ev)}
                         </p>
                       </td>
                       {isAdmin && (
@@ -547,13 +663,52 @@ export default function EvaluationPage() {
                     )}
 
                     {isAuthor && !isAdmin && (
-                      <button
-                        onClick={handleUnlockRequest}
-                        className="mt-3 bg-red-600 text-white px-4 py-2 rounded text-xs font-bold hover:bg-red-700 transition-colors shadow-sm"
-                      >
-                        <Lock className="w-3 h-3 inline mr-1" />
-                        Request Unlock to Edit
-                      </button>
+                      <div className="mt-3 space-y-3">
+                        {selectedUnlockRequest && (
+                          <div
+                            className={`rounded-lg border p-3 text-sm ${
+                              hasPendingUnlockRequest
+                                ? "border-yellow-200 bg-yellow-50 text-yellow-900"
+                                : hasRejectedUnlockRequest
+                                  ? "border-red-200 bg-red-50 text-red-900"
+                                  : "border-green-200 bg-green-50 text-green-900"
+                            }`}
+                          >
+                            <p className="font-bold uppercase text-xs tracking-wide">
+                              Unlock Request {selectedUnlockRequest.status}
+                            </p>
+                            <p className="mt-1">
+                              {hasPendingUnlockRequest
+                                ? "Your request is waiting for admin review."
+                                : hasRejectedUnlockRequest
+                                  ? "Your request was rejected by admin."
+                                  : "Your unlock request has been approved. Reload this page if editing is still locked."}
+                            </p>
+                            {selectedUnlockRequest.responseNote && (
+                              <p className="mt-2 whitespace-pre-wrap">
+                                Feedback: {selectedUnlockRequest.responseNote}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
+                        <button
+                          onClick={handleUnlockRequest}
+                          disabled={hasPendingUnlockRequest}
+                          className={`px-4 py-2 rounded text-xs font-bold transition-colors shadow-sm ${
+                            hasPendingUnlockRequest
+                              ? "bg-yellow-100 text-yellow-800 cursor-not-allowed"
+                              : "bg-red-600 text-white hover:bg-red-700"
+                          }`}
+                        >
+                          <Lock className="w-3 h-3 inline mr-1" />
+                          {hasPendingUnlockRequest
+                            ? "Unlock Request Pending"
+                            : hasRejectedUnlockRequest
+                              ? "Request Unlock Again"
+                              : "Request Unlock to Edit"}
+                        </button>
+                      </div>
                     )}
                   </div>
                 </div>
