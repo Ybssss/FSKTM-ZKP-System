@@ -91,6 +91,39 @@ const getEvaluationScheduleLabel = (evaluation) => {
   return `${startTime} - ${endTime}`;
 };
 const hasSessionTitle = (evaluation) => Boolean(evaluation?.sessionId?.title);
+const normalizeSearchText = (value = "") =>
+  String(value || "").toLowerCase().trim();
+const tokenizeSearchText = (value = "") =>
+  normalizeSearchText(value)
+    .split(/[\s/()_-]+/)
+    .map((token) => token.trim())
+    .filter(Boolean);
+const buildEvaluationSearchData = (evaluation) => {
+  const partialFields = [
+    evaluation?.studentId?.name,
+    evaluation?.studentId?.matricNumber,
+    getEvaluationSessionLabel(evaluation),
+    evaluation?.sessionId?.title,
+    evaluation?.semester,
+    formatScheduleDate(evaluation?.sessionId?.date),
+    getEvaluationScheduleLabel(evaluation),
+    evaluation?.evaluatorId?.name,
+    evaluation?.evaluatorId?.email,
+  ]
+    .map(normalizeSearchText)
+    .filter(Boolean);
+
+  const exactTokens = new Set(
+    [
+      evaluation?.status,
+      getEvaluationRoleLabel(evaluation),
+      evaluation?.sessionType,
+      evaluation?.sessionId?.sessionType,
+    ].flatMap(tokenizeSearchText),
+  );
+
+  return { partialFields, exactTokens };
+};
 
 export default function EvaluationPage() {
   const { user } = useAuth();
@@ -375,19 +408,23 @@ export default function EvaluationPage() {
   };
 
   const [searchTerm, setSearchTerm] = useState("");
-  const filteredEvaluations = useMemo(
-    () =>
-      evaluations.filter(
-        (e) =>
-          e.studentId?.name
-            ?.toLowerCase()
-            .includes(searchTerm.toLowerCase()) ||
-          e.studentId?.matricNumber
-            ?.toLowerCase()
-            .includes(searchTerm.toLowerCase()),
-      ),
-    [evaluations, searchTerm],
-  );
+  const filteredEvaluations = useMemo(() => {
+    const normalizedQuery = normalizeSearchText(searchTerm);
+    if (!normalizedQuery) return evaluations;
+
+    const queryTokens = tokenizeSearchText(normalizedQuery);
+    if (!queryTokens.length) return evaluations;
+
+    return evaluations.filter((evaluation) => {
+      const { partialFields, exactTokens } = buildEvaluationSearchData(evaluation);
+
+      return queryTokens.every(
+        (token) =>
+          exactTokens.has(token) ||
+          partialFields.some((field) => field.includes(token)),
+      );
+    });
+  }, [evaluations, searchTerm]);
   const evaluationSortAccessors = useMemo(
     () => ({
       candidate: (ev) => `${ev.studentId?.name || ""} ${ev.studentId?.matricNumber || ""}`,
@@ -478,7 +515,7 @@ export default function EvaluationPage() {
             <div className="p-4 bg-gray-50 border-b border-gray-200">
               <input
                 type="text"
-                placeholder="Search by Student Name or Matric No..."
+                placeholder="Search candidate, session, schedule, evaluator, or status..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full md:w-1/3 p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"

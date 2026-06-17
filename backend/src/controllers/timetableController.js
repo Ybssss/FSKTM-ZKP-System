@@ -138,6 +138,34 @@ const sameId = (a, b) => idString(a) && idString(a) === idString(b);
 const sessionHasUser = (values = [], userId) =>
   values.some((value) => sameId(value, userId));
 
+const buildTimetableQueryForViewer = async (user = {}) => {
+  const userId = user.id || user._id || user.userId;
+  const role = user.role;
+
+  if (role === "student") {
+    return { students: userId };
+  }
+
+  if (role === "panel") {
+    const supervisedStudents = await User.find({ supervisorId: userId })
+      .select("_id")
+      .lean();
+    const supervisedStudentIds = supervisedStudents
+      .map((student) => student._id)
+      .filter(Boolean);
+
+    if (!supervisedStudentIds.length) {
+      return { panels: userId };
+    }
+
+    return {
+      $or: [{ panels: userId }, { students: { $in: supervisedStudentIds } }],
+    };
+  }
+
+  return {};
+};
+
 const getDocumentUploaderId = (document) => idString(document?.uploadedBy);
 
 const canAccessSessionMaterial = async (timetable, user, document = null) => {
@@ -293,6 +321,13 @@ const getSessionDateTimeEnd = (session) => {
   return Number.isNaN(dt.getTime()) ? null : dt;
 };
 
+const getSessionDateTimeStart = (session) => {
+  const date = normalizeDateOnly(session.date);
+  const startTime = cleanText(session.startTime || session.time || "00:00", 20);
+  const dt = new Date(`${date}T${startTime}:00`);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+};
+
 const assertPanelReplacementWindow = (existingSession, nextPanels) => {
   const oldPanels = (existingSession.panels || []).map(idString).filter(Boolean);
   const newPanels = (nextPanels || []).map(idString).filter(Boolean);
@@ -301,13 +336,11 @@ const assertPanelReplacementWindow = (existingSession, nextPanels) => {
 
   if (!changed) return;
 
-  const dateOnly = normalizeDateOnly(existingSession.date);
-  const sessionDate = new Date(`${dateOnly}T00:00:00`);
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const diffDays = Math.ceil((sessionDate - today) / (1000 * 60 * 60 * 24));
+  const sessionStart = getSessionDateTimeStart(existingSession);
+  const now = new Date();
+  const minLeadMs = PANEL_REPLACEMENT_MIN_DAYS * 24 * 60 * 60 * 1000;
 
-  if (diffDays < PANEL_REPLACEMENT_MIN_DAYS) {
+  if (!sessionStart || sessionStart.getTime() - now.getTime() < minLeadMs) {
     const err = new Error(
       "Panel replacement is only allowed at least 1 week before the session date.",
     );
@@ -515,9 +548,7 @@ exports.createTimetable = async (req, res) => {
 
 exports.getTimetables = async (req, res) => {
   try {
-    let query = {};
-    if (req.user.role === "student") query.students = req.user.id;
-    if (req.user.role === "panel") query.panels = req.user.id;
+    const query = await buildTimetableQueryForViewer(req.user);
 
     const timetables = await populateTimetableQuery(
       Timetable.find(query).sort({ date: 1, startTime: 1 }),
@@ -531,11 +562,7 @@ exports.getTimetables = async (req, res) => {
 
 exports.getMyTimetable = async (req, res) => {
   try {
-    let query = {};
-    const myId = req.user.id || req.user._id;
-    if (req.user.role === "student") query.students = myId;
-    else if (req.user.role === "panel") query.panels = myId;
-    else if (req.user.role === "admin") query = {};
+    const query = await buildTimetableQueryForViewer(req.user);
 
     const timetables = await populateTimetableQuery(
       Timetable.find(query).sort({ date: 1, startTime: 1 }),

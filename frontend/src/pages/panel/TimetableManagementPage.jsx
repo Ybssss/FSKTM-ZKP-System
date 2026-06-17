@@ -57,6 +57,13 @@ const sortSessionsBySchedule = (items = []) =>
     return aKey.localeCompare(bKey);
   });
 
+const getSessionStartDateTime = (session) => {
+  const date = normalizeDateKey(session?.date);
+  const time = String(session?.startTime || session?.time || "00:00").trim();
+  const dt = new Date(`${date}T${time}:00`);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+};
+
 export default function TimetableManagementPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -323,6 +330,14 @@ export default function TimetableManagementPage() {
     return students.find((student) => String(student._id) === studentId) || value;
   }, [students]);
 
+  const resolveSupervisor = useCallback((studentValue) => {
+    const student = resolveStudent(studentValue);
+    const supervisor = student?.supervisorId;
+    const supervisorId = idOf(supervisor);
+    if (!supervisorId) return null;
+    return panels.find((panel) => String(panel._id) === supervisorId) || supervisor;
+  }, [panels, resolveStudent]);
+
   const assignedPanelNames = useCallback((student) =>
     (student.assignedPanels || [])
       .slice(0, 2)
@@ -362,9 +377,22 @@ export default function TimetableManagementPage() {
     (student) => (student.assignedPanels || []).length >= 2,
   ).length;
 
+  const reviewStudentIds = useMemo(
+    () =>
+      new Set(
+        reviewRows
+          .map((row) => String(row.studentId || ""))
+          .filter(Boolean),
+      ),
+    [reviewRows],
+  );
+
   const toggleStudentForBulk = (student) => {
     if (isExistingBatchMode && !selectedBatchId) return alert("Please select an existing batch first.");
     const studentId = student._id;
+    const existingReviewRow = reviewRows.find(
+      (row) => String(row.studentId || "") === String(studentId),
+    );
     const assigned = student.assignedPanels || [];
     if (assigned.length < 2) {
       return alert("This student does not have exactly 2 default panels. Assign panels first.");
@@ -374,6 +402,10 @@ export default function TimetableManagementPage() {
     const panel1 = resolvePanel(p1);
     const panel2 = resolvePanel(p2);
     const selectedRubric = rubrics.find((r) => r._id === bulkConfig.rubricId);
+
+    if (existingReviewRow?.type === "existing") {
+      return;
+    }
 
     if (selectedStudentIds.includes(studentId)) {
       setSelectedStudentIds((prev) => prev.filter((id) => id !== studentId));
@@ -572,9 +604,27 @@ export default function TimetableManagementPage() {
     });
   };
 
+  const isPanelReplacementLocked = useMemo(() => {
+    if (!editingSession) return false;
+    const sessionStart = getSessionStartDateTime(editingSession);
+    if (!sessionStart) return true;
+    return sessionStart.getTime() - Date.now() < 7 * 24 * 60 * 60 * 1000;
+  }, [editingSession]);
+
   const submitEditSession = async (e) => {
     e.preventDefault();
     const selectedRubric = rubrics.find((r) => r._id === editForm.rubricId);
+    const originalPanel1Id = idOf(getPanel(editingSession, 0));
+    const originalPanel2Id = idOf(getPanel(editingSession, 1));
+    const panelsChanged =
+      originalPanel1Id !== String(editForm.panel1Id || "") ||
+      originalPanel2Id !== String(editForm.panel2Id || "");
+
+    if (isPanelReplacementLocked && panelsChanged) {
+      alert("Panel replacement is only allowed at least 1 week before the session date.");
+      return;
+    }
+
     try {
       await api.put(`/timetables/${editingSession._id || editingSession.id}`, {
         ...editForm,
@@ -677,6 +727,9 @@ export default function TimetableManagementPage() {
         student?.name,
         student?.matricNumber,
         student?.researchTitle,
+        student?.supervisorId?.name,
+        student?.supervisorId?.userId,
+        student?.supervisorId?.email,
         session.startTime,
         normalizeDateKey(session.date),
       ]
@@ -692,9 +745,13 @@ export default function TimetableManagementPage() {
       schedule: (session) => `${normalizeDateKey(session.date)} ${session.startTime || session.time || ""}`,
       student: (session) => {
         const student = getStudent(session);
-        return `${student?.name || ""} ${student?.matricNumber || student?.userId || ""}`;
+        const supervisor = student?.supervisorId;
+        return `${student?.name || ""} ${student?.matricNumber || student?.userId || ""} ${supervisor?.name || ""} ${supervisor?.userId || ""}`;
       },
-      panels: (session) => `${nameOf(getPanel(session, 0))} ${nameOf(getPanel(session, 1))}`,
+      panels: (session) => {
+        const supervisor = getStudent(session)?.supervisorId;
+        return `${nameOf(getPanel(session, 0))} ${nameOf(getPanel(session, 1))} ${supervisor?.name || ""} ${supervisor?.userId || ""}`;
+      },
     }),
     [],
   );
@@ -754,7 +811,7 @@ export default function TimetableManagementPage() {
             )}
             <div className="relative flex-1">
               <Search className="w-5 h-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-lg" placeholder="Search student, batch, session, date, panel..." />
+              <input value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-10 pr-4 py-2 border rounded-lg" placeholder="Search student, supervisor, batch, session, date, panel..." />
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -772,12 +829,34 @@ export default function TimetableManagementPage() {
                 {sortedSessions.map((session) => {
                   const sessionId = session._id || session.id;
                   const student = getStudent(session);
+                  const supervisor = resolveSupervisor(student);
+                  const isSupervisorViewer = idOf(supervisor) === currentUserId;
                   return (
                     <tr key={sessionId} className="hover:bg-gray-50">
                       <td className="p-4"><p className="font-bold text-gray-900">{session.title || session.sessionType}</p><p className="text-xs text-gray-500">{session.batchName || session.batchId || "No batch"}</p></td>
                       <td className="p-4 text-sm text-gray-700"><div>{normalizeDateKey(session.date)}</div><div className="font-semibold">{session.startTime || session.time} - {session.endTime}</div><a href={formatLink(session.venue || session.googleMeetLink)} target="_blank" rel="noreferrer" className="text-blue-700 font-semibold flex items-center gap-1"><Video className="w-4 h-4" /> Link</a></td>
                       <td className="p-4"><p className="font-bold"><UserProfileLink user={student} fallback="-" className="font-bold" /></p><p className="text-xs text-gray-500">{student?.matricNumber || student?.userId || "-"}</p></td>
-                      <td className="p-4 text-sm"><p><UserProfileLink user={getPanel(session, 0)} fallback={nameOf(getPanel(session, 0))} /></p><p><UserProfileLink user={getPanel(session, 1)} fallback={nameOf(getPanel(session, 1))} /></p></td>
+                      <td className="p-4 text-sm">
+                        <p><UserProfileLink user={getPanel(session, 0)} fallback={nameOf(getPanel(session, 0))} /></p>
+                        <p><UserProfileLink user={getPanel(session, 1)} fallback={nameOf(getPanel(session, 1))} /></p>
+                        {supervisor && (
+                          <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                            <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-bold uppercase text-emerald-700">
+                              SV
+                            </span>
+                            <UserProfileLink
+                              user={supervisor}
+                              fallback={nameOf(supervisor)}
+                              className="font-semibold text-emerald-800"
+                            />
+                            {isSupervisorViewer && (
+                              <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-bold text-emerald-700">
+                                You
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
                       <td className="p-4">
                         <div className="flex justify-end gap-2">
                           <button
@@ -1038,13 +1117,18 @@ export default function TimetableManagementPage() {
                 )}
                 {filteredBulkStudents.map((student) => {
                   const defaultPanels = assignedPanelNames(student);
-                  const isSelected = selectedStudentIds.includes(student._id);
+                  const isSelected = reviewStudentIds.has(String(student._id));
+                  const hasExistingRow = reviewRows.some(
+                    (row) =>
+                      String(row.studentId || "") === String(student._id) &&
+                      row.type === "existing",
+                  );
 
                   return (
                     <button
                       key={student._id}
                       type="button"
-                      aria-pressed={selectedStudentIds.includes(student._id)}
+                      aria-pressed={isSelected}
                       onClick={() => toggleStudentForBulk(student)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter" || e.key === " ") {
@@ -1088,7 +1172,7 @@ export default function TimetableManagementPage() {
                               : "border-gray-200 bg-gray-50 text-gray-500"
                           }`}
                         >
-                          {isSelected ? "Selected" : "Add"}
+                          {hasExistingRow ? "Selected" : isSelected ? "Selected" : "Add"}
                         </span>
                       </div>
                     </button>
@@ -1112,6 +1196,8 @@ export default function TimetableManagementPage() {
               {reviewRows.length === 0 && <div className="p-10 text-center text-gray-500">Select an existing batch or add students to review timings.</div>}
               {reviewRows.map((row, index) => {
                 const errors = publishConflictMap.get(row.key) || [];
+                const student = resolveStudent(row.studentId);
+                const supervisor = resolveSupervisor(student);
                 return (
                   <div key={row.key} draggable onDragStart={() => setDragIndex(index)} onDragOver={(e) => e.preventDefault()} onDrop={() => { if (dragIndex !== null) moveRow(dragIndex, index); setDragIndex(null); }} className={`p-4 grid grid-cols-1 lg:grid-cols-[44px_90px_1fr_140px_180px_120px] gap-3 items-center ${errors.length ? "bg-red-50 border-l-4 border-red-500" : row.type === "existing" ? "bg-blue-50/30" : "bg-white"}`}>
                     <div className="flex items-center gap-2 text-gray-500"><GripVertical className="w-5 h-5" /><span className="font-bold">#{row.slotNo}</span></div>
@@ -1125,6 +1211,18 @@ export default function TimetableManagementPage() {
                         />
                       </p>
                       <p className="text-xs text-gray-500">{row.matricNumber} · {row.type === "existing" ? "Scheduled" : "New Draft"}</p>
+                      {supervisor && (
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
+                          <span className="rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 font-bold uppercase text-emerald-700">
+                            SV
+                          </span>
+                          <UserProfileLink
+                            user={supervisor}
+                            fallback={nameOf(supervisor)}
+                            className="font-semibold text-emerald-800"
+                          />
+                        </div>
+                      )}
                       {errors.map((err) => <p key={err} className="text-xs text-red-700 font-semibold mt-1 flex items-center gap-1"><AlertTriangle className="w-3 h-3" /> {err}</p>)}
                     </div>
                     <div><p className="text-xs text-gray-500 uppercase font-bold">Date</p><p className="font-semibold">{row.date}</p></div>
@@ -1171,8 +1269,8 @@ export default function TimetableManagementPage() {
             <select value={editForm.rubricId} onChange={(e) => setEditForm({ ...editForm, rubricId: e.target.value })} className="w-full p-2 border rounded-lg">{rubrics.map((r) => <option key={r._id} value={r._id}>{r.name}</option>)}</select>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3"><input type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} className="p-2 border rounded-lg" /><input type="time" value={editForm.time} onChange={(e) => setEditForm({ ...editForm, time: e.target.value })} className="p-2 border rounded-lg" /><input type="time" value={editForm.endTime} onChange={(e) => setEditForm({ ...editForm, endTime: e.target.value })} className="p-2 border rounded-lg" /></div>
             <input value={editForm.venue} onChange={(e) => setEditForm({ ...editForm, venue: e.target.value })} className="w-full p-2 border rounded-lg" placeholder="Meeting link" />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><select value={editForm.panel1Id} onChange={(e) => setEditForm({ ...editForm, panel1Id: e.target.value })} className="p-2 border rounded-lg"><option value="">Panel 1</option>{panels.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}</select><select value={editForm.panel2Id} onChange={(e) => setEditForm({ ...editForm, panel2Id: e.target.value })} className="p-2 border rounded-lg"><option value="">Panel 2</option>{panels.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}</select></div>
-            <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 p-3 rounded-lg">Panel replacement is only allowed at least 1 week before the session date. Completed evaluations are not changed.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><select value={editForm.panel1Id} disabled={isPanelReplacementLocked} onChange={(e) => setEditForm({ ...editForm, panel1Id: e.target.value })} className="p-2 border rounded-lg disabled:bg-gray-100 disabled:text-gray-500"><option value="">Panel 1</option>{panels.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}</select><select value={editForm.panel2Id} disabled={isPanelReplacementLocked} onChange={(e) => setEditForm({ ...editForm, panel2Id: e.target.value })} className="p-2 border rounded-lg disabled:bg-gray-100 disabled:text-gray-500"><option value="">Panel 2</option>{panels.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}</select></div>
+            <p className={`text-xs border p-3 rounded-lg ${isPanelReplacementLocked ? "text-red-700 bg-red-50 border-red-200" : "text-amber-700 bg-amber-50 border-amber-200"}`}>{isPanelReplacementLocked ? "Panel replacement is locked because this session is less than 1 week away. Completed evaluations are not changed." : "Panel replacement is only allowed at least 1 week before the session date. Completed evaluations are not changed."}</p>
             <button className="w-full py-3 bg-indigo-600 text-white rounded-lg font-bold">Save Session</button>
           </form>
         </div>

@@ -112,8 +112,8 @@ export const buildTimingConflictMap = ({
   };
   const itemLabel = (item) =>
     item.source === "review"
-      ? `row #${item.slotNo} (${item.studentName || item.title || "session"})`
-      : `existing session "${item.title}"`;
+      ? `row #${item.slotNo}`
+      : "another scheduled session";
   const itemTime = (item) => `${item.startTime || "?"}-${item.endTime || "?"}`;
   const panelNameFor = (item, panelId) => {
     const directName = item.panelNames?.[panelId];
@@ -132,11 +132,11 @@ export const buildTimingConflictMap = ({
       if (a.studentId && a.studentId === b.studentId) {
         addToReviewRow(
           a,
-          `Student conflict: ${a.studentName || "This student"} already has ${itemLabel(b)} on ${a.date} at ${itemTime(b)}. One student can only have one session per day.`,
+          `Student already scheduled on ${a.date} at ${itemTime(b)} in ${itemLabel(b)}.`,
         );
         addToReviewRow(
           b,
-          `Student conflict: ${b.studentName || "This student"} already has ${itemLabel(a)} on ${b.date} at ${itemTime(a)}. One student can only have one session per day.`,
+          `Student already scheduled on ${b.date} at ${itemTime(a)} in ${itemLabel(a)}.`,
         );
       }
       if (a.start === null || a.end === null || b.start === null || b.end === null) {
@@ -147,11 +147,11 @@ export const buildTimingConflictMap = ({
       sharedPanels.forEach((sharedPanel) => {
         addToReviewRow(
           a,
-          `Panel conflict: ${panelNameFor(a, sharedPanel)} is also assigned to ${itemLabel(b)} at ${itemTime(b)}, which overlaps this row at ${itemTime(a)}.`,
+          `${panelNameFor(a, sharedPanel)} already booked at ${itemTime(b)} in ${itemLabel(b)}.`,
         );
         addToReviewRow(
           b,
-          `Panel conflict: ${panelNameFor(b, sharedPanel)} is also assigned to ${itemLabel(a)} at ${itemTime(a)}, which overlaps this row at ${itemTime(b)}.`,
+          `${panelNameFor(b, sharedPanel)} already booked at ${itemTime(a)} in ${itemLabel(a)}.`,
         );
       });
     }
