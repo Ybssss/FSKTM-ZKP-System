@@ -212,15 +212,24 @@ exports.searchFeedback = async (req, res) => {
       ev = attachSessionInfo(ev);
       const evaluatorId = ev.evaluatorId?._id || ev.evaluatorId;
       const studentOwnerId = ev.studentId?._id || ev.studentId;
+      const currentSupervisorId =
+        ev.studentId?.supervisorId?._id || ev.studentId?.supervisorId;
 
       const isAdmin = viewerRole === "admin";
       const isOwnerPanel = String(evaluatorId) === String(viewerId);
       const isStudentOwner =
         viewerRole === "student" && String(studentOwnerId) === String(viewerId);
+      const isCurrentSupervisor =
+        viewerRole === "panel" &&
+        String(currentSupervisorId || "") === String(viewerId);
       const hasApprovedAccess = approvedEvaluationIds.has(String(ev._id));
 
       const canViewProtectedContent =
-        isAdmin || isOwnerPanel || isStudentOwner || hasApprovedAccess;
+        isAdmin ||
+        isOwnerPanel ||
+        isStudentOwner ||
+        isCurrentSupervisor ||
+        hasApprovedAccess;
 
       const studentDocuments = ev.sessionId?.studentDocuments || [];
 

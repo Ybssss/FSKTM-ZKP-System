@@ -9,6 +9,9 @@ const idString = (value) => String(value?._id || value || "");
 
 const isSameId = (a, b) => idString(a) && idString(a) === idString(b);
 
+const getSessionStudentKey = (sessionId, studentId) =>
+  `${idString(sessionId)}|${idString(studentId)}`;
+
 const getEvaluationGroupKey = (evaluation) =>
   idString(evaluation.sessionId) ||
   `${evaluation.sessionType || "UNKNOWN"}_${evaluation.semester || "UNKNOWN"}`;
@@ -101,73 +104,194 @@ const buildEvaluationDocsForTimetable = async (
   ];
 };
 
+const syncSupervisorEvaluationsForStudents = async ({
+  studentIds = [],
+} = {}) => {
+  const cleanStudentIds = [...new Set(studentIds.map(idString).filter(Boolean))];
+  const sessionQuery = cleanStudentIds.length
+    ? { students: { $in: cleanStudentIds } }
+    : {};
+
+  const sessions = await Timetable.find(sessionQuery)
+    .select("_id students rubricId sessionType academicSession")
+    .populate({ path: "students", select: "supervisorId" })
+    .lean();
+
+  if (!sessions.length) {
+    return { createdCount: 0, updatedCount: 0, deletedCount: 0 };
+  }
+
+  const sessionRows = sessions
+    .map((session) => {
+      const student = Array.isArray(session.students) ? session.students[0] : null;
+      const studentId = student?._id || session.students?.[0];
+
+      if (!studentId) return null;
+
+      return {
+        sessionId: session._id,
+        studentId,
+        supervisorId: student?.supervisorId || null,
+        rubricId: session.rubricId || null,
+        semester: session.academicSession || "",
+        sessionType: session.sessionType || "",
+      };
+    })
+    .filter(Boolean);
+
+  if (!sessionRows.length) {
+    return { createdCount: 0, updatedCount: 0, deletedCount: 0 };
+  }
+
+  const sessionIds = [...new Set(sessionRows.map((row) => idString(row.sessionId)))];
+  const rowStudentIds = [...new Set(sessionRows.map((row) => idString(row.studentId)))];
+
+  const existingSupervisorEvals = await Evaluation.find({
+    sessionId: { $in: sessionIds },
+    studentId: { $in: rowStudentIds },
+    formFiller: "Supervisor",
+  })
+    .sort({ createdAt: 1, _id: 1 })
+    .lean();
+
+  const existingByKey = new Map();
+  existingSupervisorEvals.forEach((evaluation) => {
+    const key = getSessionStudentKey(evaluation.sessionId, evaluation.studentId);
+    if (!existingByKey.has(key)) existingByKey.set(key, []);
+    existingByKey.get(key).push(evaluation);
+  });
+
+  const toCreate = [];
+  const updateOps = [];
+  const deleteIds = [];
+
+  sessionRows.forEach((row) => {
+    const key = getSessionStudentKey(row.sessionId, row.studentId);
+    const existing = existingByKey.get(key) || [];
+    const completed = existing.filter(
+      (evaluation) => evaluation.status === "COMPLETED",
+    );
+    const pending = existing.filter(
+      (evaluation) => evaluation.status !== "COMPLETED",
+    );
+
+    if (completed.length) {
+      pending.forEach((evaluation) => deleteIds.push(evaluation._id));
+      return;
+    }
+
+    const supervisorId = idString(row.supervisorId);
+    if (!supervisorId) {
+      pending.forEach((evaluation) => deleteIds.push(evaluation._id));
+      return;
+    }
+
+    if (!pending.length) {
+      toCreate.push({
+        sessionId: row.sessionId,
+        studentId: row.studentId,
+        evaluatorId: row.supervisorId,
+        rubricId: row.rubricId,
+        semester: row.semester,
+        sessionType: row.sessionType,
+        status: "PENDING",
+        formFiller: "Supervisor",
+      });
+      return;
+    }
+
+    const [keeper, ...extras] = pending;
+    const needsUpdate =
+      !isSameId(keeper.evaluatorId, row.supervisorId) ||
+      !isSameId(keeper.rubricId, row.rubricId) ||
+      String(keeper.semester || "") !== String(row.semester || "") ||
+      String(keeper.sessionType || "") !== String(row.sessionType || "");
+
+    if (needsUpdate) {
+      updateOps.push({
+        updateOne: {
+          filter: { _id: keeper._id },
+          update: {
+            $set: {
+              evaluatorId: row.supervisorId,
+              rubricId: row.rubricId,
+              semester: row.semester,
+              sessionType: row.sessionType,
+              formFiller: "Supervisor",
+            },
+          },
+        },
+      });
+    }
+
+    extras.forEach((evaluation) => deleteIds.push(evaluation._id));
+  });
+
+  if (updateOps.length) {
+    await Evaluation.bulkWrite(updateOps, { ordered: false });
+  }
+
+  if (deleteIds.length) {
+    await Evaluation.deleteMany({ _id: { $in: deleteIds } });
+  }
+
+  if (toCreate.length) {
+    await Evaluation.insertMany(toCreate, { ordered: false });
+  }
+
+  return {
+    createdCount: toCreate.length,
+    updatedCount: updateOps.length,
+    deletedCount: deleteIds.length,
+  };
+};
+
 const ensureSupervisorEvaluations = async ({
   studentIds = [],
   supervisorId = null,
 } = {}) => {
-  const query = {};
   const cleanStudentIds = studentIds.map(idString).filter(Boolean);
-  if (cleanStudentIds.length) query.students = { $in: cleanStudentIds };
+  const query = cleanStudentIds.length
+    ? { students: { $in: cleanStudentIds } }
+    : {};
+  const supervisorIdString = idString(supervisorId);
 
   const sessions = await Timetable.find(query)
-    .select("_id students rubricId sessionType academicSession")
-    .populate({ path: "students", select: "supervisorId" });
+    .select("students")
+    .populate({ path: "students", select: "supervisorId" })
+    .lean();
 
   if (!sessions.length) return 0;
 
-  const candidates = [];
+  const relevantStudentIds = [...new Set(
+    sessions
+      .map((session) => {
+        const student = Array.isArray(session.students) ? session.students[0] : null;
+        const studentId = student?._id || session.students?.[0];
+        const studentSupervisorId = student?.supervisorId;
 
-  sessions.forEach((session) => {
-    const student = session.students?.[0];
-    const studentId = student?._id || student;
-    const studentSupervisorId = student?.supervisorId;
+        if (!studentId) return "";
+        if (
+          supervisorIdString &&
+          !isSameId(studentSupervisorId, supervisorIdString)
+        ) {
+          return "";
+        }
 
-    if (!studentId || !studentSupervisorId) return;
-    if (supervisorId && !isSameId(studentSupervisorId, supervisorId)) return;
+        return idString(studentId);
+      })
+      .filter(Boolean),
+  )];
 
-    candidates.push({
-      sessionId: session._id,
-      studentId,
-      evaluatorId: studentSupervisorId,
-      rubricId: session.rubricId,
-      semester: session.academicSession || "",
-      sessionType: session.sessionType,
-      status: "PENDING",
-      formFiller: "Supervisor",
-    });
+  if (!relevantStudentIds.length) return 0;
+
+  const summary = await syncSupervisorEvaluationsForStudents({
+    studentIds: relevantStudentIds,
   });
 
-  if (!candidates.length) return 0;
-
-  const existing = await Evaluation.find({
-    sessionId: { $in: candidates.map((candidate) => candidate.sessionId) },
-    formFiller: "Supervisor",
-  })
-    .select("sessionId studentId evaluatorId formFiller")
-    .lean();
-
-  const existingKeys = new Set(
-    existing.map(
-      (evaluation) =>
-        `${idString(evaluation.sessionId)}|${idString(
-          evaluation.studentId,
-        )}|${idString(evaluation.evaluatorId)}|Supervisor`,
-    ),
+  return (
+    summary.createdCount + summary.updatedCount + summary.deletedCount
   );
-
-  const missing = candidates.filter(
-    (candidate) =>
-      !existingKeys.has(
-        `${idString(candidate.sessionId)}|${idString(
-          candidate.studentId,
-        )}|${idString(candidate.evaluatorId)}|Supervisor`,
-      ),
-  );
-
-  if (!missing.length) return 0;
-
-  await Evaluation.insertMany(missing, { ordered: false });
-  return missing.length;
 };
 
 const ensureSupervisorEvaluationsForViewer = async (viewer = {}) => {
@@ -286,4 +410,5 @@ module.exports = {
   ensureSupervisorEvaluationsForViewer,
   getEvaluationGroupKey,
   sanitizeEvaluationForStudent,
+  syncSupervisorEvaluationsForStudents,
 };

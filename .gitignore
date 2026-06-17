@@ -15,6 +15,9 @@ frontend/dist/
 backend/dist/
 .vite/
 
+# Logs
+*.log
+
 # Database backups (from your script)
 backups/
 

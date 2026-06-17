@@ -11,6 +11,9 @@ const {
   buildSupervisorConflictMessage,
   hasSupervisorPanelConflict,
 } = require("../utils/supervisorConflictValidation");
+const {
+  syncSupervisorEvaluationsForStudents,
+} = require("../utils/evaluationWorkflow");
 
 const queueRegistrationEmail = ({
   email,
@@ -371,6 +374,7 @@ exports.updateUser = async (req, res) => {
     }
 
     const nextRole = updateData.role || existingUser.role;
+    const previousSupervisorId = existingUser.supervisorId;
     const nextSupervisorId =
       updateData.supervisorId !== undefined
         ? updateData.supervisorId
@@ -398,7 +402,21 @@ exports.updateUser = async (req, res) => {
       runValidators: true,
     });
 
-    res.status(200).json({ success: true, user });
+    const supervisorChanged =
+      nextRole === "student" &&
+      String(previousSupervisorId || "") !== String(nextSupervisorId || "");
+
+    if (supervisorChanged) {
+      await syncSupervisorEvaluationsForStudents({ studentIds: [id] });
+    }
+
+    res.status(200).json({
+      success: true,
+      user,
+      message: supervisorChanged
+        ? "User updated. Completed supervisor evaluations remain with the previous supervisor, and pending supervisor evaluations were synchronized to the current supervisor."
+        : undefined,
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: "Failed to update user." });
   }

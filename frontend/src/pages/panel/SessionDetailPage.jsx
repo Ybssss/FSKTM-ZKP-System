@@ -217,17 +217,37 @@ export default function SessionDetailPage() {
     }
   };
 
-  const getPermissionTargetId = (permission) =>
-    typeof permission.targetEvaluationId === "object"
-      ? permission.targetEvaluationId?._id
-      : permission.targetEvaluationId;
+  const getPermissionTargetId = useCallback(
+    (permission) =>
+      typeof permission.targetEvaluationId === "object"
+        ? permission.targetEvaluationId?._id
+        : permission.targetEvaluationId,
+    [],
+  );
 
-  const getRequestForEvaluation = (evaluationId) =>
-    permissions.find(
-      (permission) =>
-        String(getPermissionTargetId(permission)) === String(evaluationId) &&
-        permission.status !== "WITHDRAWN",
-    );
+  const getRequestForEvaluation = useCallback(
+    (evaluationId) =>
+      permissions.find(
+        (permission) =>
+          String(getPermissionTargetId(permission)) === String(evaluationId) &&
+          permission.status !== "WITHDRAWN",
+      ),
+    [getPermissionTargetId, permissions],
+  );
+
+  const canRequestAllHistory = useMemo(
+    () =>
+      isStaff &&
+      historicalEvals.some((ev) => {
+        const request = getRequestForEvaluation(ev._id);
+        return (
+          !ev.accessGranted &&
+          request?.status !== "PENDING" &&
+          request?.status !== "APPROVED"
+        );
+      }),
+    [getRequestForEvaluation, historicalEvals, isStaff],
+  );
 
   const handleRequestAllHistory = async () => {
     try {
@@ -649,13 +669,13 @@ export default function SessionDetailPage() {
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
         <h2 className="text-lg font-bold text-gray-900 mb-4">Quick Actions</h2>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 auto-rows-fr">
           {onlineMeetingUrl && (
             <a
               href={onlineMeetingUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="px-4 py-3 bg-blue-50 text-blue-700 rounded-lg font-bold border border-blue-100 hover:bg-blue-100 flex items-center gap-2"
+              className="w-full min-w-0 px-4 py-3 bg-blue-50 text-blue-700 rounded-lg font-bold border border-blue-100 hover:bg-blue-100 flex items-center justify-center gap-2 text-center leading-tight"
             >
               <Video className="w-4 h-4" />
               Join Meeting
@@ -670,7 +690,7 @@ export default function SessionDetailPage() {
                   .getElementById("session-material-upload")
                   ?.scrollIntoView({ behavior: "smooth" })
               }
-              className="px-4 py-3 bg-indigo-50 text-indigo-700 rounded-lg font-bold border border-indigo-100 hover:bg-indigo-100 flex items-center gap-2"
+              className="w-full min-w-0 px-4 py-3 bg-indigo-50 text-indigo-700 rounded-lg font-bold border border-indigo-100 hover:bg-indigo-100 flex items-center justify-center gap-2 text-center leading-tight"
             >
               <Upload className="w-4 h-4" />
               Upload Material
@@ -686,7 +706,7 @@ export default function SessionDetailPage() {
                 );
                 if (pendingEval) goToEvaluation(pendingEval._id);
               }}
-              className="px-4 py-3 bg-green-50 text-green-700 rounded-lg font-bold border border-green-100 hover:bg-green-100 flex items-center gap-2"
+              className="w-full min-w-0 px-4 py-3 bg-green-50 text-green-700 rounded-lg font-bold border border-green-100 hover:bg-green-100 flex items-center justify-center gap-2 text-center leading-tight"
             >
               <FileText className="w-4 h-4" />
               Evaluate Now
@@ -701,31 +721,13 @@ export default function SessionDetailPage() {
                   .getElementById("historical-feedback-vault")
                   ?.scrollIntoView({ behavior: "smooth" })
               }
-              className="px-4 py-3 bg-gray-50 text-gray-700 rounded-lg font-bold border border-gray-200 hover:bg-gray-100 flex items-center gap-2"
+              className="w-full min-w-0 px-4 py-3 bg-gray-50 text-gray-700 rounded-lg font-bold border border-gray-200 hover:bg-gray-100 flex items-center justify-center gap-2 text-center leading-tight"
             >
               <History className="w-4 h-4" />
               Historical Vault
             </button>
           )}
         </div>
-        {isStaff &&
-          historicalEvals.some((ev) => {
-            const request = getRequestForEvaluation(ev._id);
-            return (
-              !ev.accessGranted &&
-              request?.status !== "PENDING" &&
-              request?.status !== "APPROVED"
-            );
-          }) && (
-            <button
-              type="button"
-              onClick={handleRequestAllHistory}
-              className="px-4 py-3 bg-purple-50 text-purple-700 rounded-lg font-bold border border-purple-100 hover:bg-purple-100 flex items-center gap-2"
-            >
-              <Lock className="w-4 h-4" />
-              Request All History
-            </button>
-          )}
       </div>
 
       {/* PANEL EXAMINERS - visible to students and staff */}
@@ -1206,6 +1208,27 @@ export default function SessionDetailPage() {
               Anti-Plagiarism & Progression Check
             </span>
           </div>
+
+          {canRequestAllHistory && (
+            <div className="px-6 py-4 border-b border-gray-800 bg-gray-950/70 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold text-white">
+                  Locked historical reports are available for request.
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  Request all unavailable historical evaluations for this candidate in one action.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleRequestAllHistory}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-lg font-bold hover:bg-purple-700 transition-colors"
+              >
+                <Lock className="w-4 h-4" />
+                Request All History
+              </button>
+            </div>
+          )}
 
           {historicalEvals.length === 0 ? (
             <div className="p-8 text-center text-gray-400 font-medium">

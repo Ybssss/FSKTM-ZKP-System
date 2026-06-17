@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const Timetable = require("../models/Timetable");
 const User = require("../models/User");
 const Evaluation = require("../models/Evaluation");
+const PermissionRequest = require("../models/PermissionRequest");
 const SessionBatch = require("../models/SessionBatch");
 const Rubric = require("../models/Rubric");
 const { toSessionTypeCode } = require("../utils/sessionType");
@@ -461,6 +462,29 @@ const validateAgainstExisting = async ({ items, excludeSessionIds = [] }) => {
 
 const buildPendingEvaluations = buildEvaluationDocsForTimetable;
 
+const filterPendingEvaluationsAgainstCompleted = (
+  candidates = [],
+  completedEvaluations = [],
+) => {
+  const completedPanelIds = new Set(
+    completedEvaluations
+      .filter((evaluation) => evaluation.formFiller === "Panel")
+      .map((evaluation) => idString(evaluation.evaluatorId))
+      .filter(Boolean),
+  );
+  const hasCompletedSupervisor = completedEvaluations.some(
+    (evaluation) => evaluation.formFiller === "Supervisor",
+  );
+
+  return candidates.filter((candidate) => {
+    if (candidate.formFiller === "Supervisor") {
+      return !hasCompletedSupervisor;
+    }
+
+    return !completedPanelIds.has(idString(candidate.evaluatorId));
+  });
+};
+
 const buildPayload = async (body, userId) => {
   const sessionType = await resolveRubricSessionType({
     sessionType: body.sessionType,
@@ -713,9 +737,17 @@ exports.updateTimetable = async (req, res) => {
     const existing = await Timetable.findById(req.params.id);
     if (!existing) return res.status(404).json({ success: false, message: "Timetable not found." });
 
+    const oldPanels = (existing.panels || []).map(idString).filter(Boolean);
     const nextPanels = req.body.panels
       ? cleanArray(req.body.panels)
       : [req.body.panel1Id ?? existing.panels?.[0], req.body.panel2Id ?? existing.panels?.[1]].filter(Boolean);
+    const normalizedNextPanels = nextPanels.map(idString).filter(Boolean);
+    const panelsChanged =
+      oldPanels.length !== normalizedNextPanels.length ||
+      oldPanels.some((panelId, index) => panelId !== normalizedNextPanels[index]);
+    const removedPanelIds = oldPanels.filter(
+      (panelId) => !normalizedNextPanels.includes(panelId),
+    );
 
     if (nextPanels.length && new Set(nextPanels.map(idString)).size !== nextPanels.length) {
       return res.status(400).json({ success: false, message: "Panel 1 and Panel 2 cannot be the same person." });
@@ -765,8 +797,39 @@ exports.updateTimetable = async (req, res) => {
     const updated = await Timetable.findByIdAndUpdate(req.params.id, updates, { new: true });
 
     if (updates.panels || updates.rubricId || updates.sessionType) {
+      if (panelsChanged && removedPanelIds.length) {
+        const removedPanelEvaluations = await Evaluation.find({
+          sessionId: updated._id,
+          formFiller: "Panel",
+          evaluatorId: { $in: removedPanelIds },
+        })
+          .select("_id")
+          .lean();
+
+        const removedEvaluationIds = removedPanelEvaluations
+          .map((evaluation) => evaluation._id)
+          .filter(Boolean);
+
+        if (removedEvaluationIds.length) {
+          await PermissionRequest.deleteMany({
+            targetEvaluationId: { $in: removedEvaluationIds },
+          });
+          await Evaluation.deleteMany({
+            _id: { $in: removedEvaluationIds },
+          });
+        }
+      }
+
       await Evaluation.deleteMany({ sessionId: updated._id, status: "PENDING" });
-      const pending = await buildPendingEvaluations(
+
+      const completedEvaluations = await Evaluation.find({
+        sessionId: updated._id,
+        status: "COMPLETED",
+      })
+        .select("evaluatorId formFiller")
+        .lean();
+
+      const pendingCandidates = await buildPendingEvaluations(
         updated,
         {
           students: updated.students,
@@ -776,6 +839,10 @@ exports.updateTimetable = async (req, res) => {
           academicSession: updated.academicSession,
         },
         updated.academicSession,
+      );
+      const pending = filterPendingEvaluationsAgainstCompleted(
+        pendingCandidates,
+        completedEvaluations,
       );
       if (pending.length) await Evaluation.insertMany(pending);
     }

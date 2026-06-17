@@ -386,11 +386,16 @@ exports.getEvaluationById = async (req, res) => {
 
     const evaluatorId = evaluation.evaluatorId?._id || evaluation.evaluatorId;
     const studentId = evaluation.studentId?._id || evaluation.studentId;
+    const currentSupervisorId =
+      evaluation.studentId?.supervisorId?._id ||
+      evaluation.studentId?.supervisorId;
 
     const isAdmin = viewerRole === "admin";
     const isOwnerPanel = isSameId(evaluatorId, viewerId);
     const isStudentOwner =
       viewerRole === "student" && isSameId(studentId, viewerId);
+    const isCurrentSupervisor =
+      viewerRole === "panel" && isSameId(currentSupervisorId, viewerId);
     const sessionRefId = evaluation.sessionId?._id || evaluation.sessionId;
     const isAssignedSessionPanel =
       viewerRole === "panel" &&
@@ -414,6 +419,7 @@ exports.getEvaluationById = async (req, res) => {
       !isAdmin &&
       !isOwnerPanel &&
       !isStudentOwner &&
+      !isCurrentSupervisor &&
       !hasApprovedAccess &&
       !isAssignedSessionPanel
     ) {

@@ -699,8 +699,15 @@ export default function TimetableManagementPage() {
   };
 
   const currentUserId = idOf(user?.id || user?._id);
-  const isMyAssignedSession = useCallback((session) =>
-    (session.panels || []).some((panel) => idOf(panel) === currentUserId), [currentUserId]);
+  const isMyAssignedSession = useCallback((session) => {
+    const isPanelAssignment = (session.panels || []).some(
+      (panel) => idOf(panel) === currentUserId,
+    );
+    if (isPanelAssignment) return true;
+
+    const student = getStudent(session);
+    return idOf(student?.supervisorId) === currentUserId;
+  }, [currentUserId]);
 
   const visibleSessions = useMemo(
     () =>
@@ -1270,7 +1277,7 @@ export default function TimetableManagementPage() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3"><input type="date" value={editForm.date} onChange={(e) => setEditForm({ ...editForm, date: e.target.value })} className="p-2 border rounded-lg" /><input type="time" value={editForm.time} onChange={(e) => setEditForm({ ...editForm, time: e.target.value })} className="p-2 border rounded-lg" /><input type="time" value={editForm.endTime} onChange={(e) => setEditForm({ ...editForm, endTime: e.target.value })} className="p-2 border rounded-lg" /></div>
             <input value={editForm.venue} onChange={(e) => setEditForm({ ...editForm, venue: e.target.value })} className="w-full p-2 border rounded-lg" placeholder="Meeting link" />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><select value={editForm.panel1Id} disabled={isPanelReplacementLocked} onChange={(e) => setEditForm({ ...editForm, panel1Id: e.target.value })} className="p-2 border rounded-lg disabled:bg-gray-100 disabled:text-gray-500"><option value="">Panel 1</option>{panels.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}</select><select value={editForm.panel2Id} disabled={isPanelReplacementLocked} onChange={(e) => setEditForm({ ...editForm, panel2Id: e.target.value })} className="p-2 border rounded-lg disabled:bg-gray-100 disabled:text-gray-500"><option value="">Panel 2</option>{panels.map((p) => <option key={p._id} value={p._id}>{p.name}</option>)}</select></div>
-            <p className={`text-xs border p-3 rounded-lg ${isPanelReplacementLocked ? "text-red-700 bg-red-50 border-red-200" : "text-amber-700 bg-amber-50 border-amber-200"}`}>{isPanelReplacementLocked ? "Panel replacement is locked because this session is less than 1 week away. Completed evaluations are not changed." : "Panel replacement is only allowed at least 1 week before the session date. Completed evaluations are not changed."}</p>
+            <p className={`text-xs border p-3 rounded-lg ${isPanelReplacementLocked ? "text-red-700 bg-red-50 border-red-200" : "text-amber-700 bg-amber-50 border-amber-200"}`}>{isPanelReplacementLocked ? "Panel replacement is locked because this session is less than 1 week away. If a panel is replaced earlier, evaluations authored by removed panels are discarded and the new panel receives a pending evaluation." : "Panel replacement is only allowed at least 1 week before the session date. If a panel is replaced, evaluations authored by removed panels are discarded and the new panel receives a pending evaluation."}</p>
             <button className="w-full py-3 bg-indigo-600 text-white rounded-lg font-bold">Save Session</button>
           </form>
         </div>
