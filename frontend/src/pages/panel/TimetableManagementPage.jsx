@@ -50,6 +50,13 @@ const buildBatchId = (batchName, date) => {
   return `${normalizedName || "BATCH"}${normalizedDate ? `-${normalizedDate}` : ""}`;
 };
 
+const buildAcademicSessionOptions = (currentYear = new Date().getFullYear()) => [
+  `${currentYear - 1}/${currentYear}, Semester 1`,
+  `${currentYear - 1}/${currentYear}, Semester 2`,
+  `${currentYear}/${currentYear + 1}, Semester 1`,
+  `${currentYear}/${currentYear + 1}, Semester 2`,
+];
+
 const assignedPanelValue = (assignment) => assignment?.panelId || assignment;
 const sortSessionsBySchedule = (items = []) =>
   [...items].sort((a, b) => {
@@ -107,7 +114,7 @@ export default function TimetableManagementPage() {
   const [slotDuration, setSlotDuration] = useState(() => Number(localStorage.getItem("admin_slot_duration") || 30));
   const [bulkConfig, setBulkConfig] = useState({
     rubricId: "",
-    academicSession: "2025/2026, Semester 1",
+    academicSession: buildAcademicSessionOptions()[0],
     batchName: "",
     batchId: "",
     date: normalizeDateKey(new Date()),
@@ -138,6 +145,28 @@ export default function TimetableManagementPage() {
   const visibleBatchId = isExistingBatchMode
     ? bulkConfig.batchId || selectedBatchId || derivedBatchId
     : derivedBatchId;
+  const baseAcademicSessionOptions = useMemo(
+    () => buildAcademicSessionOptions(),
+    [],
+  );
+  const bulkAcademicSessionOptions = useMemo(() => {
+    if (
+      bulkConfig.academicSession &&
+      !baseAcademicSessionOptions.includes(bulkConfig.academicSession)
+    ) {
+      return [bulkConfig.academicSession, ...baseAcademicSessionOptions];
+    }
+    return baseAcademicSessionOptions;
+  }, [baseAcademicSessionOptions, bulkConfig.academicSession]);
+  const batchEditAcademicSessionOptions = useMemo(() => {
+    if (
+      batchForm.academicSession &&
+      !baseAcademicSessionOptions.includes(batchForm.academicSession)
+    ) {
+      return [batchForm.academicSession, ...baseAcademicSessionOptions];
+    }
+    return baseAcademicSessionOptions;
+  }, [baseAcademicSessionOptions, batchForm.academicSession]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -568,7 +597,6 @@ export default function TimetableManagementPage() {
           batchName: bulkConfig.batchName.trim(),
           batchId: finalBatchId,
           academicSession: bulkConfig.academicSession,
-          scheduleTitle: "Postgraduate Progress Presentation Schedule",
           sessionType,
           rubricId: bulkConfig.rubricId,
           date: bulkConfig.date,
@@ -583,7 +611,6 @@ export default function TimetableManagementPage() {
       await api.post("/timetables/bulk", {
         useExistingBatch: batchMode === "existing",
         academicSession: bulkConfig.academicSession,
-        scheduleTitle: "Postgraduate Progress Presentation Schedule",
         batchName: bulkConfig.batchName.trim(),
         batchId: finalBatchId,
         googleMeetLink: bulkConfig.venue,
@@ -678,8 +705,8 @@ export default function TimetableManagementPage() {
     setBatchForm({
       batchName: selectedBatch.batchName || "",
       academicSession: selectedBatch.academicSession || "",
-      scheduleTitle: selectedBatch.scheduleTitle || "Postgraduate Progress Presentation Schedule",
       sessionType: selectedBatch.sessionType || "PROPOSAL_DEFENSE",
+      rubricId: idOf(selectedBatch.rubricId) || "",
       date: normalizeDateKey(selectedBatch.date || selectedBatch.earliestDate),
       startTime: selectedBatch.startTime || "09:00",
       slotDurationMinutes: selectedBatch.slotDurationMinutes || slotDuration,
@@ -1175,6 +1202,18 @@ export default function TimetableManagementPage() {
             <div className="bg-white rounded-xl border shadow-sm p-5 space-y-3">
               <h2 className="text-lg font-bold">Batch Details</h2>
               <input value={bulkConfig.batchName} disabled={isExistingBatchMode} onChange={(e) => updateBulkConfig({ batchName: e.target.value })} placeholder="Batch Name, e.g. PIXEL" className="w-full p-2 border rounded-lg disabled:bg-gray-100" />
+              <select
+                value={bulkConfig.academicSession}
+                disabled={isExistingBatchMode}
+                onChange={(e) => updateBulkConfig({ academicSession: e.target.value })}
+                className="w-full p-2 border rounded-lg disabled:bg-gray-100 bg-white"
+              >
+                {bulkAcademicSessionOptions.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
               <div className="w-full p-2 border rounded-lg bg-gray-50 text-sm disabled:bg-gray-100">
                 <p className="text-[11px] font-bold uppercase tracking-wide text-gray-500 mb-1">
                   {isExistingBatchMode ? "Batch ID" : "Batch ID (Auto-generated)"}
@@ -1445,8 +1484,39 @@ export default function TimetableManagementPage() {
           <form onSubmit={submitEditBatch} className="bg-white rounded-xl max-w-xl w-full p-6 space-y-4 shadow-xl">
             <div className="flex justify-between items-center"><h2 className="text-xl font-bold">Edit Batch</h2><button type="button" onClick={() => setEditingBatch(false)}><X className="w-5 h-5" /></button></div>
             <input value={batchForm.batchName || ""} onChange={(e) => setBatchForm({ ...batchForm, batchName: e.target.value })} className="w-full p-2 border rounded-lg" placeholder="Batch name" />
-            <input value={batchForm.academicSession || ""} onChange={(e) => setBatchForm({ ...batchForm, academicSession: e.target.value })} className="w-full p-2 border rounded-lg" placeholder="Academic session" />
-            <input value={batchForm.scheduleTitle || ""} onChange={(e) => setBatchForm({ ...batchForm, scheduleTitle: e.target.value })} className="w-full p-2 border rounded-lg" placeholder="Schedule title" />
+            <select
+              value={batchForm.academicSession || ""}
+              onChange={(e) => setBatchForm({ ...batchForm, academicSession: e.target.value })}
+              className="w-full p-2 border rounded-lg bg-white"
+            >
+              {batchEditAcademicSessionOptions.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
+            <div className="space-y-1">
+              <select
+                value={batchForm.rubricId || ""}
+                onChange={(e) => setBatchForm({ ...batchForm, rubricId: e.target.value })}
+                className="w-full p-2 border rounded-lg bg-white"
+              >
+                <option value="">Select rubric...</option>
+                {rubrics.map((rubric) => (
+                  <option key={rubric._id} value={rubric._id}>
+                    {rubric.name}
+                  </option>
+                ))}
+              </select>
+              {batchForm.rubricId && (
+                <p className="text-xs text-gray-500">
+                  Session type will follow the selected rubric.
+                </p>
+              )}
+            </div>
+            <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-semibold text-amber-800">
+              Changing the batch rubric only affects future sessions added to this batch. Existing created sessions keep their original rubric.
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><input type="date" value={batchForm.date || ""} onChange={(e) => setBatchForm({ ...batchForm, date: e.target.value })} className="p-2 border rounded-lg" /><input type="time" value={batchForm.startTime || ""} onChange={(e) => setBatchForm({ ...batchForm, startTime: e.target.value })} className="p-2 border rounded-lg" /></div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <label className="block">

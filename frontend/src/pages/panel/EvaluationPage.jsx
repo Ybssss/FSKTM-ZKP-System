@@ -650,9 +650,6 @@ export default function EvaluationPage() {
                           <p className="mt-1 text-xs font-mono text-gray-500">
                             {ev.evaluatorId?.userId || ev.evaluatorId?.email || "-"}
                           </p>
-                          <p className="mt-1 text-[11px] font-bold uppercase text-gray-400">
-                            {getEvaluationRoleLabel(ev)}
-                          </p>
                         </td>
                       )}
                       <td className="p-4 text-center">

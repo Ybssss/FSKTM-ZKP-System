@@ -611,7 +611,6 @@ async function main() {
         batchName: `Smoke Batch ${unique}`,
         batchId,
         academicSession: "2025/2026",
-        scheduleTitle: "Smoke Test Schedule",
         rubricId: toId(rubric._id),
         date: "2026-06-20",
         startTime: "09:00",

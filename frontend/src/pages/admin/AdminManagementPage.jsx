@@ -24,6 +24,7 @@ export default function AdminManagementPage() {
     email: "",
     role: "",
     matricNumber: "",
+    program: "",
   });
 
   useEffect(() => {
@@ -57,6 +58,7 @@ export default function AdminManagementPage() {
         email: "",
         role: "",
         matricNumber: "",
+        program: "",
       });
       fetchUsers();
     } catch {
@@ -265,16 +267,27 @@ export default function AdminManagementPage() {
             <option value="student">Student</option>
           </select>
           {formData.role === "student" && (
-            <input
-              required
-              type="text"
-              placeholder="Matric Number"
-              value={formData.matricNumber}
-              onChange={(e) =>
-                setFormData({ ...formData, matricNumber: e.target.value })
-              }
-              className="w-full p-2 border rounded"
-            />
+            <>
+              <input
+                required
+                type="text"
+                placeholder="Matric Number"
+                value={formData.matricNumber}
+                onChange={(e) =>
+                  setFormData({ ...formData, matricNumber: e.target.value })
+                }
+                className="w-full p-2 border rounded"
+              />
+              <input
+                type="text"
+                placeholder="Programme"
+                value={formData.program}
+                onChange={(e) =>
+                  setFormData({ ...formData, program: e.target.value })
+                }
+                className="w-full p-2 border rounded"
+              />
+            </>
           )}
           <button
             type="submit"

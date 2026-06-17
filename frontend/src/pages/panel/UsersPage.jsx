@@ -597,6 +597,12 @@ export default function UsersPage() {
                           "{u.researchTitle}"
                         </p>
                       )}
+
+                      {u.role === "student" && u.program && (
+                        <p className="mt-2 text-xs font-semibold text-gray-600">
+                          {u.program}
+                        </p>
+                      )}
                     </td>
                     <td className="p-4 text-sm text-gray-600">
                       {u.role === "student" ? (
@@ -754,6 +760,23 @@ export default function UsersPage() {
                         })
                       }
                       className="w-full border-2 border-indigo-200 rounded p-2 uppercase font-bold focus:ring-2 focus:ring-indigo-500 bg-indigo-50"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">
+                      Programme
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.program}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          program: e.target.value,
+                        })
+                      }
+                      placeholder="e.g. Master of Information Security"
+                      className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
                   <div>
@@ -961,6 +984,23 @@ export default function UsersPage() {
                         })
                       }
                       className="w-full border rounded p-2 uppercase font-bold focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">
+                      Programme
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.program}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          program: e.target.value,
+                        })
+                      }
+                      placeholder="e.g. Master of Information Security"
+                      className="w-full border rounded p-2 focus:ring-2 focus:ring-indigo-500"
                     />
                   </div>
                   <div>

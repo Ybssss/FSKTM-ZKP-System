@@ -49,7 +49,7 @@ const normalizeProfileImageUrl = (value = "") => String(value || "").trim();
 
 export default function StudentProfile() {
   const { id: viewedUserId } = useParams();
-  const { user } = useAuth();
+  const { user, updateUser } = useAuth();
   const navigate = useNavigate();
 
   const [profileData, setProfileData] = useState(null);
@@ -275,6 +275,12 @@ export default function StudentProfile() {
         ...(res.user || {}),
         profileImageUrl: persistedProfileImageUrl,
       }));
+      if (isOwnProfile) {
+        updateUser({
+          ...(res.user || {}),
+          profileImageUrl: persistedProfileImageUrl,
+        });
+      }
       setProfileImagePreview("");
       setMessage({
         type: "success",

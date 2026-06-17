@@ -68,7 +68,6 @@ exports.createBatch = async (req, res) => {
       batchName,
       batchId,
       academicSession,
-      scheduleTitle,
       sessionType,
       rubricId,
       date,
@@ -103,10 +102,6 @@ exports.createBatch = async (req, res) => {
       batchId:
         cleanText(batchId || "", 150) || buildBatchId(batchName, date),
       academicSession: cleanText(academicSession || "", 100),
-      scheduleTitle: cleanText(
-        scheduleTitle || "Postgraduate Progress Presentation Schedule",
-        150,
-      ),
       sessionType: resolvedSessionType,
       rubricId: rubricId || null,
       date: normalizeDateOnly(date),
@@ -199,7 +194,6 @@ exports.updateBatch = async (req, res) => {
     [
       "batchName",
       "academicSession",
-      "scheduleTitle",
       "sessionType",
       "rubricId",
       "date",
@@ -216,8 +210,6 @@ exports.updateBatch = async (req, res) => {
       updates.batchName = cleanText(updates.batchName, 100);
     if (updates.academicSession !== undefined)
       updates.academicSession = cleanText(updates.academicSession, 100);
-    if (updates.scheduleTitle !== undefined)
-      updates.scheduleTitle = cleanText(updates.scheduleTitle, 150);
     if (updates.googleMeetLink !== undefined)
       updates.googleMeetLink = cleanText(updates.googleMeetLink, 500);
     if (updates.startTime !== undefined)
@@ -255,10 +247,10 @@ exports.updateBatch = async (req, res) => {
     if (updates.batchName !== undefined) timetableUpdates.batchName = batch.batchName;
     if (updates.academicSession !== undefined)
       timetableUpdates.academicSession = batch.academicSession;
-    if (updates.scheduleTitle !== undefined)
-      timetableUpdates.scheduleTitle = batch.scheduleTitle;
-    if (updates.sessionType !== undefined) timetableUpdates.sessionType = batch.sessionType;
-    if (updates.rubricId !== undefined) timetableUpdates.rubricId = batch.rubricId || null;
+    // Keep rubric/session type changes at the batch-master level only.
+    // Existing created timetable sessions must preserve the rubric they were
+    // originally scheduled with, while future sessions added into this batch
+    // should use the updated batch rubric.
     if (updates.date !== undefined) timetableUpdates.date = normalizeDateOnly(batch.date);
     if (updates.slotDurationMinutes !== undefined)
       timetableUpdates.slotDurationMinutes = batch.slotDurationMinutes;
@@ -280,12 +272,17 @@ exports.updateBatch = async (req, res) => {
       syncedSessionsCount = result.modifiedCount || result.nModified || 0;
     }
 
+    const preservedExistingRubric =
+      updates.rubricId !== undefined || updates.sessionType !== undefined;
+
     res.json({
       success: true,
       batch,
       syncedSessionsCount,
       message:
-        syncedSessionsCount > 0
+        preservedExistingRubric
+          ? "Batch updated. Existing created sessions kept their original rubric; the new batch rubric applies to future sessions only."
+          : syncedSessionsCount > 0
           ? `Batch updated and ${syncedSessionsCount} scheduled session(s) synced.`
           : "Batch updated.",
     });

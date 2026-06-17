@@ -17,7 +17,7 @@ test("qualitative-only completed evaluations render as text only", () => {
   };
 
   assert.equal(getScoreBadgeLabel(evaluation), "Text Only");
-  assert.equal(getScoreBadgeClass(evaluation), "text-gray-600 bg-gray-100");
+  assert.equal(getScoreBadgeClass(evaluation), "text-blue-700 bg-blue-100");
 });
 
 test("completed scored evaluations without submitted scores render as not marked", () => {
@@ -44,6 +44,7 @@ test("pending scored evaluations render as pending", () => {
   };
 
   assert.equal(getScoreBadgeLabel(evaluation), "Pending");
+  assert.equal(getScoreBadgeClass(evaluation), "text-amber-700 bg-amber-100");
 });
 
 test("completed scored evaluations with submitted marks render the percentage", () => {

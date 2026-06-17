@@ -1,6 +1,7 @@
 import React from 'react';
 import { useAuth } from '../../contexts/AuthContext';
-import { LogOut, User } from 'lucide-react';
+import { LogOut } from 'lucide-react';
+import UserAvatar from "../UserAvatar";
 
 export default function Navbar() {
   const { user, logout } = useAuth();
@@ -36,9 +37,11 @@ export default function Navbar() {
                 {user?.email}
               </div>
             </div>
-            <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-semibold">
-              {user?.name?.charAt(0)}
-            </div>
+            <UserAvatar
+              user={user}
+              className="w-10 h-10 rounded-full overflow-hidden bg-primary"
+              fallbackClassName="w-full h-full rounded-full flex items-center justify-center bg-primary text-white font-semibold uppercase"
+            />
             <button
               onClick={handleLogout}
               className="p-2 text-gray-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"

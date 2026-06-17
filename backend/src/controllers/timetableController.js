@@ -526,10 +526,6 @@ const buildPayload = async (body, userId) => {
     batchName: cleanText(body.batchName || "", 100),
     batchId: cleanText(body.batchId || body.batchName || "", 150),
     academicSession: cleanText(body.academicSession || body.semester || "", 100),
-    scheduleTitle: cleanText(
-      body.scheduleTitle || "Postgraduate Progress Presentation Schedule",
-      150,
-    ),
     slotDurationMinutes: toPositiveInt(body.slotDurationMinutes, null),
     breakBetweenSlotsMinutes: toNonNegativeInt(
       body.breakBetweenSlotsMinutes,
@@ -623,7 +619,6 @@ exports.createBulkTimetables = async (req, res) => {
       googleMeetLink,
       venue,
       academicSession,
-      scheduleTitle,
       slotDurationMinutes,
       breakBetweenSlotsMinutes,
       useExistingBatch,
@@ -651,10 +646,6 @@ exports.createBulkTimetables = async (req, res) => {
       : requestedBatchName || effectiveBatchId;
     const effectiveVenue = cleanText(googleMeetLink || venue || selectedBatch?.googleMeetLink || "", 500);
     const effectiveAcademicSession = cleanText(academicSession || selectedBatch?.academicSession || "", 100);
-    const effectiveScheduleTitle = cleanText(
-      scheduleTitle || selectedBatch?.scheduleTitle || "Postgraduate Progress Presentation Schedule",
-      150,
-    );
     const effectiveSlotDuration = toPositiveInt(
       slotDurationMinutes || selectedBatch?.slotDurationMinutes,
       60,
@@ -694,7 +685,6 @@ exports.createBulkTimetables = async (req, res) => {
         batchId: effectiveBatchId,
         batchName: effectiveBatchName,
         academicSession: effectiveAcademicSession,
-        scheduleTitle: effectiveScheduleTitle,
         slotDurationMinutes: effectiveSlotDuration,
         breakBetweenSlotsMinutes: effectiveBreak,
       };
@@ -756,7 +746,7 @@ exports.updateTimetable = async (req, res) => {
     assertPanelReplacementWindow(existing, nextPanels);
 
     const updates = {};
-    ["sessionType", "rubricId", "title", "description", "venue", "googleMeetLink", "status", "batchId", "batchName", "academicSession", "scheduleTitle"].forEach((field) => {
+    ["sessionType", "rubricId", "title", "description", "venue", "googleMeetLink", "status", "batchId", "batchName", "academicSession"].forEach((field) => {
       if (req.body[field] !== undefined) updates[field] = req.body[field];
     });
 
@@ -952,7 +942,6 @@ exports.getAvailableBatches = async (req, res) => {
           date: { $min: "$date" },
           sessionType: { $first: "$sessionType" },
           academicSession: { $first: "$academicSession" },
-          scheduleTitle: { $first: "$scheduleTitle" },
           googleMeetLink: { $first: "$googleMeetLink" },
           startTime: { $min: "$startTime" },
           slotDurationMinutes: { $first: "$slotDurationMinutes" },
@@ -1012,21 +1001,18 @@ const buildBatchSchedule = async (batchId) => {
 
   const batchName = batch?.batchName || first.batchName || batchId;
   const academicSession = batch?.academicSession || first.academicSession || "";
-  const scheduleTitle =
-    batch?.scheduleTitle || first.scheduleTitle || "Postgraduate Progress Presentation Schedule";
   const googleMeetLink = batch?.googleMeetLink || first.googleMeetLink || first.venue || "";
   const sessionType = batch?.sessionType || first.sessionType || "";
   const rubricName = batch?.rubricId?.name || first.rubricId?.name || "";
 
   return {
-    title: scheduleTitle,
+    title: batchName,
     batchId,
     batchName,
     date: dateInfo.raw,
     dateDisplay: dateInfo.display,
     dayName: dateInfo.dayName,
     academicSession,
-    scheduleTitle,
     googleMeetLink,
     sessionType,
     rubricName,

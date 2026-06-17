@@ -134,11 +134,6 @@ const timetableSchema = new mongoose.Schema(
       default: "",
     },
 
-    scheduleTitle: {
-      type: String,
-      default: "Postgraduate Progress Presentation Schedule",
-    },
-
     // Panel notes saved before the live evaluation.
     panelNotes: [
       {

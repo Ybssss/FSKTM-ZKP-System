@@ -72,6 +72,13 @@ const queueRegistrationEmail = ({
   return status;
 };
 
+const cleanProgram = (value) =>
+  String(value || "")
+    .normalize("NFKC")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 160);
+
 exports.getAllUsers = async (req, res) => {
   try {
     const users = await User.find()
@@ -176,7 +183,7 @@ exports.createUser = async (req, res) => {
         matricNumber: String(matricNumber || "")
           .replace(/\s+/g, "")
           .toUpperCase(),
-        program,
+        program: cleanProgram(program),
         researchTitle: String(researchTitle || "")
           .replace(/[<>]/g, "")
           .replace(/\s+/g, " ")
@@ -342,7 +349,7 @@ exports.updateUser = async (req, res) => {
       name,
       email,
       matricNumber,
-      program,
+      program: program !== undefined ? cleanProgram(program) : undefined,
       researchTitle,
       researchAbstract:
         researchAbstract !== undefined

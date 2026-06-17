@@ -32,6 +32,10 @@ const getPersonName = (value, fallback = "-") => {
   if (typeof value === "string") return value;
   return value.name || value.userId || value.email || fallback;
 };
+const getPersonIdentifier = (value) => {
+  if (!value || typeof value === "string") return "";
+  return value.userId || value.email || "";
+};
 
 const getEvaluation = (item) => item?.targetEvaluationId || item;
 
@@ -429,6 +433,27 @@ export default function HistoricalFeedbackPage() {
       </div>
     </div>
   );
+  const renderPersonInfo = (person, fallback = "-") => {
+    if (!person) return fallback;
+    if (typeof person === "string") return person;
+
+    const personIdentifier = getPersonIdentifier(person);
+
+    return (
+      <div>
+        <UserProfileLink
+          user={person}
+          fallback={fallback}
+          className="font-semibold text-gray-900"
+        />
+        {personIdentifier && (
+          <p className="mt-1 text-xs font-mono text-gray-500">
+            {personIdentifier}
+          </p>
+        )}
+      </div>
+    );
+  };
 
   const EvaluationCard = ({ evaluation, locked = false }) => {
     const session = getSession(evaluation);
@@ -521,7 +546,10 @@ export default function HistoricalFeedbackPage() {
               <InfoLine label="Session" value={session?.title} />
               <InfoLine label="Batch" value={session?.batchName || session?.batchId} />
               <InfoLine label="Date / Time" value={`${formatDate(session?.date)} · ${session?.startTime || "-"} - ${session?.endTime || "-"}`} />
-              <InfoLine label="Evaluator" value={getPersonName(evaluation.evaluatorId)} />
+              <InfoLine
+                label="Evaluator"
+                content={renderPersonInfo(evaluation.evaluatorId, "Unknown Evaluator")}
+              />
               <InfoLine
                 label="Rubric"
                 value={getRubricDisplayName(rubric, evaluation.sessionType)}
@@ -677,9 +705,15 @@ export default function HistoricalFeedbackPage() {
       },
       {
         label: "Original Owner",
-        value: getPersonName(request.owningPanelId || evaluation?.evaluatorId),
+        content: renderPersonInfo(
+          request.owningPanelId || evaluation?.evaluatorId,
+          "Unknown Owner",
+        ),
       },
-      { label: "Access Holder", value: getPersonName(request.requestingPanelId) },
+      {
+        label: "Access Holder",
+        content: renderPersonInfo(request.requestingPanelId, "Unknown Holder"),
+      },
       ...requestContextFields,
     ];
 

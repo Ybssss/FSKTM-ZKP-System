@@ -235,9 +235,9 @@ export default function BatchSchedulePrintPage() {
       ];
 
       const data = [
-        [schedule.academicSession ? `(${schedule.academicSession}) ${schedule.title || schedule.scheduleTitle || ""}` : schedule.title || ""],
-        [schedule.title || schedule.scheduleTitle || "Postgraduate Progress Presentation Schedule"],
-        [`Session: ${schedule.batchName || "-"}`],
+        [schedule.academicSession ? `(${schedule.academicSession})` : ""],
+        [schedule.batchName || schedule.title || "-"],
+        [`Batch ID: ${schedule.batchId || "-"}`],
         [getScheduleDateLine(schedule)],
         [`GMLink: ${schedule.googleMeetLink || "-"}`],
         [],
@@ -397,16 +397,16 @@ export default function BatchSchedulePrintPage() {
           >
             {schedule.academicSession && (
               <h1 className="text-xl font-bold mb-4">
-                ({schedule.academicSession}) {schedule.title || schedule.scheduleTitle}
+                ({schedule.academicSession})
               </h1>
             )}
 
             <h2 className="text-lg font-bold mb-4">
-              {schedule.title || schedule.scheduleTitle || "Postgraduate Progress Presentation Schedule"}
+              {schedule.batchName || schedule.title || "-"}
             </h2>
 
             <div className="mb-5 space-y-1">
-              <p className="text-2xl font-bold">Session: {schedule.batchName}</p>
+              <p className="text-2xl font-bold">Batch ID: {schedule.batchId || "-"}</p>
               <p className="font-semibold">{getScheduleDateLine(schedule)}</p>
               <p className="font-semibold">GMLink: {schedule.googleMeetLink || "-"}</p>
             </div>

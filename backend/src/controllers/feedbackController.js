@@ -24,7 +24,7 @@ const STUDENT_SELECT =
 const EVALUATOR_SELECT = "name email userId role profession expertiseTags";
 const RUBRIC_SELECT = "name sessionType criteria";
 const SESSION_SELECT =
-  "title sessionType date startTime endTime venue googleMeetLink batchId batchName academicSession scheduleTitle status studentDocuments students panels rubricId";
+  "title sessionType date startTime endTime venue googleMeetLink batchId batchName academicSession status studentDocuments students panels rubricId";
 
 const attachSessionInfo = (evaluation) => {
   if (!evaluation) return evaluation;
@@ -43,7 +43,6 @@ const attachSessionInfo = (evaluation) => {
       batchId: session.batchId || "",
       batchName: session.batchName || "",
       academicSession: session.academicSession || evaluation.semester || "",
-      scheduleTitle: session.scheduleTitle || "",
       status: session.status || "",
       studentDocuments: session.studentDocuments || [],
       students: session.students || [],

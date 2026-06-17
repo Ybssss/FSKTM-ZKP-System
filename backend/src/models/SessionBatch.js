@@ -18,10 +18,6 @@ const sessionBatchSchema = new mongoose.Schema(
       type: String,
       default: "",
     },
-    scheduleTitle: {
-      type: String,
-      default: "Postgraduate Progress Presentation Schedule",
-    },
     sessionType: {
       type: String,
       required: true,

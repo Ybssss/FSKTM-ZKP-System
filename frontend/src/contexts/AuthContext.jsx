@@ -28,6 +28,26 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  const updateUser = useCallback((nextUser) => {
+    setUser((previousUser) => {
+      const resolvedUser =
+        typeof nextUser === "function" ? nextUser(previousUser) : nextUser;
+
+      if (!resolvedUser) {
+        localStorage.removeItem("user");
+        return null;
+      }
+
+      const mergedUser = {
+        ...(previousUser || {}),
+        ...resolvedUser,
+      };
+
+      localStorage.setItem("user", JSON.stringify(mergedUser));
+      return mergedUser;
+    });
+  }, []);
+
   const clearLocalSession = useCallback(({
     clearDeviceBinding = false,
     clearKeys = false,
@@ -215,6 +235,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     forceLogout,
     checkAuth,
+    updateUser,
   };
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

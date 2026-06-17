@@ -55,4 +55,8 @@ export const getScoreColorClass = (score) => {
 export const getScoreBadgeClass = (evaluation) =>
   hasDisplayableScore(evaluation)
     ? getScoreColorClass(Number(evaluation.totalMarks))
-    : "text-gray-600 bg-gray-100";
+    : getReportCriteria(evaluation).length === 0
+      ? "text-blue-700 bg-blue-100"
+      : evaluation?.status !== "COMPLETED"
+        ? "text-amber-700 bg-amber-100"
+        : "text-gray-600 bg-gray-100";

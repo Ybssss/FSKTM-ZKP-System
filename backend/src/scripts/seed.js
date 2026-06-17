@@ -1003,7 +1003,6 @@ const seedDatabase = async () => {
     const makeDate = (dateOnly) => new Date(`${dateOnly}T00:00:00.000Z`);
 
     const academicSession = "2025/2026, Semester 1";
-    const scheduleTitle = "Postgraduate Progress Presentation Schedule";
 
     const stageConfigs = [
       {
@@ -1230,7 +1229,6 @@ const seedDatabase = async () => {
         batchName: group.batchName,
         batchId: getStageBatchId(stage, group.batchName),
         academicSession,
-        scheduleTitle,
         sessionType: stage.sessionType,
         rubricId: stage.rubric._id,
         date: stage.date,
@@ -1266,7 +1264,6 @@ const seedDatabase = async () => {
             batchId: getStageBatchId(stage, group.batchName),
             batchName: group.batchName,
             academicSession,
-            scheduleTitle,
             slotDurationMinutes: 60,
             breakBetweenSlotsMinutes: 5,
           };

@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
 import api from "../../services/api";
+import UserAvatar from "../UserAvatar";
 import {
   HISTORICAL_REQUESTS_UPDATED_EVENT,
 } from "../../utils/historicalRequestEvents";
@@ -235,9 +236,11 @@ export default function PanelLayout() {
 
         <div className="p-4 border-b border-gray-200 bg-indigo-50">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-600 rounded-full flex items-center justify-center text-white font-semibold uppercase">
-              {user?.name?.charAt(0) || "U"}
-            </div>
+            <UserAvatar
+              user={user}
+              className="w-10 h-10 rounded-full overflow-hidden bg-indigo-600"
+              fallbackClassName="w-full h-full rounded-full flex items-center justify-center bg-indigo-600 text-white font-semibold uppercase"
+            />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-semibold text-gray-900 truncate">
                 {user?.name || "Loading..."}
@@ -321,9 +324,11 @@ export default function PanelLayout() {
               {formatRole(user?.role)} Portal
             </h1>
           </div>
-          <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center text-white font-bold text-xs uppercase">
-            {user?.name?.charAt(0) || "U"}
-          </div>
+          <UserAvatar
+            user={user}
+            className="w-8 h-8 rounded-full overflow-hidden bg-indigo-600"
+            fallbackClassName="w-full h-full rounded-full flex items-center justify-center bg-indigo-600 text-white font-bold text-xs uppercase"
+          />
         </header>
 
         <main className="flex-1 overflow-auto">
