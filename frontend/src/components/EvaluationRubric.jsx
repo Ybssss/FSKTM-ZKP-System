@@ -1,14 +1,11 @@
 import React, { useState } from "react";
 import axios from "axios";
+import { formatMarkLabel } from "../utils/evaluationForm";
 
-const SCALE = [
-  { label: "Outstanding", value: 5 },
-  { label: "Exemplary", value: 4 },
-  { label: "Proficient", value: 3 },
-  { label: "Satisfactory", value: 2 },
-  { label: "Foundational", value: 1 },
-  { label: "Novice", value: 0 },
-];
+const SCALE = Array.from({ length: 6 }, (_, index) => {
+  const value = 5 - index;
+  return { label: formatMarkLabel(value), value };
+});
 
 // Sample criteria from the PDF (You can fetch this from the DB based on sessionType)
 const CRITERIA = [

@@ -15,13 +15,10 @@ const criterionSchema = new mongoose.Schema(
     maxScore: { type: Number, default: 5 },
 
     description: { type: String, default: "" },
-
-    outstanding: { type: String, default: "" },
-    exemplary: { type: String, default: "" },
-    proficient: { type: String, default: "" },
-    satisfactory: { type: String, default: "" },
-    foundational: { type: String, default: "" },
-    novice: { type: String, default: "" },
+    scoreDescriptions: {
+      type: mongoose.Schema.Types.Mixed,
+      default: () => ({}),
+    },
   },
   { _id: false },
 );

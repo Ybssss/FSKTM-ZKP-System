@@ -541,7 +541,9 @@ async function main() {
             type: "quantitative",
             weight: 100,
             maxScore: 5,
-            outstanding: "Excellent.",
+            scoreDescriptions: {
+              5: "Excellent.",
+            },
           },
           {
             key: "criterion_qualitative",

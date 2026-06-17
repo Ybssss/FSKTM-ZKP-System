@@ -1,14 +1,11 @@
 import React, { useState } from "react";
 import api from "../services/api";
+import { formatMarkLabel } from "../utils/evaluationForm";
 
-const SCALE = [
-  { label: "Outstanding", value: 5 },
-  { label: "Exemplary", value: 4 },
-  { label: "Proficient", value: 3 },
-  { label: "Satisfactory", value: 2 },
-  { label: "Foundational", value: 1 },
-  { label: "Novice", value: 0 },
-];
+const SCALE = Array.from({ length: 6 }, (_, index) => {
+  const value = 5 - index;
+  return { label: formatMarkLabel(value), value };
+});
 
 const EvaluationForm = ({ session, user }) => {
   const [loading, setLoading] = useState(false);
@@ -155,10 +152,10 @@ const EvaluationForm = ({ session, user }) => {
                 <tr className="bg-indigo-700 text-white">
                   <th className="p-2 border">Criteria</th>
                   {SCALE.map((s) => (
-                    <th key={s.value} className="p-2 border text-center">
-                      {s.label} ({s.value})
-                    </th>
-                  ))}
+                  <th key={s.value} className="p-2 border text-center">
+                      {s.label}
+                  </th>
+                ))}
                 </tr>
               </thead>
               <tbody>

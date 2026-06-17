@@ -90,6 +90,7 @@ const getEvaluationScheduleLabel = (evaluation) => {
   }
   return `${startTime} - ${endTime}`;
 };
+const hasSessionTitle = (evaluation) => Boolean(evaluation?.sessionId?.title);
 
 export default function EvaluationPage() {
   const { user } = useAuth();
@@ -512,9 +513,20 @@ export default function EvaluationPage() {
                       </td>
                       <td className="p-4">
                         <div className="mb-1 flex flex-wrap items-center gap-2">
-                          <span className="inline-block px-3 py-1 bg-indigo-50 text-indigo-700 rounded text-xs font-bold border border-indigo-100">
-                            {getEvaluationSessionLabel(ev)}
-                          </span>
+                          {hasSessionTitle(ev) && getSessionId(ev) ? (
+                            <button
+                              type="button"
+                              onClick={() => openSessionDetail(ev)}
+                              className="inline-flex items-center gap-1 px-3 py-1 bg-indigo-50 text-indigo-700 rounded text-xs font-bold border border-indigo-100 hover:bg-indigo-100 hover:text-indigo-900"
+                            >
+                              {getEvaluationSessionLabel(ev)}
+                              <ExternalLink className="w-3.5 h-3.5" />
+                            </button>
+                          ) : (
+                            <span className="inline-block px-3 py-1 bg-indigo-50 text-indigo-700 rounded text-xs font-bold border border-indigo-100">
+                              {getEvaluationSessionLabel(ev)}
+                            </span>
+                          )}
                           <span
                             className={`inline-block px-3 py-1 rounded text-xs font-bold uppercase border ${getEvaluationRoleBadgeClass(ev)}`}
                           >
@@ -524,16 +536,6 @@ export default function EvaluationPage() {
                         <p className="text-xs text-gray-500 font-semibold">
                           {ev.semester}
                         </p>
-                        {ev.sessionId?.title && getSessionId(ev) && (
-                          <button
-                            type="button"
-                            onClick={() => openSessionDetail(ev)}
-                            className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-indigo-700 hover:text-indigo-900 hover:underline"
-                          >
-                            {ev.sessionId.title}
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </button>
-                        )}
                       </td>
                       <td className="p-4">
                         <p className="text-sm font-semibold text-gray-900">
@@ -935,7 +937,7 @@ export default function EvaluationPage() {
                                             key={s.value}
                                             className="p-3 border-r last:border-r-0 border-gray-200 text-center font-bold text-gray-500 text-xs uppercase tracking-wider min-w-[150px]"
                                           >
-                                            {s.label} ({formatMarkLabel(s.value)})
+                                            {formatMarkLabel(s.value)}
                                           </th>
                                         ))}
                                       </tr>

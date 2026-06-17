@@ -61,10 +61,10 @@ test("completed scored evaluations with submitted marks render the percentage", 
 });
 
 test("scoreLabel maps rubric scale values", () => {
-  assert.equal(scoreLabel(5), "Outstanding");
-  assert.equal(scoreLabel(4), "Exemplary");
-  assert.equal(scoreLabel(3), "Proficient");
-  assert.equal(scoreLabel(2), "Satisfactory");
-  assert.equal(scoreLabel(1), "Foundational");
-  assert.equal(scoreLabel(0), "Novice");
+  assert.equal(scoreLabel(5), "5 marks");
+  assert.equal(scoreLabel(4), "4 marks");
+  assert.equal(scoreLabel(3), "3 marks");
+  assert.equal(scoreLabel(2), "2 marks");
+  assert.equal(scoreLabel(1), "1 mark");
+  assert.equal(scoreLabel(0), "0 marks");
 });

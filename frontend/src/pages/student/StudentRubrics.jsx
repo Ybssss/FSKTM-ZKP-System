@@ -204,7 +204,7 @@ export default function StudentRubrics() {
                                           key={score.value}
                                           className="p-3 border-r last:border-r-0 border-gray-200 text-center font-bold text-gray-500 text-xs uppercase tracking-wider"
                                         >
-                                          {score.label} ({formatMarkLabel(score.value)})
+                                          {formatMarkLabel(score.value)}
                                         </th>
                                       ))}
                                     </tr>

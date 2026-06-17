@@ -21,14 +21,19 @@ const scoredEvaluation = {
         type: "quantitative",
         weight: 40,
         maxScore: 5,
-        outstanding: "Strong",
+        scoreDescriptions: {
+          5: "Strong",
+        },
       },
       {
         key: "crit_b",
         type: "quantitative",
         weight: 60,
         maxScore: 5,
-        exemplary: "Clear",
+        scoreDescriptions: {
+          5: "Clear",
+          4: "Well structured",
+        },
       },
       {
         key: "qual_1",
@@ -83,13 +88,14 @@ test("getScoreScale respects criterion max score and label ordering", () => {
   const scale = getScoreScale(scoredEvaluation.rubricId.criteria[0]);
 
   assert.equal(scale[0].value, 5);
+  assert.equal(scale[0].label, "5 marks");
   assert.equal(scale.at(-1).value, 0);
 });
 
 test("getScoreDescription resolves criterion-specific labels", () => {
   const description = getScoreDescription(scoredEvaluation.rubricId.criteria[1], {
     value: 5,
-    descriptionKey: "outstanding",
+    descriptionKey: "5",
   });
 
   assert.equal(description, "Clear");

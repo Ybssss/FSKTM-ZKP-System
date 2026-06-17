@@ -12,7 +12,13 @@ import {
 } from "lucide-react";
 import api from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
-import { getScoreDescription as getRubricScoreDescription } from "../../utils/evaluationForm";
+import {
+  formatMarkLabel,
+  getCriterionMaxScore,
+  getCriterionScoreDescriptions,
+  getScoreDescription as getRubricScoreDescription,
+  getScoreScale,
+} from "../../utils/evaluationForm";
 import { getRubricDisplayName } from "../../utils/rubricLabels";
 
 const toSessionTypeCode = (value = "") =>
@@ -24,15 +30,6 @@ const toSessionTypeCode = (value = "") =>
     .toUpperCase()
     .slice(0, 50);
 
-const SCORE_DESCRIPTORS = {
-  5: { label: "Outstanding", field: "outstanding", color: "emerald" },
-  4: { label: "Exemplary", field: "exemplary", color: "green" },
-  3: { label: "Proficient", field: "proficient", color: "blue" },
-  2: { label: "Satisfactory", field: "satisfactory", color: "yellow" },
-  1: { label: "Foundational", field: "foundational", color: "orange" },
-  0: { label: "Novice", field: "novice", color: "red" },
-};
-
 const SCORE_CARD_STYLES = {
   emerald: "bg-emerald-50 border-emerald-200 text-emerald-700",
   green: "bg-green-50 border-green-200 text-green-700",
@@ -42,25 +39,25 @@ const SCORE_CARD_STYLES = {
   red: "bg-red-50 border-red-200 text-red-700",
 };
 
-const getCriterionMaxScore = (criterion) => {
-  const maxScore = Math.floor(Number(criterion?.maxScore ?? 5));
-  return Number.isFinite(maxScore) && maxScore > 0 ? Math.min(maxScore, 5) : 5;
+const getScoreCardStyle = (scoreValue, maxScore) => {
+  if (maxScore <= 0) return SCORE_CARD_STYLES.blue;
+  if (scoreValue === 0) return SCORE_CARD_STYLES.red;
+
+  const ratio = scoreValue / maxScore;
+  if (ratio >= 1) return SCORE_CARD_STYLES.emerald;
+  if (ratio >= 0.75) return SCORE_CARD_STYLES.green;
+  if (ratio >= 0.5) return SCORE_CARD_STYLES.blue;
+  if (ratio >= 0.25) return SCORE_CARD_STYLES.yellow;
+  return SCORE_CARD_STYLES.orange;
 };
 
-const getScoreScale = (criterion) =>
-  Array.from({ length: getCriterionMaxScore(criterion) + 1 }, (_, index) => {
-    const value = getCriterionMaxScore(criterion) - index;
-    return {
-      value,
-      ...(SCORE_DESCRIPTORS[value] || {
-        label: `Score ${value}`,
-        field: "",
-        color: "blue",
-      }),
-    };
-  });
+const hydrateCriterionForEditor = (criterion = {}) => {
+  const hydrated = { ...criterion };
+  if (hydrated.type === "qualitative") return hydrated;
+  hydrated.scoreDescriptions = getCriterionScoreDescriptions(criterion);
 
-const formatMarkLabel = (value) => `${value} ${value === 1 ? "mark" : "marks"}`;
+  return hydrated;
+};
 
 export default function RubricPage() {
   const { user } = useAuth();
@@ -82,12 +79,7 @@ export default function RubricPage() {
     weight: 0,
     maxScore: 5,
     description: "",
-    outstanding: "",
-    exemplary: "",
-    proficient: "",
-    satisfactory: "",
-    foundational: "",
-    novice: "",
+    scoreDescriptions: {},
   });
 
   const [formData, setFormData] = useState({
@@ -129,18 +121,47 @@ export default function RubricPage() {
 
   const handleCriterionChange = (index, field, value) => {
     const newCriteria = [...formData.criteria];
+    const currentCriterion = newCriteria[index];
     let nextValue = value;
 
     if (field === "weight") {
       nextValue = parseFloat(value) || 0;
     } else if (field === "maxScore") {
-      nextValue = Math.min(Math.max(parseInt(value, 10) || 5, 1), 5);
+      nextValue = Math.max(parseInt(value, 10) || 5, 1);
     }
 
     newCriteria[index] = {
-      ...newCriteria[index],
+      ...currentCriterion,
       [field]: nextValue,
     };
+
+    if (field === "maxScore" && currentCriterion?.type === "quantitative") {
+      const previousDescriptions = getCriterionScoreDescriptions(currentCriterion);
+      const nextDescriptions = {};
+      for (let score = 0; score <= nextValue; score += 1) {
+        const existing =
+          previousDescriptions[String(score)] ?? previousDescriptions[score] ?? "";
+        nextDescriptions[String(score)] = existing;
+      }
+      newCriteria[index].scoreDescriptions = nextDescriptions;
+    }
+
+    setFormData({ ...formData, criteria: newCriteria });
+  };
+
+  const handleCriterionScoreDescriptionChange = (index, scoreValue, value) => {
+    const newCriteria = [...formData.criteria];
+    const existingCriterion = newCriteria[index];
+    const existingDescriptions = getCriterionScoreDescriptions(existingCriterion);
+
+    newCriteria[index] = {
+      ...existingCriterion,
+      scoreDescriptions: {
+        ...existingDescriptions,
+        [String(scoreValue)]: value,
+      },
+    };
+
     setFormData({ ...formData, criteria: newCriteria });
   };
 
@@ -181,11 +202,9 @@ export default function RubricPage() {
       }
       if (
         c.type === "quantitative" &&
-        (!Number.isInteger(Number(c.maxScore)) ||
-          Number(c.maxScore) < 1 ||
-          Number(c.maxScore) > 5)
+        (!Number.isInteger(Number(c.maxScore)) || Number(c.maxScore) < 1)
       ) {
-        alert(`Criterion ${i + 1} max score must be a whole number from 1 to 5.`);
+        alert(`Criterion ${i + 1} max score must be a whole number greater than 0.`);
         return false;
       }
     }
@@ -227,13 +246,27 @@ export default function RubricPage() {
   };
 
   const handleEdit = (rubric) => {
+    if (rubric?.isObsolete) {
+      alert("Obsolete rubrics cannot be edited. Restore it first if needed.");
+      return;
+    }
+
+    if (rubric?.hasLinkedRecords) {
+      alert(
+        "This rubric is already used by existing sessions, batches, or evaluations. Create a new rubric instead of editing this one.",
+      );
+      return;
+    }
+
     setEditingRubric(rubric);
     setFormData({
       name: rubric.name,
       sessionType: rubric.sessionType || "",
       criteria:
         rubric.criteria && rubric.criteria.length > 0
-          ? rubric.criteria
+          ? rubric.criteria.map((criterion) =>
+              hydrateCriterionForEditor(criterion),
+            )
           : [defaultCriterion()],
     });
     setShowModal(true);
@@ -449,13 +482,22 @@ export default function RubricPage() {
                         <>
                           {!rubric.isObsolete ? (
                             <>
-                              <button
-                                onClick={() => handleEdit(rubric)}
-                                className="p-2 text-yellow-600 bg-yellow-50 hover:bg-yellow-100 rounded-lg transition-colors"
-                                title="Edit rubric"
-                              >
-                                <Edit className="w-5 h-5" />
-                              </button>
+                              {!rubric.hasLinkedRecords ? (
+                                <button
+                                  onClick={() => handleEdit(rubric)}
+                                  className="p-2 text-yellow-600 bg-yellow-50 hover:bg-yellow-100 rounded-lg transition-colors"
+                                  title="Edit rubric"
+                                >
+                                  <Edit className="w-5 h-5" />
+                                </button>
+                              ) : (
+                                <span
+                                  className="px-3 py-2 text-xs font-bold text-gray-500 bg-gray-100 rounded-lg"
+                                  title="Used rubrics are locked to protect existing session and evaluation records."
+                                >
+                                  Edit Locked
+                                </span>
+                              )}
                               <button
                                 onClick={() => handleMoveToObsolete(rubric)}
                                 className="px-3 py-2 text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors font-bold flex items-center gap-2"
@@ -655,7 +697,6 @@ export default function RubricPage() {
                               }
                               className="w-full p-2 border rounded"
                               min="1"
-                              max="5"
                               step="1"
                               required
                             />
@@ -675,16 +716,20 @@ export default function RubricPage() {
                           {getScoreScale(criterion).map((score) => (
                             <div key={score.value}>
                               <p className="text-[10px] font-bold text-gray-500 uppercase mb-1 text-center">
-                                {score.label} ({formatMarkLabel(score.value)})
+                                {formatMarkLabel(score.value)}
                               </p>
                               <textarea
                                 className="w-full text-xs p-2 border rounded"
                                 rows="4"
-                                value={criterion[score.field] || ""}
+                                value={
+                                  getCriterionScoreDescriptions(criterion)[
+                                    String(score.value)
+                                  ] || ""
+                                }
                                 onChange={(e) =>
-                                  handleCriterionChange(
+                                  handleCriterionScoreDescriptionChange(
                                     index,
-                                    score.field,
+                                    score.value,
                                     e.target.value,
                                   )
                                 }
@@ -807,9 +852,10 @@ export default function RubricPage() {
                             }}
                           >
                             {getScoreScale(criterion).map((score) => {
-                              const colorClass =
-                                SCORE_CARD_STYLES[score.color] ||
-                                SCORE_CARD_STYLES.blue;
+                              const colorClass = getScoreCardStyle(
+                                score.value,
+                                getCriterionMaxScore(criterion),
+                              );
 
                               return (
                                 <div
@@ -817,13 +863,10 @@ export default function RubricPage() {
                                   className={`${colorClass} border p-3 rounded-lg`}
                                 >
                                   <p className="text-[10px] font-bold uppercase tracking-widest mb-2 border-b border-current pb-1">
-                                    {score.label} ({formatMarkLabel(score.value)})
+                                    {formatMarkLabel(score.value)}
                                   </p>
                                   <p className="text-xs text-gray-700">
-                                    {getRubricScoreDescription(criterion, {
-                                      value: score.value,
-                                      descriptionKey: score.field,
-                                    })}
+                                    {getRubricScoreDescription(criterion, score)}
                                   </p>
                                 </div>
                               );

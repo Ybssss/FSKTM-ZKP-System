@@ -7,12 +7,9 @@ export const readMapValue = (value, key) => {
 export const scoreLabel = (score) => {
   if (score === undefined || score === null || score === "") return "-";
   const numeric = Number(score);
-  if (numeric === 5) return "Outstanding";
-  if (numeric === 4) return "Exemplary";
-  if (numeric === 3) return "Proficient";
-  if (numeric === 2) return "Satisfactory";
-  if (numeric === 1) return "Foundational";
-  if (numeric === 0) return "Novice";
+  if (Number.isFinite(numeric) && numeric >= 0) {
+    return `${numeric} ${numeric === 1 ? "mark" : "marks"}`;
+  }
   return "-";
 };
 

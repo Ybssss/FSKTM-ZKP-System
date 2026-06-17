@@ -23,7 +23,28 @@ const normalizeMaxScore = (value, type) => {
   const parsed = Number(value);
   if (!Number.isFinite(parsed) || parsed <= 0) return 5;
 
-  return Math.min(Math.max(Math.round(parsed), 1), 5);
+  return Math.max(Math.round(parsed), 1);
+};
+
+const buildScoreDescriptions = (criterion, maxScore) => {
+  const descriptions = {};
+  const directDescriptions =
+    criterion?.scoreDescriptions && typeof criterion.scoreDescriptions === "object"
+      ? criterion.scoreDescriptions
+      : {};
+
+  for (let score = 0; score <= maxScore; score += 1) {
+    const rawValue =
+      directDescriptions[String(score)] ??
+      directDescriptions[score];
+    const cleaned = cleanText(rawValue || "", 2000);
+
+    if (cleaned) {
+      descriptions[String(score)] = cleaned;
+    }
+  }
+
+  return descriptions;
 };
 
 const buildRubricPayload = (body) => {
@@ -43,26 +64,20 @@ const buildRubricPayload = (body) => {
         const type = allowedCriterionTypes.includes(criterion.type)
           ? criterion.type
           : "quantitative";
+        const maxScore = normalizeMaxScore(criterion.maxScore, type);
+        const scoreDescriptions =
+          type === "quantitative"
+            ? buildScoreDescriptions(criterion, maxScore)
+            : {};
 
         return {
           key: cleanText(criterion.key || `criterion_${index + 1}`, 80),
           title: cleanText(criterion.title, 250),
           type,
           weight: Number(criterion.weight || 0),
-          maxScore: normalizeMaxScore(criterion.maxScore, type),
+          maxScore,
           description: cleanText(criterion.description || "", 1000),
-          outstanding: cleanText(
-            criterion.outstanding || criterion.exemplary || "",
-            2000,
-          ),
-          exemplary: cleanText(
-            criterion.exemplary || criterion.outstanding || "",
-            2000,
-          ),
-          proficient: cleanText(criterion.proficient || "", 2000),
-          satisfactory: cleanText(criterion.satisfactory || "", 2000),
-          foundational: cleanText(criterion.foundational || "", 2000),
-          novice: cleanText(criterion.novice || "", 2000),
+          scoreDescriptions,
         };
       })
     : [];
@@ -227,6 +242,33 @@ router.put("/:id", async (req, res) => {
       });
     }
 
+    const existingRubric = await Rubric.findById(req.params.id);
+
+    if (!existingRubric) {
+      return res.status(404).json({
+        success: false,
+        message: "Rubric not found",
+      });
+    }
+
+    if (existingRubric.isObsolete) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Obsolete rubrics cannot be edited. Restore it first or create a new rubric instead.",
+      });
+    }
+
+    const usage = await getRubricUsage(existingRubric._id);
+    if (usage.hasLinkedRecords) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "This rubric is already linked to existing sessions, batches, or evaluations. Editing it would change existing records. Create a new rubric instead.",
+        ...usage,
+      });
+    }
+
     const rubricPayload = buildRubricPayload(req.body);
 
     const rubric = await Rubric.findByIdAndUpdate(
@@ -237,13 +279,6 @@ router.put("/:id", async (req, res) => {
         runValidators: true,
       },
     );
-
-    if (!rubric) {
-      return res.status(404).json({
-        success: false,
-        message: "Rubric not found",
-      });
-    }
 
     const serializedRubric = await serializeRubric(rubric);
 

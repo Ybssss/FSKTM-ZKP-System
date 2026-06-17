@@ -39,16 +39,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 5,
         maxScore: 5,
-        exemplary:
-          "The candidate presents a thesis title that is concise, precise, and directly aligned with the core focus of the research. The title reflects comprehensive subject knowledge and a clear grasp of key relationships within the field. It is articulated with clarity and academic rigour.",
-        proficient:
-          "The candidate presents a thesis title that is relevant, clearly worded, and appropriate to the research domain. It demonstrates a sound understanding of the subject matter and outlines the main scope of the study.",
-        satisfactory:
-          "The candidate presents a thesis title that identifies the general area of research and reflects an adequate level of understanding. However, the title lacks specificity, depth, or balanced scope.",
-        foundational:
-          "The candidate presents a thesis title that demonstrates limited familiarity with the subject area. The wording is vague, overgeneralised, or imprecise.",
-        novice:
-          "The candidate presents a thesis title that is unclear, unrelated, or unsuitable for academic inquiry. The title does not demonstrate basic understanding of the subject.",
+        scoreDescriptions: {
+          5: "The candidate presents a thesis title that is concise, precise, and directly aligned with the core focus of the research. The title reflects comprehensive subject knowledge and a clear grasp of key relationships within the field. It is articulated with clarity and academic rigour.",
+          4: "The candidate presents a thesis title that is concise, precise, and directly aligned with the core focus of the research. The title reflects comprehensive subject knowledge and a clear grasp of key relationships within the field. It is articulated with clarity and academic rigour.",
+          3: "The candidate presents a thesis title that is relevant, clearly worded, and appropriate to the research domain. It demonstrates a sound understanding of the subject matter and outlines the main scope of the study.",
+          2: "The candidate presents a thesis title that identifies the general area of research and reflects an adequate level of understanding. However, the title lacks specificity, depth, or balanced scope.",
+          1: "The candidate presents a thesis title that demonstrates limited familiarity with the subject area. The wording is vague, overgeneralised, or imprecise.",
+          0: "The candidate presents a thesis title that is unclear, unrelated, or unsuitable for academic inquiry. The title does not demonstrate basic understanding of the subject.",
+        },
       },
       {
         key: "crit_b_exec_summary",
@@ -56,16 +54,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 10,
         maxScore: 5,
-        exemplary:
-          "The candidate's executive summary presents a clear, coherent overview of the research proposal. The problem, purpose/objectives, and rationale are logically structured and well integrated. High-level cognitive skills are demonstrated through critical synthesis.",
-        proficient:
-          "The candidate's executive summary effectively communicates the core components of the proposal. The research problem and purpose/objectives are clearly stated, and there is evidence of logical reasoning.",
-        satisfactory:
-          "The candidate's executive summary provides a basic structure and covers the main aspects of the research. Cognitive engagement is present but limited in depth.",
-        foundational:
-          "The candidate's executive summary lacks clarity and cohesion. The problem, aim, or rationale may be unclear or disconnected.",
-        novice:
-          "The candidate's executive summary is poorly structured and lacks essential components. Little or no demonstration of cognitive reasoning.",
+        scoreDescriptions: {
+          5: "The candidate's executive summary presents a clear, coherent overview of the research proposal. The problem, purpose/objectives, and rationale are logically structured and well integrated. High-level cognitive skills are demonstrated through critical synthesis.",
+          4: "The candidate's executive summary presents a clear, coherent overview of the research proposal. The problem, purpose/objectives, and rationale are logically structured and well integrated. High-level cognitive skills are demonstrated through critical synthesis.",
+          3: "The candidate's executive summary effectively communicates the core components of the proposal. The research problem and purpose/objectives are clearly stated, and there is evidence of logical reasoning.",
+          2: "The candidate's executive summary provides a basic structure and covers the main aspects of the research. Cognitive engagement is present but limited in depth.",
+          1: "The candidate's executive summary lacks clarity and cohesion. The problem, aim, or rationale may be unclear or disconnected.",
+          0: "The candidate's executive summary is poorly structured and lacks essential components. Little or no demonstration of cognitive reasoning.",
+        },
       },
       {
         key: "crit_c_problem",
@@ -73,16 +69,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 15,
         maxScore: 5,
-        exemplary:
-          "The problem statement is well-defined, contextually grounded, and critically justified with relevant literature. High-level cognitive and critical thinking skills are evident.",
-        proficient:
-          "The problem statement is clearly articulated and supported with appropriate context and references. The significance of the study is logically presented.",
-        satisfactory:
-          "The problem statement is adequately stated and generally relevant, though some elements may lack clarity or depth.",
-        foundational:
-          "The problem statement lacks clarity or is weakly developed. The justification is minimal, and the significance is not convincingly explained.",
-        novice:
-          "The problem statement is unclear, unfocused, or missing. No meaningful justification is provided.",
+        scoreDescriptions: {
+          5: "The problem statement is well-defined, contextually grounded, and critically justified with relevant literature. High-level cognitive and critical thinking skills are evident.",
+          4: "The problem statement is well-defined, contextually grounded, and critically justified with relevant literature. High-level cognitive and critical thinking skills are evident.",
+          3: "The problem statement is clearly articulated and supported with appropriate context and references. The significance of the study is logically presented.",
+          2: "The problem statement is adequately stated and generally relevant, though some elements may lack clarity or depth.",
+          1: "The problem statement lacks clarity or is weakly developed. The justification is minimal, and the significance is not convincingly explained.",
+          0: "The problem statement is unclear, unfocused, or missing. No meaningful justification is provided.",
+        },
       },
       {
         key: "crit_d_objective",
@@ -90,16 +84,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 10,
         maxScore: 5,
-        exemplary:
-          "The research objectives are clearly defined, focused, and aligned with the research problem, structured to be measurable, achievable, and academically pertinent.",
-        proficient:
-          "The research objectives are clear, relevant, and generally well-aligned with the research problem, offering measurable and structured guidance.",
-        satisfactory:
-          "The research objectives are generally understandable but show limited clarity, specificity, and alignment with the research problem.",
-        foundational:
-          "The research objectives are unclear, overly broad, and weakly connected to the research problem, with poor structure.",
-        novice:
-          "The research objectives are absent or entirely unclear, showing no alignment with the research problem.",
+        scoreDescriptions: {
+          5: "The research objectives are clearly defined, focused, and aligned with the research problem, structured to be measurable, achievable, and academically pertinent.",
+          4: "The research objectives are clearly defined, focused, and aligned with the research problem, structured to be measurable, achievable, and academically pertinent.",
+          3: "The research objectives are clear, relevant, and generally well-aligned with the research problem, offering measurable and structured guidance.",
+          2: "The research objectives are generally understandable but show limited clarity, specificity, and alignment with the research problem.",
+          1: "The research objectives are unclear, overly broad, and weakly connected to the research problem, with poor structure.",
+          0: "The research objectives are absent or entirely unclear, showing no alignment with the research problem.",
+        },
       },
       {
         key: "crit_e_literature",
@@ -107,16 +99,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 15,
         maxScore: 5,
-        exemplary:
-          "The literature review demonstrates critical engagement with a wide range of relevant and credible sources, clearly identifying key debates and gaps.",
-        proficient:
-          "The literature review is well-organised and clearly written, using relevant sources to support the research context. Evidence of critical discussion and synthesis is present.",
-        satisfactory:
-          "The literature review adequately covers relevant sources but is largely descriptive rather than analytical. Some key authors or themes may be underrepresented.",
-        foundational:
-          "The literature review is loosely structured and shows limited critical insight. Coverage of relevant literature is incomplete.",
-        novice:
-          "The literature review is poorly constructed, showing minimal critical engagement and limited relevance.",
+        scoreDescriptions: {
+          5: "The literature review demonstrates critical engagement with a wide range of relevant and credible sources, clearly identifying key debates and gaps.",
+          4: "The literature review demonstrates critical engagement with a wide range of relevant and credible sources, clearly identifying key debates and gaps.",
+          3: "The literature review is well-organised and clearly written, using relevant sources to support the research context. Evidence of critical discussion and synthesis is present.",
+          2: "The literature review adequately covers relevant sources but is largely descriptive rather than analytical. Some key authors or themes may be underrepresented.",
+          1: "The literature review is loosely structured and shows limited critical insight. Coverage of relevant literature is incomplete.",
+          0: "The literature review is poorly constructed, showing minimal critical engagement and limited relevance.",
+        },
       },
       {
         key: "crit_f_methodology",
@@ -124,16 +114,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 15,
         maxScore: 5,
-        exemplary:
-          "The methodology is comprehensive, clearly aligned with the research objectives, and well justified. The research design, data collection, and analysis methods are methodologically sound.",
-        proficient:
-          "The methodology is coherent and appropriately structured, with relevant research design and methods that are clearly explained and generally well justified.",
-        satisfactory:
-          "The methodology outlines the basic research procedures with moderate alignment to the objectives. Justification is provided but limited.",
-        foundational:
-          "The methodology lacks clarity and consistency, with weak alignment to the research objectives and inadequate justification.",
-        novice:
-          "The methodology is poorly structured or largely absent, with research methods that are inappropriate or disconnected.",
+        scoreDescriptions: {
+          5: "The methodology is comprehensive, clearly aligned with the research objectives, and well justified. The research design, data collection, and analysis methods are methodologically sound.",
+          4: "The methodology is comprehensive, clearly aligned with the research objectives, and well justified. The research design, data collection, and analysis methods are methodologically sound.",
+          3: "The methodology is coherent and appropriately structured, with relevant research design and methods that are clearly explained and generally well justified.",
+          2: "The methodology outlines the basic research procedures with moderate alignment to the objectives. Justification is provided but limited.",
+          1: "The methodology lacks clarity and consistency, with weak alignment to the research objectives and inadequate justification.",
+          0: "The methodology is poorly structured or largely absent, with research methods that are inappropriate or disconnected.",
+        },
       },
       {
         key: "crit_g_prelim",
@@ -141,16 +129,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 5,
         maxScore: 5,
-        exemplary:
-          "Preliminary findings (where applicable) are presented clearly and supported by rigorous analysis using appropriate digital or analytical tools. Expected outcomes are precisely formulated.",
-        proficient:
-          "Preliminary findings are explained with clarity and supported by relevant data and tools. Expected outcomes are reasonably derived.",
-        satisfactory:
-          "Preliminary findings are reported with limited depth and supported by basic analysis. Expected outcomes are generally aligned.",
-        foundational:
-          "Preliminary findings are vaguely presented and lack analytical rigour. Expected outcomes are loosely connected.",
-        novice:
-          "Preliminary findings are absent or unclear, with no meaningful analytical support.",
+        scoreDescriptions: {
+          5: "Preliminary findings (where applicable) are presented clearly and supported by rigorous analysis using appropriate digital or analytical tools. Expected outcomes are precisely formulated.",
+          4: "Preliminary findings (where applicable) are presented clearly and supported by rigorous analysis using appropriate digital or analytical tools. Expected outcomes are precisely formulated.",
+          3: "Preliminary findings are explained with clarity and supported by relevant data and tools. Expected outcomes are reasonably derived.",
+          2: "Preliminary findings are reported with limited depth and supported by basic analysis. Expected outcomes are generally aligned.",
+          1: "Preliminary findings are vaguely presented and lack analytical rigour. Expected outcomes are loosely connected.",
+          0: "Preliminary findings are absent or unclear, with no meaningful analytical support.",
+        },
       },
       {
         key: "crit_h_ethics",
@@ -158,16 +144,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 5,
         maxScore: 5,
-        exemplary:
-          "Methodological reliability and validity are comprehensively addressed with well-reasoned justification and supported by appropriate references. Ethical considerations are thoroughly integrated.",
-        proficient:
-          "Methodological reliability and validity are adequately explained with reasonable justification. Ethical considerations are incorporated.",
-        satisfactory:
-          "Basic attention is given to methodological reliability and validity, though explanation may be general. Some ethical procedures are mentioned.",
-        foundational:
-          "Methodological reliability and validity are vaguely addressed. Ethical aspects are referenced but poorly defined.",
-        novice:
-          "Methodological reliability and validity are omitted. Ethical considerations are absent or misinterpreted.",
+        scoreDescriptions: {
+          5: "Methodological reliability and validity are comprehensively addressed with well-reasoned justification and supported by appropriate references. Ethical considerations are thoroughly integrated.",
+          4: "Methodological reliability and validity are comprehensively addressed with well-reasoned justification and supported by appropriate references. Ethical considerations are thoroughly integrated.",
+          3: "Methodological reliability and validity are adequately explained with reasonable justification. Ethical considerations are incorporated.",
+          2: "Basic attention is given to methodological reliability and validity, though explanation may be general. Some ethical procedures are mentioned.",
+          1: "Methodological reliability and validity are vaguely addressed. Ethical aspects are referenced but poorly defined.",
+          0: "Methodological reliability and validity are omitted. Ethical considerations are absent or misinterpreted.",
+        },
       },
       {
         key: "crit_i_org",
@@ -175,16 +159,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 5,
         maxScore: 5,
-        exemplary:
-          "The proposal was written with exceptional clarity and coherence, demonstrating a logical and purposeful sequence of ideas. Transitions were seamless.",
-        proficient:
-          "The proposal was written in a clear and structured manner, with logical progression and effective transitions between sections.",
-        satisfactory:
-          "The proposal was written with a basic level of organisation, though occasional inconsistencies in flow or clarity were evident.",
-        foundational:
-          "The proposal was written with limited coherence and structure. Ideas were not consistently organised.",
-        novice:
-          "The proposal was written without clear structure or logical progression. Ideas appeared fragmented.",
+        scoreDescriptions: {
+          5: "The proposal was written with exceptional clarity and coherence, demonstrating a logical and purposeful sequence of ideas. Transitions were seamless.",
+          4: "The proposal was written with exceptional clarity and coherence, demonstrating a logical and purposeful sequence of ideas. Transitions were seamless.",
+          3: "The proposal was written in a clear and structured manner, with logical progression and effective transitions between sections.",
+          2: "The proposal was written with a basic level of organisation, though occasional inconsistencies in flow or clarity were evident.",
+          1: "The proposal was written with limited coherence and structure. Ideas were not consistently organised.",
+          0: "The proposal was written without clear structure or logical progression. Ideas appeared fragmented.",
+        },
       },
       {
         key: "crit_j_lang",
@@ -192,16 +174,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 5,
         maxScore: 5,
-        exemplary:
-          "The proposal was written using precise, formal, and discipline-appropriate language throughout. Sentence structure and grammar consistently accurate.",
-        proficient:
-          "The proposal was written with generally accurate and formal language appropriate to the academic context.",
-        satisfactory:
-          "The proposal was written using language that was mostly appropriate, though lapses in grammar or clarity were occasionally evident.",
-        foundational:
-          "The proposal was written with frequent grammatical or structural errors that affected clarity.",
-        novice:
-          "The proposal was written with persistent language and grammatical issues that interfered with meaning.",
+        scoreDescriptions: {
+          5: "The proposal was written using precise, formal, and discipline-appropriate language throughout. Sentence structure and grammar consistently accurate.",
+          4: "The proposal was written using precise, formal, and discipline-appropriate language throughout. Sentence structure and grammar consistently accurate.",
+          3: "The proposal was written with generally accurate and formal language appropriate to the academic context.",
+          2: "The proposal was written using language that was mostly appropriate, though lapses in grammar or clarity were occasionally evident.",
+          1: "The proposal was written with frequent grammatical or structural errors that affected clarity.",
+          0: "The proposal was written with persistent language and grammatical issues that interfered with meaning.",
+        },
       },
       {
         key: "crit_k_ref",
@@ -209,16 +189,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 5,
         maxScore: 5,
-        exemplary:
-          "Demonstrates precise and consistent use of the required referencing style throughout. All citations are accurate and correctly formatted.",
-        proficient:
-          "Referencing style is applied correctly with only occasional minor errors. Sources are appropriately chosen.",
-        satisfactory:
-          "Referencing is generally appropriate but contains recurring formatting or citation errors.",
-        foundational:
-          "Referencing style is inconsistently applied, with frequent formatting errors and incomplete citations.",
-        novice:
-          "Shows little or no understanding of academic referencing. Citations are largely inaccurate or absent.",
+        scoreDescriptions: {
+          5: "Demonstrates precise and consistent use of the required referencing style throughout. All citations are accurate and correctly formatted.",
+          4: "Demonstrates precise and consistent use of the required referencing style throughout. All citations are accurate and correctly formatted.",
+          3: "Referencing style is applied correctly with only occasional minor errors. Sources are appropriately chosen.",
+          2: "Referencing is generally appropriate but contains recurring formatting or citation errors.",
+          1: "Referencing style is inconsistently applied, with frequent formatting errors and incomplete citations.",
+          0: "Shows little or no understanding of academic referencing. Citations are largely inaccurate or absent.",
+        },
       },
       {
         key: "crit_l_pres",
@@ -226,16 +204,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 5,
         maxScore: 5,
-        exemplary:
-          "Presentation delivered with clarity, confidence, and a strong academic presence. Ideas communicated logically and fluently.",
-        proficient:
-          "Presentation delivered clearly, with appropriate tone and structure. Key points effectively communicated.",
-        satisfactory:
-          "Presentation delivered with adequate clarity and structure, though some hesitation was evident.",
-        foundational:
-          "Presentation delivered with limited clarity and confidence. Content was poorly organised.",
-        novice:
-          "Presentation delivered in a disorganised and unclear manner. Key ideas poorly expressed.",
+        scoreDescriptions: {
+          5: "Presentation delivered with clarity, confidence, and a strong academic presence. Ideas communicated logically and fluently.",
+          4: "Presentation delivered with clarity, confidence, and a strong academic presence. Ideas communicated logically and fluently.",
+          3: "Presentation delivered clearly, with appropriate tone and structure. Key points effectively communicated.",
+          2: "Presentation delivered with adequate clarity and structure, though some hesitation was evident.",
+          1: "Presentation delivered with limited clarity and confidence. Content was poorly organised.",
+          0: "Presentation delivered in a disorganised and unclear manner. Key ideas poorly expressed.",
+        },
       },
       {
         key: "crit_m_qual",
@@ -258,15 +234,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 5,
         maxScore: 5,
-        exemplary:
-          "Title is concise, precise, and directly aligned with the core focus of the research. Articulated with clarity and academic rigour.",
-        proficient:
-          "Title is relevant, clearly worded, and appropriate to the research domain. Demonstrates a sound understanding.",
-        satisfactory:
-          "Identifies the general area of research and reflects an adequate level of understanding. Lacks specificity.",
-        foundational:
-          "Demonstrates limited familiarity with the subject area. The wording is vague or imprecise.",
-        novice: "Unclear, unrelated, or unsuitable for academic inquiry.",
+        scoreDescriptions: {
+          5: "Title is concise, precise, and directly aligned with the core focus of the research. Articulated with clarity and academic rigour.",
+          4: "Title is concise, precise, and directly aligned with the core focus of the research. Articulated with clarity and academic rigour.",
+          3: "Title is relevant, clearly worded, and appropriate to the research domain. Demonstrates a sound understanding.",
+          2: "Identifies the general area of research and reflects an adequate level of understanding. Lacks specificity.",
+          1: "Demonstrates limited familiarity with the subject area. The wording is vague or imprecise.",
+          0: "Unclear, unrelated, or unsuitable for academic inquiry.",
+        },
       },
       {
         key: "crit_b_abs",
@@ -274,15 +249,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 5,
         maxScore: 5,
-        exemplary:
-          "Demonstrates high scholarly competence. Offers a precise, coherent, and methodologically sound synthesis.",
-        proficient:
-          "Presented in a well-organised and academically appropriate manner. Clearly identifies research problem.",
-        satisfactory:
-          "Constructs the abstract with reasonable academic coherence. Lacks critical depth.",
-        foundational:
-          "Demonstrates partial understanding. Ambiguously stated or underdeveloped.",
-        novice: "Fails to construct a coherent abstract. Vague or fragmented.",
+        scoreDescriptions: {
+          5: "Demonstrates high scholarly competence. Offers a precise, coherent, and methodologically sound synthesis.",
+          4: "Demonstrates high scholarly competence. Offers a precise, coherent, and methodologically sound synthesis.",
+          3: "Presented in a well-organised and academically appropriate manner. Clearly identifies research problem.",
+          2: "Constructs the abstract with reasonable academic coherence. Lacks critical depth.",
+          1: "Demonstrates partial understanding. Ambiguously stated or underdeveloped.",
+          0: "Fails to construct a coherent abstract. Vague or fragmented.",
+        },
       },
       {
         key: "crit_c_prob",
@@ -290,16 +264,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 10,
         maxScore: 5,
-        exemplary:
-          "Well-defined, contextually grounded, and critically justified with relevant literature. Strong critical thinking.",
-        proficient:
-          "Clear and logical problem statement. Relevant and supported with appropriate background.",
-        satisfactory:
-          "Generally clear but may be overly broad. Rationale is not fully persuasive.",
-        foundational:
-          "Attempt made, but lacks sufficient clarity, specificity, or focus.",
-        novice:
-          "Does not provide a coherent or researchable problem statement.",
+        scoreDescriptions: {
+          5: "Well-defined, contextually grounded, and critically justified with relevant literature. Strong critical thinking.",
+          4: "Well-defined, contextually grounded, and critically justified with relevant literature. Strong critical thinking.",
+          3: "Clear and logical problem statement. Relevant and supported with appropriate background.",
+          2: "Generally clear but may be overly broad. Rationale is not fully persuasive.",
+          1: "Attempt made, but lacks sufficient clarity, specificity, or focus.",
+          0: "Does not provide a coherent or researchable problem statement.",
+        },
       },
       {
         key: "crit_d_obj",
@@ -307,13 +279,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 5,
         maxScore: 5,
-        exemplary:
-          "Articulates objectives with exceptional clarity and precision. Measurable and strong strategic focus.",
-        proficient: "Objectives are clear, relevant, and appropriately scoped.",
-        satisfactory:
-          "Objectives are understandable and somewhat aligned, but may lack specificity.",
-        foundational: "Objectives are vague, overly broad, or loosely related.",
-        novice: "Does not present appropriate research objectives.",
+        scoreDescriptions: {
+          5: "Articulates objectives with exceptional clarity and precision. Measurable and strong strategic focus.",
+          4: "Articulates objectives with exceptional clarity and precision. Measurable and strong strategic focus.",
+          3: "Objectives are clear, relevant, and appropriately scoped.",
+          2: "Objectives are understandable and somewhat aligned, but may lack specificity.",
+          1: "Objectives are vague, overly broad, or loosely related.",
+          0: "Does not present appropriate research objectives.",
+        },
       },
       {
         key: "crit_e_lit",
@@ -321,14 +294,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 10,
         maxScore: 5,
-        exemplary:
-          "Shows critical engagement and synthesis of credible sources. Key debates articulated.",
-        proficient:
-          "Well-organised and clearly written. Evidence of critical discussion.",
-        satisfactory:
-          "Adequate coverage but tends to be more descriptive than analytical.",
-        foundational: "Loosely structured with limited critical insight.",
-        novice: "Poorly constructed, showing minimal critical engagement.",
+        scoreDescriptions: {
+          5: "Shows critical engagement and synthesis of credible sources. Key debates articulated.",
+          4: "Shows critical engagement and synthesis of credible sources. Key debates articulated.",
+          3: "Well-organised and clearly written. Evidence of critical discussion.",
+          2: "Adequate coverage but tends to be more descriptive than analytical.",
+          1: "Loosely structured with limited critical insight.",
+          0: "Poorly constructed, showing minimal critical engagement.",
+        },
       },
       {
         key: "crit_f_meth",
@@ -336,15 +309,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 10,
         maxScore: 5,
-        exemplary:
-          "Methodology is clearly articulated, rigorously justified, and highly appropriate.",
-        proficient:
-          "Methodology is logically structured and appropriate for the research aims.",
-        satisfactory:
-          "Methodology is generally appropriate, though may lack detail or strong justification.",
-        foundational:
-          "Methodology has minimal explanation. Procedures are loosely aligned.",
-        novice: "Fails to present a viable methodology.",
+        scoreDescriptions: {
+          5: "Methodology is clearly articulated, rigorously justified, and highly appropriate.",
+          4: "Methodology is clearly articulated, rigorously justified, and highly appropriate.",
+          3: "Methodology is logically structured and appropriate for the research aims.",
+          2: "Methodology is generally appropriate, though may lack detail or strong justification.",
+          1: "Methodology has minimal explanation. Procedures are loosely aligned.",
+          0: "Fails to present a viable methodology.",
+        },
       },
       {
         key: "crit_g_res",
@@ -352,15 +324,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 10,
         maxScore: 5,
-        exemplary:
-          "Demonstrates critical analysis, with findings well-integrated and justified. Results synthesized insightfully.",
-        proficient:
-          "Clear and well-structured, effectively interpreting results and linking them to objectives.",
-        satisfactory:
-          "Addresses main findings with basic interpretation. Descriptive rather than critical.",
-        foundational:
-          "Shows minimal interpretation with limited engagement with literature.",
-        novice: "Provides little or no meaningful analysis.",
+        scoreDescriptions: {
+          5: "Demonstrates critical analysis, with findings well-integrated and justified. Results synthesized insightfully.",
+          4: "Demonstrates critical analysis, with findings well-integrated and justified. Results synthesized insightfully.",
+          3: "Clear and well-structured, effectively interpreting results and linking them to objectives.",
+          2: "Addresses main findings with basic interpretation. Descriptive rather than critical.",
+          1: "Shows minimal interpretation with limited engagement with literature.",
+          0: "Provides little or no meaningful analysis.",
+        },
       },
       {
         key: "crit_h_find",
@@ -368,15 +339,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 5,
         maxScore: 5,
-        exemplary:
-          "Presented with clarity and logical flow, supported by accurate and well-designed visualisations.",
-        proficient:
-          "Findings presented with clarity and effective structure. Digital tools used appropriately.",
-        satisfactory:
-          "Generally clear but may lack depth or polish. Visuals may be simplistic.",
-        foundational:
-          "Struggles to present findings coherently. Use of tools is minimal or misapplied.",
-        novice: "Presentation lacks structure and coherence.",
+        scoreDescriptions: {
+          5: "Presented with clarity and logical flow, supported by accurate and well-designed visualisations.",
+          4: "Presented with clarity and logical flow, supported by accurate and well-designed visualisations.",
+          3: "Findings presented with clarity and effective structure. Digital tools used appropriately.",
+          2: "Generally clear but may lack depth or polish. Visuals may be simplistic.",
+          1: "Struggles to present findings coherently. Use of tools is minimal or misapplied.",
+          0: "Presentation lacks structure and coherence.",
+        },
       },
       {
         key: "crit_i_eth",
@@ -384,16 +354,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 5,
         maxScore: 5,
-        exemplary:
-          "Demonstrates strong critical thinking in data analysis using well-justified methods. Rigorous ethical compliance.",
-        proficient:
-          "Applies suitable analytical methods to interpret data. Ethical considerations addressed.",
-        satisfactory:
-          "Basic competence in handling data. Ethical procedures partially implemented.",
-        foundational:
-          "Limited ability in organising data. Ethical considerations addressed superficially.",
-        novice:
-          "Unable to apply appropriate data analysis techniques. Ethical obligations not observed.",
+        scoreDescriptions: {
+          5: "Demonstrates strong critical thinking in data analysis using well-justified methods. Rigorous ethical compliance.",
+          4: "Demonstrates strong critical thinking in data analysis using well-justified methods. Rigorous ethical compliance.",
+          3: "Applies suitable analytical methods to interpret data. Ethical considerations addressed.",
+          2: "Basic competence in handling data. Ethical procedures partially implemented.",
+          1: "Limited ability in organising data. Ethical considerations addressed superficially.",
+          0: "Unable to apply appropriate data analysis techniques. Ethical obligations not observed.",
+        },
       },
       {
         key: "crit_j_contrib",
@@ -401,15 +369,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 10,
         maxScore: 5,
-        exemplary:
-          "Substantive and original contribution yielding novel theoretical constructs or innovations.",
-        proficient:
-          "Coherent and well-substantiated contribution addressing a relevant gap.",
-        satisfactory:
-          "Valid contribution addressing a defined question, though significance was limited.",
-        foundational:
-          "Limited contribution to knowledge addressing a narrowly defined issue.",
-        novice: "Did not demonstrate a meaningful or credible contribution.",
+        scoreDescriptions: {
+          5: "Substantive and original contribution yielding novel theoretical constructs or innovations.",
+          4: "Substantive and original contribution yielding novel theoretical constructs or innovations.",
+          3: "Coherent and well-substantiated contribution addressing a relevant gap.",
+          2: "Valid contribution addressing a defined question, though significance was limited.",
+          1: "Limited contribution to knowledge addressing a narrowly defined issue.",
+          0: "Did not demonstrate a meaningful or credible contribution.",
+        },
       },
       {
         key: "crit_k_conc",
@@ -417,13 +384,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 5,
         maxScore: 5,
-        exemplary:
-          "Formulated conclusions reflecting a high level of synthesis. Original and analytically grounded.",
-        proficient: "Presented coherent conclusions aligned with objectives.",
-        satisfactory:
-          "Presented acceptable conclusions derived from findings, limited in analytical depth.",
-        foundational: "Presented basic conclusions with weak synthesis.",
-        novice: "Failed to present coherent or substantiated conclusions.",
+        scoreDescriptions: {
+          5: "Formulated conclusions reflecting a high level of synthesis. Original and analytically grounded.",
+          4: "Formulated conclusions reflecting a high level of synthesis. Original and analytically grounded.",
+          3: "Presented coherent conclusions aligned with objectives.",
+          2: "Presented acceptable conclusions derived from findings, limited in analytical depth.",
+          1: "Presented basic conclusions with weak synthesis.",
+          0: "Failed to present coherent or substantiated conclusions.",
+        },
       },
       {
         key: "crit_l_org2",
@@ -431,15 +399,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 5,
         maxScore: 5,
-        exemplary:
-          "Exceptional clarity and coherence. Logical progression of ideas.",
-        proficient:
-          "Ideas presented in a coherent and logically sequenced manner.",
-        satisfactory:
-          "Generally consistent structure, though some sections lacked cohesion.",
-        foundational:
-          "Basic attempt at organising content. Inconsistent sequencing.",
-        novice: "Failed to organise thesis content in a coherent manner.",
+        scoreDescriptions: {
+          5: "Exceptional clarity and coherence. Logical progression of ideas.",
+          4: "Exceptional clarity and coherence. Logical progression of ideas.",
+          3: "Ideas presented in a coherent and logically sequenced manner.",
+          2: "Generally consistent structure, though some sections lacked cohesion.",
+          1: "Basic attempt at organising content. Inconsistent sequencing.",
+          0: "Failed to organise thesis content in a coherent manner.",
+        },
       },
       {
         key: "crit_m_lang2",
@@ -447,15 +414,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 5,
         maxScore: 5,
-        exemplary:
-          "Language consistently precise, scholarly, and aligned with disciplinary norms.",
-        proficient:
-          "Language appropriate to context with clear articulation of arguments.",
-        satisfactory:
-          "Acceptable academic language, with occasional imprecision.",
-        foundational:
-          "Limited control over academic writing conventions. Inconsistently structured.",
-        novice: "Did not demonstrate proficiency in academic writing.",
+        scoreDescriptions: {
+          5: "Language consistently precise, scholarly, and aligned with disciplinary norms.",
+          4: "Language consistently precise, scholarly, and aligned with disciplinary norms.",
+          3: "Language appropriate to context with clear articulation of arguments.",
+          2: "Acceptable academic language, with occasional imprecision.",
+          1: "Limited control over academic writing conventions. Inconsistently structured.",
+          0: "Did not demonstrate proficiency in academic writing.",
+        },
       },
       {
         key: "crit_n_ref2",
@@ -463,15 +429,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 5,
         maxScore: 5,
-        exemplary:
-          "Precise and consistent use of required referencing style. All citations accurate.",
-        proficient:
-          "Style applied correctly with only occasional minor errors.",
-        satisfactory:
-          "Generally appropriate but contains recurring formatting or citation errors.",
-        foundational:
-          "Inconsistently applied, with frequent formatting errors and incomplete citations.",
-        novice: "Shows little or no understanding of academic referencing.",
+        scoreDescriptions: {
+          5: "Precise and consistent use of required referencing style. All citations accurate.",
+          4: "Precise and consistent use of required referencing style. All citations accurate.",
+          3: "Style applied correctly with only occasional minor errors.",
+          2: "Generally appropriate but contains recurring formatting or citation errors.",
+          1: "Inconsistently applied, with frequent formatting errors and incomplete citations.",
+          0: "Shows little or no understanding of academic referencing.",
+        },
       },
       {
         key: "crit_o_pres2",
@@ -479,16 +444,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 2.5,
         maxScore: 5,
-        exemplary:
-          "Delivered a well-structured and analytically rigorous presentation.",
-        proficient:
-          "Presented coherently, showing a solid grasp of the objective.",
-        satisfactory:
-          "Communicated main aspects with reasonable clarity. Lacked consistency in fluency.",
-        foundational:
-          "Presented research with limited clarity and organisation.",
-        novice:
-          "Did not present the research in an academically appropriate manner.",
+        scoreDescriptions: {
+          5: "Delivered a well-structured and analytically rigorous presentation.",
+          4: "Delivered a well-structured and analytically rigorous presentation.",
+          3: "Presented coherently, showing a solid grasp of the objective.",
+          2: "Communicated main aspects with reasonable clarity. Lacked consistency in fluency.",
+          1: "Presented research with limited clarity and organisation.",
+          0: "Did not present the research in an academically appropriate manner.",
+        },
       },
       {
         key: "crit_p_delib",
@@ -496,15 +459,14 @@ const rubricsData = [
         type: "quantitative",
         weight: 2.5,
         maxScore: 5,
-        exemplary:
-          "Exceptional academic leadership, full autonomy, and deep sense of responsibility in defending the thesis.",
-        proficient:
-          "Displays strong academic independence and responsibility. Defence is well-structured.",
-        satisfactory:
-          "Shows adequate autonomy and a satisfactory level of responsibility.",
-        foundational:
-          "Demonstrates limited autonomy and emerging responsibility. Justifications are superficial.",
-        novice: "Fails to exhibit autonomy, responsibility, or leadership.",
+        scoreDescriptions: {
+          5: "Exceptional academic leadership, full autonomy, and deep sense of responsibility in defending the thesis.",
+          4: "Exceptional academic leadership, full autonomy, and deep sense of responsibility in defending the thesis.",
+          3: "Displays strong academic independence and responsibility. Defence is well-structured.",
+          2: "Shows adequate autonomy and a satisfactory level of responsibility.",
+          1: "Demonstrates limited autonomy and emerging responsibility. Justifications are superficial.",
+          0: "Fails to exhibit autonomy, responsibility, or leadership.",
+        },
       },
       {
         key: "crit_qual_chairperson",

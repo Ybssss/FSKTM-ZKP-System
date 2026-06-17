@@ -40,6 +40,10 @@ const getSession = (item) => {
     null
   );
 };
+const getSessionId = (item) => {
+  const session = getSession(item);
+  return getId(session);
+};
 
 const getStudent = (item) => {
   const evaluation = getEvaluation(item);
@@ -211,6 +215,13 @@ export default function HistoricalFeedbackPage() {
     });
   }, [buildReturnUrl, navigate]);
 
+  const openSessionDetail = useCallback((item) => {
+    const sessionId = getSessionId(item);
+    if (!sessionId) return;
+
+    navigate(`/panel/sessions/${sessionId}`);
+  }, [navigate]);
+
   const formatDate = (value) => {
     if (!value) return "-";
     const date = new Date(value);
@@ -374,10 +385,12 @@ export default function HistoricalFeedbackPage() {
       alert(error.response?.data?.message || "Failed to withdraw permission.");
     }
   };
-  const InfoLine = ({ label, value }) => (
+  const InfoLine = ({ label, value, content }) => (
     <div>
       <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">{label}</p>
-      <p className="text-sm font-semibold text-gray-900 break-words">{value || "-"}</p>
+      <div className="text-sm font-semibold text-gray-900 break-words">
+        {content ?? value ?? "-"}
+      </div>
     </div>
   );
 
@@ -410,9 +423,19 @@ export default function HistoricalFeedbackPage() {
         <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
           <div className="space-y-3 flex-1 min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-700">
-                {getEvaluationDisplayLabel(evaluation)}
-              </span>
+              {session?.title && getSessionId(evaluation) ? (
+                <button
+                  type="button"
+                  onClick={() => openSessionDetail(evaluation)}
+                  className="px-2 py-1 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-700 hover:bg-indigo-200 hover:text-indigo-900"
+                >
+                  {getEvaluationDisplayLabel(evaluation)}
+                </button>
+              ) : (
+                <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-700">
+                  {getEvaluationDisplayLabel(evaluation)}
+                </span>
+              )}
               <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-gray-100 text-gray-700">
                 {evaluation.semester || session?.academicSession || "No semester"}
               </span>
@@ -529,7 +552,20 @@ export default function HistoricalFeedbackPage() {
       request.scope === "STUDENT_HISTORY" && Boolean(request.batchId);
     const requestContextFields = [
       currentSession?.title
-        ? { label: "Requesting Session", value: currentSession.title }
+        ? {
+            label: "Requesting Session",
+            content: getId(currentSession) ? (
+              <button
+                type="button"
+                onClick={() => navigate(`/panel/sessions/${getId(currentSession)}`)}
+                className="text-indigo-700 hover:text-indigo-900 hover:underline"
+              >
+                {currentSession.title}
+              </button>
+            ) : (
+              currentSession.title
+            ),
+          }
         : null,
       currentSession?.batchName || currentSession?.batchId
         ? {
@@ -545,13 +581,41 @@ export default function HistoricalFeedbackPage() {
           student?.matricNumber ? `(${student.matricNumber})` : ""
         }`,
       },
-      { label: "Historical Session", value: session?.title },
+      {
+        label: "Historical Session",
+        content:
+          session?.title && getSessionId(request) ? (
+            <button
+              type="button"
+              onClick={() => openSessionDetail(request)}
+              className="text-indigo-700 hover:text-indigo-900 hover:underline"
+            >
+              {session.title}
+            </button>
+          ) : (
+            session?.title || "-"
+          ),
+      },
       { label: "Historical Batch", value: session?.batchName || session?.batchId },
       {
         label: "Historical Date",
         value: `${formatDate(session?.date)} · ${session?.startTime || "-"} - ${session?.endTime || "-"}`,
       },
-              { label: "Rubric / Session", value: getEvaluationDisplayLabel(request) },
+      {
+        label: "Rubric / Session",
+        content:
+          session?.title && getSessionId(request) ? (
+            <button
+              type="button"
+              onClick={() => openSessionDetail(request)}
+              className="text-indigo-700 hover:text-indigo-900 hover:underline"
+            >
+              {getEvaluationDisplayLabel(request)}
+            </button>
+          ) : (
+            getEvaluationDisplayLabel(request)
+          ),
+      },
       {
         label: "Original Owner",
         value: getPersonName(request.owningPanelId || evaluation?.evaluatorId),
@@ -587,11 +651,12 @@ export default function HistoricalFeedbackPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-              {details.map((detail) => (
+              {details.map((detail, index) => (
                 <InfoLine
-                  key={`${detail.label}-${detail.value || "-"}`}
+                  key={`${detail.label}-${index}`}
                   label={detail.label}
                   value={detail.value}
+                  content={detail.content}
                 />
               ))}
             </div>

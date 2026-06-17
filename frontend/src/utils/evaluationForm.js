@@ -1,12 +1,4 @@
 export const DEFAULT_MAX_SCORE = 5;
-export const SCORE_LABELS = {
-  5: { label: "Outstanding", descriptionKey: "outstanding" },
-  4: { label: "Exemplary", descriptionKey: "exemplary" },
-  3: { label: "Proficient", descriptionKey: "proficient" },
-  2: { label: "Satisfactory", descriptionKey: "satisfactory" },
-  1: { label: "Foundational", descriptionKey: "foundational" },
-  0: { label: "Novice", descriptionKey: "novice" },
-};
 
 export const getCriteria = (evaluation) => evaluation?.rubricId?.criteria || [];
 export const getQuantitativeCriteria = (evaluation) =>
@@ -48,30 +40,35 @@ export const getCriterionMaxScore = (criterion) => {
   return maxScore > 0 ? maxScore : DEFAULT_MAX_SCORE;
 };
 
+export const getCriterionScoreDescriptions = (criterion = {}) => {
+  const directDescriptions =
+    criterion?.scoreDescriptions &&
+    typeof criterion.scoreDescriptions === "object"
+      ? criterion.scoreDescriptions
+      : {};
+
+  return { ...directDescriptions };
+};
+
 export const getScoreScale = (criterion) =>
   Array.from({ length: getCriterionMaxScore(criterion) + 1 }, (_, index) => {
     const value = getCriterionMaxScore(criterion) - index;
-    const scoreLabel = SCORE_LABELS[value] || {
-      label: `Score ${value}`,
-      descriptionKey: "",
+    return {
+      value,
+      label: formatMarkLabel(value),
+      descriptionKey: String(value),
     };
-
-    return { value, ...scoreLabel };
   });
 
 export const getScoreDescription = (criterion, score) => {
-  if (score.descriptionKey && criterion?.[score.descriptionKey]) {
-    return criterion[score.descriptionKey];
-  }
+  const scoreValue =
+    typeof score === "object" ? score?.value : toNumber(score, null);
+  const descriptions = getCriterionScoreDescriptions(criterion);
+  const description =
+    descriptions[String(scoreValue)] ?? descriptions[Number(scoreValue)];
 
-  if (score.value === getCriterionMaxScore(criterion)) {
-    if (criterion?.outstanding) {
-      return criterion.outstanding;
-    }
-
-    if (criterion?.exemplary) {
-      return criterion.exemplary;
-    }
+  if (typeof description === "string" && description.trim()) {
+    return description.trim();
   }
 
   return "No description provided.";
