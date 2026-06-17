@@ -660,7 +660,7 @@ export default function StudentProfile() {
 
                 <div className="bg-purple-50 p-5 rounded-lg border border-purple-100">
                   <p className="text-xs font-bold text-purple-800 uppercase tracking-widest mb-2 flex items-center gap-2">
-                    <Users className="w-4 h-4" /> Default Panels
+                    <Users className="w-4 h-4" /> Current Panels
                   </p>
                   {assignedPanels.length > 0 ? (
                     <div className="space-y-1">
@@ -679,7 +679,7 @@ export default function StudentProfile() {
                     </div>
                   ) : (
                     <p className="font-semibold text-gray-500">
-                      No default panels assigned yet.
+                      No current panels assigned yet.
                     </p>
                   )}
                 </div>
