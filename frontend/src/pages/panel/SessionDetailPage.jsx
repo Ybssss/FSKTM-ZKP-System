@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import api from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
+import { emitHistoricalRequestsUpdated } from "../../utils/historicalRequestEvents";
 import {
   getDocumentFileName,
   openAuthenticatedFile,
@@ -208,6 +209,7 @@ export default function SessionDetailPage() {
       const res = await api.post("/feedback/permissions/request", payload);
       if (res.data.success) {
         mergePermissions([res.data.permission]);
+        emitHistoricalRequestsUpdated();
         alert(
           "Request sent successfully to the original author and admins.",
         );
@@ -268,6 +270,7 @@ export default function SessionDetailPage() {
 
       if (res.data.success) {
         mergePermissions(res.data.permissions || []);
+        emitHistoricalRequestsUpdated();
         alert(
           `${res.data.createdCount} historical access request(s) created under batch ${res.data.batchId}.`,
         );

@@ -12,6 +12,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import api from "../../services/api";
+import { emitHistoricalRequestsUpdated } from "../../utils/historicalRequestEvents";
 import { useAuth } from "../../contexts/AuthContext";
 import UserProfileLink from "../../components/UserProfileLink";
 import SortableTh from "../../components/SortableTh";
@@ -230,6 +231,7 @@ export default function EvaluationPage() {
       );
 
       if (res.data.success) {
+        emitHistoricalRequestsUpdated();
         alert(
           "Unlock request sent to the administration. You will be able to edit once approved.",
         );

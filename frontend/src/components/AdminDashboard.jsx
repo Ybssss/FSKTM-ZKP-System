@@ -4,6 +4,7 @@ import { ShieldAlert, CheckCircle, XCircle, Clock } from "lucide-react";
 import UserProfileLink from "./UserProfileLink";
 import SortableTh from "./SortableTh";
 import useSortableData from "../hooks/useSortableData";
+import { emitHistoricalRequestsUpdated } from "../utils/historicalRequestEvents";
 
 const AdminDashboard = () => {
   const [searchQuery, setSearchQuery] = useState("");
@@ -80,6 +81,7 @@ const AdminDashboard = () => {
         action,
         responseNote,
       });
+      emitHistoricalRequestsUpdated();
       loadRequests();
     } catch (error) {
       alert(error.response?.data?.message || "Failed to process request.");

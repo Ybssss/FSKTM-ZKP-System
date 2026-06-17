@@ -17,6 +17,7 @@ import {
   getScoreBadgeClass,
   getScoreBadgeLabel,
 } from "../../utils/historicalFeedback";
+import { emitHistoricalRequestsUpdated } from "../../utils/historicalRequestEvents";
 import { getRubricDisplayName } from "../../utils/rubricLabels";
 
 const getId = (value) => (typeof value === "object" ? value?._id : value);
@@ -320,6 +321,7 @@ export default function HistoricalFeedbackPage() {
       alert("Access request sent successfully.");
       setRequestModalData(null);
       setRequestReason("");
+      emitHistoricalRequestsUpdated();
       loadData();
     } catch (error) {
       alert(
@@ -361,6 +363,7 @@ export default function HistoricalFeedbackPage() {
         action,
         responseNote,
       });
+      emitHistoricalRequestsUpdated();
       loadData();
     } catch (error) {
       alert(error.response?.data?.message || error.response?.data?.error || "Failed to respond.");
@@ -379,6 +382,7 @@ export default function HistoricalFeedbackPage() {
 
     try {
       await api.post("/feedback/permissions/withdraw", { requestId: getId(request) });
+      emitHistoricalRequestsUpdated();
       loadData();
       alert("Approved access withdrawn.");
     } catch (error) {

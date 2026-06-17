@@ -1,6 +1,10 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Outlet, NavLink, useNavigate } from "react-router-dom";
 import { useAuth } from "../../contexts/AuthContext";
+import api from "../../services/api";
+import {
+  HISTORICAL_REQUESTS_UPDATED_EVENT,
+} from "../../utils/historicalRequestEvents";
 import {
   LayoutDashboard,
   ClipboardCheck,
@@ -24,11 +28,83 @@ export default function PanelLayout() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [historicalRequestCounts, setHistoricalRequestCounts] = useState({
+    pending: 0,
+    approved: 0,
+    rejected: 0,
+  });
 
   const handleLogout = () => {
     logout();
     navigate("/login");
   };
+
+  const canTrackHistoricalRequests = useMemo(
+    () => ["admin", "panel"].includes(user?.role),
+    [user?.role],
+  );
+
+  const loadHistoricalRequestCounts = useCallback(async () => {
+    if (!canTrackHistoricalRequests) {
+      setHistoricalRequestCounts({ pending: 0, approved: 0, rejected: 0 });
+      return;
+    }
+
+    try {
+      const [myRes, incomingRes] = await Promise.all([
+        api.get("/feedback/permissions/my"),
+        api.get("/feedback/permissions/incoming?status=PENDING"),
+      ]);
+
+      const myRequests = myRes.data?.requests || [];
+      const incomingPending = incomingRes.data?.requests || [];
+
+      setHistoricalRequestCounts({
+        pending:
+          incomingPending.length +
+          myRequests.filter((request) => request.status === "PENDING").length,
+        approved: myRequests.filter((request) => request.status === "APPROVED")
+          .length,
+        rejected: myRequests.filter((request) => request.status === "REJECTED")
+          .length,
+      });
+    } catch (error) {
+      console.error("Failed to load historical request counts:", error);
+    }
+  }, [canTrackHistoricalRequests]);
+
+  useEffect(() => {
+    if (!canTrackHistoricalRequests) return undefined;
+
+    const handleRefresh = () => {
+      loadHistoricalRequestCounts();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        loadHistoricalRequestCounts();
+      }
+    };
+
+    const initialRefreshTimer = window.setTimeout(handleRefresh, 0);
+
+    window.addEventListener(HISTORICAL_REQUESTS_UPDATED_EVENT, handleRefresh);
+    window.addEventListener("focus", handleRefresh);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearTimeout(initialRefreshTimer);
+      window.removeEventListener(
+        HISTORICAL_REQUESTS_UPDATED_EVENT,
+        handleRefresh,
+      );
+      window.removeEventListener("focus", handleRefresh);
+      document.removeEventListener(
+        "visibilitychange",
+        handleVisibilityChange,
+      );
+    };
+  }, [canTrackHistoricalRequests, loadHistoricalRequestCounts]);
 
   const navItems = [
     {
@@ -97,6 +173,27 @@ export default function PanelLayout() {
     return role.charAt(0).toUpperCase() + role.slice(1);
   };
 
+  const requestBadgeItems = [
+    {
+      key: "pending",
+      count: historicalRequestCounts.pending,
+      className: "bg-amber-100 text-amber-800 border border-amber-200",
+      title: "Pending requests",
+    },
+    {
+      key: "approved",
+      count: historicalRequestCounts.approved,
+      className: "bg-green-100 text-green-800 border border-green-200",
+      title: "Approved updates to my requests",
+    },
+    {
+      key: "rejected",
+      count: historicalRequestCounts.rejected,
+      className: "bg-red-100 text-red-800 border border-red-200",
+      title: "Rejected updates to my requests",
+    },
+  ].filter((badge) => badge.count > 0);
+
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden">
       {isSidebarOpen && (
@@ -151,15 +248,39 @@ export default function PanelLayout() {
                   to={item.to}
                   onClick={() => setIsSidebarOpen(false)}
                   className={({ isActive }) =>
-                    `flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+                    `flex items-center justify-between gap-3 px-4 py-3 rounded-lg transition-colors ${
                       isActive
                         ? "bg-indigo-600 text-white shadow-md"
                         : "text-gray-700 hover:bg-gray-100"
                     }`
                   }
                 >
-                  <item.icon className="w-5 h-5" />
-                  <span className="font-medium">{item.label}</span>
+                  {({ isActive }) => (
+                    <>
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <item.icon className="w-5 h-5 shrink-0" />
+                        <span className="font-medium truncate">{item.label}</span>
+                      </div>
+                      {item.to === "/panel/historical-feedback" &&
+                        requestBadgeItems.length > 0 && (
+                          <div className="flex items-center gap-1 shrink-0 pl-2">
+                            {requestBadgeItems.map((badge) => (
+                              <span
+                                key={badge.key}
+                                title={badge.title}
+                                className={`min-w-[1.5rem] rounded-full px-1.5 py-0.5 text-center text-[10px] font-bold leading-none ${
+                                  isActive
+                                    ? badge.className
+                                    : badge.className
+                                }`}
+                              >
+                                {badge.count}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                    </>
+                  )}
                 </NavLink>
               </li>
             ))}
