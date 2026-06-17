@@ -40,6 +40,7 @@ export default function Navbar() {
             <UserAvatar
               user={user}
               className="w-10 h-10 rounded-full overflow-hidden bg-primary"
+              imgClassName="w-full h-full rounded-full object-contain bg-white p-0.5"
               fallbackClassName="w-full h-full rounded-full flex items-center justify-center bg-primary text-white font-semibold uppercase"
             />
             <button

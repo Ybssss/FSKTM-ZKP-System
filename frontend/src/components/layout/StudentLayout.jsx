@@ -67,6 +67,7 @@ export default function StudentLayout() {
             <UserAvatar
               user={user}
               className="w-10 h-10 rounded-full overflow-hidden bg-blue-600"
+              imgClassName="w-full h-full rounded-full object-contain bg-white p-0.5"
               fallbackClassName="w-full h-full rounded-full flex items-center justify-center bg-blue-600 text-white font-semibold uppercase"
             />
             <div className="flex-1 min-w-0">
@@ -128,6 +129,7 @@ export default function StudentLayout() {
           <UserAvatar
             user={user}
             className="w-8 h-8 rounded-full overflow-hidden bg-blue-600"
+            imgClassName="w-full h-full rounded-full object-contain bg-white p-0.5"
             fallbackClassName="w-full h-full rounded-full flex items-center justify-center bg-blue-600 text-white font-bold text-xs uppercase"
           />
         </header>
