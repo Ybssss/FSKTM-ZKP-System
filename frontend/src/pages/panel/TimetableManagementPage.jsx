@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   AlertTriangle,
   Calendar as CalendarIcon,
+  ClipboardCheck,
   Clock,
   Eye,
   GripVertical,
@@ -67,11 +68,14 @@ const getSessionStartDateTime = (session) => {
 export default function TimetableManagementPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
+  const currentUserId = idOf(user?.id || user?._id);
+  const canTrackViewerEvaluations = ["admin", "panel"].includes(user?.role);
   const navigate = useNavigate();
 
   const [activeTab, setActiveTab] = useState("list");
   const [loading, setLoading] = useState(true);
   const [sessions, setSessions] = useState([]);
+  const [viewerEvaluations, setViewerEvaluations] = useState([]);
   const [students, setStudents] = useState([]);
   const [panels, setPanels] = useState([]);
   const [rubrics, setRubrics] = useState([]);
@@ -126,14 +130,26 @@ export default function TimetableManagementPage() {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const sessionRes = isAdmin ? await api.get("/timetables") : await api.get("/timetables/my");
+      const [sessionRes, evaluationRes] = await Promise.all([
+        isAdmin ? api.get("/timetables") : api.get("/timetables/my"),
+        canTrackViewerEvaluations
+          ? api.get("/evaluations")
+          : Promise.resolve({ data: { data: [] } }),
+      ]);
       const fetchedSessions = sessionRes.data.timetables || sessionRes.data.sessions || sessionRes.data.data || [];
+      const fetchedEvaluations =
+        evaluationRes.data?.data || evaluationRes.data?.evaluations || [];
       setSessions(
         [...fetchedSessions].sort((a, b) => {
           const da = `${normalizeDateKey(a.date)} ${a.startTime || a.time || ""}`;
           const db = `${normalizeDateKey(b.date)} ${b.startTime || b.time || ""}`;
           return db.localeCompare(da);
         }),
+      );
+      setViewerEvaluations(
+        fetchedEvaluations.filter(
+          (evaluation) => idOf(evaluation?.evaluatorId) === currentUserId,
+        ),
       );
 
       if (isAdmin) {
@@ -170,7 +186,7 @@ export default function TimetableManagementPage() {
     } finally {
       setLoading(false);
     }
-  }, [isAdmin]);
+  }, [canTrackViewerEvaluations, currentUserId, isAdmin]);
 
   useEffect(() => {
     loadData();
@@ -698,7 +714,6 @@ export default function TimetableManagementPage() {
     }
   };
 
-  const currentUserId = idOf(user?.id || user?._id);
   const isMyAssignedSession = useCallback((session) => {
     const isPanelAssignment = (session.panels || []).some(
       (panel) => idOf(panel) === currentUserId,
@@ -746,6 +761,17 @@ export default function TimetableManagementPage() {
         .includes(term);
     });
   }, [visibleSessions, searchTerm]);
+  const viewerEvaluationBySession = useMemo(() => {
+    const nextMap = new Map();
+
+    viewerEvaluations.forEach((evaluation) => {
+      const sessionId = idOf(evaluation?.sessionId);
+      if (!sessionId || nextMap.has(sessionId)) return;
+      nextMap.set(sessionId, evaluation);
+    });
+
+    return nextMap;
+  }, [viewerEvaluations]);
   const sessionSortAccessors = useMemo(
     () => ({
       session: (session) => `${session.title || session.sessionType || ""} ${session.batchName || session.batchId || ""}`,
@@ -838,6 +864,38 @@ export default function TimetableManagementPage() {
                   const student = getStudent(session);
                   const supervisor = resolveSupervisor(student);
                   const isSupervisorViewer = idOf(supervisor) === currentUserId;
+                  const viewerEvaluation = viewerEvaluationBySession.get(
+                    String(sessionId),
+                  );
+                  const viewerEvaluationStatus = String(
+                    viewerEvaluation?.status || "",
+                  ).toUpperCase();
+                  const viewAction =
+                    viewerEvaluationStatus === "COMPLETED"
+                      ? {
+                          label: "Submitted",
+                          icon: Eye,
+                          className:
+                            "bg-emerald-600 text-white hover:bg-emerald-700",
+                          title:
+                            "You already submitted your evaluation for this session.",
+                        }
+                      : viewerEvaluationStatus === "PENDING"
+                        ? {
+                            label: "Evaluate",
+                            icon: ClipboardCheck,
+                            className:
+                              "bg-amber-500 text-white hover:bg-amber-600",
+                            title:
+                              "This session still has a pending evaluation assigned to you.",
+                          }
+                        : {
+                            label: "View",
+                            icon: Eye,
+                            className:
+                              "bg-gray-700 text-white hover:bg-gray-800",
+                            title: "Open session details.",
+                          };
                   return (
                     <tr key={sessionId} className="hover:bg-gray-50">
                       <td className="p-4"><p className="font-bold text-gray-900">{session.title || session.sessionType}</p><p className="text-xs text-gray-500">{session.batchName || session.batchId || "No batch"}</p></td>
@@ -869,10 +927,11 @@ export default function TimetableManagementPage() {
                           <button
                             type="button"
                             onClick={() => navigate(`/panel/sessions/${sessionId}`)}
-                            className="inline-flex items-center gap-2 px-3 py-2 bg-gray-700 text-white rounded-lg text-sm font-bold"
+                            title={viewAction.title}
+                            className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold ${viewAction.className}`}
                           >
-                            <Eye className="w-4 h-4" />
-                            View
+                            <viewAction.icon className="w-4 h-4" />
+                            {viewAction.label}
                           </button>
                           {isAdmin && (
                             <button
