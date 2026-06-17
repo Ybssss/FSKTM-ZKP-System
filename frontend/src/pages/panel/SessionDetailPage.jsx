@@ -28,6 +28,16 @@ import UserProfileLink from "../../components/UserProfileLink";
 import { buildPanelSessionOutcome } from "../../utils/sessionOutcome";
 import { getRubricDisplayName } from "../../utils/rubricLabels";
 
+const idOf = (value) => String(value?._id || value || "");
+const formatMinutesToClock = (totalMinutes) => {
+  const normalized = Number(totalMinutes);
+  if (!Number.isFinite(normalized) || normalized < 0) return "";
+
+  const hours = Math.floor(normalized / 60) % 24;
+  const minutes = normalized % 60;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}`;
+};
+
 export default function SessionDetailPage() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -261,6 +271,44 @@ export default function SessionDetailPage() {
   const sessionFinalResult = useMemo(() => {
     return buildPanelSessionOutcome(evaluations);
   }, [evaluations]);
+  const supervisorReviewer = session?.student?.supervisorId || null;
+  const orderedEvaluations = useMemo(() => {
+    const panelOrder = new Map(
+      (session?.panels || []).map((panel, index) => [idOf(panel), index]),
+    );
+    const supervisorId = idOf(supervisorReviewer);
+
+    return [...evaluations].sort((left, right) => {
+      const leftRole = left?.formFiller === "Supervisor" ? 1 : 0;
+      const rightRole = right?.formFiller === "Supervisor" ? 1 : 0;
+      if (leftRole !== rightRole) return leftRole - rightRole;
+
+      const leftId = idOf(left?.evaluatorId);
+      const rightId = idOf(right?.evaluatorId);
+
+      const leftPanelIndex = panelOrder.has(leftId)
+        ? panelOrder.get(leftId)
+        : Number.MAX_SAFE_INTEGER;
+      const rightPanelIndex = panelOrder.has(rightId)
+        ? panelOrder.get(rightId)
+        : Number.MAX_SAFE_INTEGER;
+      if (leftPanelIndex !== rightPanelIndex) {
+        return leftPanelIndex - rightPanelIndex;
+      }
+
+      if (supervisorId) {
+        const leftIsSupervisor = leftId === supervisorId ? 1 : 0;
+        const rightIsSupervisor = rightId === supervisorId ? 1 : 0;
+        if (leftIsSupervisor !== rightIsSupervisor) {
+          return leftIsSupervisor - rightIsSupervisor;
+        }
+      }
+
+      return String(left?.evaluatorId?.name || left?.evaluatorId?.userId || "").localeCompare(
+        String(right?.evaluatorId?.name || right?.evaluatorId?.userId || ""),
+      );
+    });
+  }, [evaluations, session?.panels, supervisorReviewer]);
 
   const toggleAttendance = async () => {
     if (attendanceActive) {
@@ -443,6 +491,37 @@ export default function SessionDetailPage() {
     sessionDate && !Number.isNaN(sessionDate.getTime());
   const onlineMeetingRawValue = session.schedule?.venue || session.venue || "";
   const onlineMeetingUrl = getOnlineMeetingUrl(onlineMeetingRawValue);
+  const sessionTimeLabel = (() => {
+    const startTime = String(session.startTime || "").trim();
+    const endTime = String(session.endTime || "").trim();
+
+    if (startTime && endTime) {
+      return `${startTime} - ${endTime}`;
+    }
+
+    if (startTime) {
+      const parsedStartMinutes = startTime ? (() => {
+        const match = startTime.match(/^(\d{1,2}):(\d{2})$/);
+        if (!match) return null;
+        return Number(match[1]) * 60 + Number(match[2]);
+      })() : null;
+      const derivedEndTime =
+        parsedStartMinutes !== null &&
+        Number.isFinite(Number(session.slotDurationMinutes)) &&
+        Number(session.slotDurationMinutes) > 0
+          ? formatMinutesToClock(
+              parsedStartMinutes + Number(session.slotDurationMinutes),
+            )
+          : "";
+
+      return derivedEndTime ? `${startTime} - ${derivedEndTime}` : startTime;
+    }
+
+    if (session.schedule?.time) return session.schedule.time;
+    if (session.time) return session.time;
+
+    return "Time TBA";
+  })();
 
   return (
     <div className="max-w-6xl mx-auto space-y-6 pb-12">
@@ -516,11 +595,7 @@ export default function SessionDetailPage() {
             <div>
               <p className="text-xs font-bold text-gray-500 uppercase">Time</p>
               <p className="font-semibold text-gray-900">
-                {session.schedule?.time ||
-                  session.time ||
-                  (session.startTime
-                    ? `${session.startTime}${session.endTime ? ` - ${session.endTime}` : ""}`
-                    : "Time TBA")}
+                {sessionTimeLabel}
               </p>
             </div>
           </div>
@@ -700,6 +775,33 @@ export default function SessionDetailPage() {
           </p>
         )}
       </div>
+
+      {supervisorReviewer && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+          <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2 mb-4">
+            <ShieldAlert className="w-5 h-5 text-emerald-600" /> Supervisor Reviewer
+          </h2>
+
+          <div className="p-4 rounded-lg border border-emerald-200 bg-emerald-50">
+            <p className="text-xs font-bold text-emerald-700 uppercase tracking-widest">
+              Fixed Evaluator
+            </p>
+            <p className="font-bold text-gray-900 mt-1">
+              <UserProfileLink
+                user={supervisorReviewer}
+                fallback="Supervisor name unavailable"
+                className="font-bold"
+              />
+            </p>
+            {supervisorReviewer.email && (
+              <p className="text-sm text-gray-600 mt-1">{supervisorReviewer.email}</p>
+            )}
+            <p className="text-xs text-emerald-700 mt-3 font-semibold">
+              The supervisor evaluates separately and does not attend the live session schedule.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* SESSION MATERIALS */}
       <div
@@ -1024,7 +1126,7 @@ export default function SessionDetailPage() {
                   </div>
                 </div>
               )}
-              {evaluations.map((ev) => (
+              {orderedEvaluations.map((ev) => (
                 <div
                   key={ev._id}
                   className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white hover:bg-gray-50 transition-colors"
@@ -1040,6 +1142,9 @@ export default function SessionDetailPage() {
                     <p className="text-sm text-gray-500">
                       {ev.evaluatorId?.email}
                     </p>
+                    <p className="text-xs font-bold uppercase tracking-widest text-gray-400 mt-1">
+                      {ev.formFiller === "Supervisor" ? "Supervisor Reviewer" : "Panel Examiner"}
+                    </p>
                   </div>
 
                   <div className="flex items-center gap-4">
@@ -1047,7 +1152,7 @@ export default function SessionDetailPage() {
                       <>
                         <div className="text-right">
                           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">
-                            Panel Score
+                            {ev.formFiller === "Supervisor" ? "Supervisor Score" : "Panel Score"}
                           </p>
                           <p
                             className={`px-4 py-1.5 rounded font-black border shadow-sm ${getScoreColor(ev.totalMarks)}`}
