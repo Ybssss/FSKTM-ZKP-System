@@ -65,6 +65,15 @@ const getSessionStartDateTime = (session) => {
   return Number.isNaN(dt.getTime()) ? null : dt;
 };
 
+const getSessionEndDateTime = (session) => {
+  const date = normalizeDateKey(session?.date);
+  const time = String(
+    session?.endTime || session?.startTime || session?.time || "23:59",
+  ).trim();
+  const dt = new Date(`${date}T${time}:00`);
+  return Number.isNaN(dt.getTime()) ? null : dt;
+};
+
 export default function TimetableManagementPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
@@ -75,6 +84,7 @@ export default function TimetableManagementPage() {
   const [activeTab, setActiveTab] = useState("list");
   const [loading, setLoading] = useState(true);
   const [sessions, setSessions] = useState([]);
+  const [sessionEvaluations, setSessionEvaluations] = useState([]);
   const [viewerEvaluations, setViewerEvaluations] = useState([]);
   const [students, setStudents] = useState([]);
   const [panels, setPanels] = useState([]);
@@ -146,6 +156,7 @@ export default function TimetableManagementPage() {
           return db.localeCompare(da);
         }),
       );
+      setSessionEvaluations(fetchedEvaluations);
       setViewerEvaluations(
         fetchedEvaluations.filter(
           (evaluation) => idOf(evaluation?.evaluatorId) === currentUserId,
@@ -772,6 +783,20 @@ export default function TimetableManagementPage() {
 
     return nextMap;
   }, [viewerEvaluations]);
+  const sessionEvaluationsBySession = useMemo(() => {
+    const nextMap = new Map();
+
+    sessionEvaluations.forEach((evaluation) => {
+      const sessionId = idOf(evaluation?.sessionId);
+      if (!sessionId) return;
+
+      const existing = nextMap.get(sessionId) || [];
+      existing.push(evaluation);
+      nextMap.set(sessionId, existing);
+    });
+
+    return nextMap;
+  }, [sessionEvaluations]);
   const sessionSortAccessors = useMemo(
     () => ({
       session: (session) => `${session.title || session.sessionType || ""} ${session.batchName || session.batchId || ""}`,
@@ -864,12 +889,35 @@ export default function TimetableManagementPage() {
                   const student = getStudent(session);
                   const supervisor = resolveSupervisor(student);
                   const isSupervisorViewer = idOf(supervisor) === currentUserId;
+                  const sessionEnd = getSessionEndDateTime(session);
+                  const isSessionLate =
+                    sessionEnd && sessionEnd.getTime() < Date.now();
+                  const sessionEvaluationItems =
+                    sessionEvaluationsBySession.get(String(sessionId)) || [];
+                  const latePendingEvaluations = isSessionLate
+                    ? sessionEvaluationItems.filter(
+                        (evaluation) =>
+                          String(evaluation?.status || "").toUpperCase() ===
+                          "PENDING",
+                      )
+                    : [];
+                  const latePendingSummary = latePendingEvaluations
+                    .map((evaluation) => {
+                      const evaluatorName =
+                        evaluation?.evaluatorId?.name || "Unknown Evaluator";
+                      return evaluation?.formFiller === "Supervisor"
+                        ? `SV: ${evaluatorName}`
+                        : evaluatorName;
+                    })
+                    .filter(Boolean);
                   const viewerEvaluation = viewerEvaluationBySession.get(
                     String(sessionId),
                   );
                   const viewerEvaluationStatus = String(
                     viewerEvaluation?.status || "",
                   ).toUpperCase();
+                  const isViewerLate =
+                    isSessionLate && viewerEvaluationStatus === "PENDING";
                   const viewAction =
                     viewerEvaluationStatus === "COMPLETED"
                       ? {
@@ -880,7 +928,16 @@ export default function TimetableManagementPage() {
                           title:
                             "You already submitted your evaluation for this session.",
                         }
-                      : viewerEvaluationStatus === "PENDING"
+                      : isViewerLate
+                        ? {
+                            label: "Late",
+                            icon: AlertTriangle,
+                            className:
+                              "bg-red-600 text-white hover:bg-red-700",
+                            title:
+                              "Your evaluation is still pending after the scheduled session end time.",
+                          }
+                        : viewerEvaluationStatus === "PENDING"
                         ? {
                             label: "Evaluate",
                             icon: ClipboardCheck,
@@ -897,8 +954,35 @@ export default function TimetableManagementPage() {
                             title: "Open session details.",
                           };
                   return (
-                    <tr key={sessionId} className="hover:bg-gray-50">
-                      <td className="p-4"><p className="font-bold text-gray-900">{session.title || session.sessionType}</p><p className="text-xs text-gray-500">{session.batchName || session.batchId || "No batch"}</p></td>
+                    <tr
+                      key={sessionId}
+                      className={`${
+                        latePendingEvaluations.length
+                          ? "bg-red-50/40 hover:bg-red-50/70"
+                          : "hover:bg-gray-50"
+                      }`}
+                    >
+                      <td className="p-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="font-bold text-gray-900">
+                            {session.title || session.sessionType}
+                          </p>
+                          {latePendingEvaluations.length > 0 && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-red-200 bg-red-100 px-2 py-0.5 text-[11px] font-bold uppercase text-red-700">
+                              <AlertTriangle className="w-3 h-3" />
+                              Late Pending {latePendingEvaluations.length}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500">
+                          {session.batchName || session.batchId || "No batch"}
+                        </p>
+                        {latePendingSummary.length > 0 && (
+                          <p className="mt-1 text-xs font-semibold text-red-700">
+                            Waiting for: {latePendingSummary.join(", ")}
+                          </p>
+                        )}
+                      </td>
                       <td className="p-4 text-sm text-gray-700"><div>{normalizeDateKey(session.date)}</div><div className="font-semibold">{session.startTime || session.time} - {session.endTime}</div><a href={formatLink(session.venue || session.googleMeetLink)} target="_blank" rel="noreferrer" className="text-blue-700 font-semibold flex items-center gap-1"><Video className="w-4 h-4" /> Link</a></td>
                       <td className="p-4"><p className="font-bold"><UserProfileLink user={student} fallback="-" className="font-bold" /></p><p className="text-xs text-gray-500">{student?.matricNumber || student?.userId || "-"}</p></td>
                       <td className="p-4 text-sm">
