@@ -129,7 +129,7 @@ router.get('/stats', authenticateToken, async (req, res) => {
     }
 
     try {
-      activeRubrics = await Rubric.countDocuments();
+      activeRubrics = await Rubric.countDocuments({ isObsolete: { $ne: true } });
     } catch (error) {
       console.warn("Analytics rubric summary fallback:", error.message);
     }

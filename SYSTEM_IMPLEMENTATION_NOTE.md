@@ -2,6 +2,50 @@
 
 This note maps the important implemented functions to their code locations and explains why the security and domain elements matter.
 
+## Index of Contents
+
+- [1. First important truth about the current ZKP implementation](#1-first-important-truth-about-the-current-zkp-implementation)
+- [2. Main backend route map](#2-main-backend-route-map)
+- [3. Authentication and security path](#3-authentication-and-security-path)
+  - [3.1 Registration](#31-registration)
+  - [3.2 Login challenge and proof verification](#32-login-challenge-and-proof-verification)
+  - [3.3 No password storage](#33-no-password-storage)
+  - [3.4 Device-bound sessions](#34-device-bound-sessions)
+  - [3.5 Brute-force and bot resistance](#35-brute-force-and-bot-resistance)
+  - [3.6 Device pairing and key transfer](#36-device-pairing-and-key-transfer)
+- [4. User model and role design](#4-user-model-and-role-design)
+- [5. User lifecycle and profile features](#5-user-lifecycle-and-profile-features)
+  - [5.1 Admin user creation, update, reset](#51-admin-user-creation-update-reset)
+  - [5.2 Inline user profile routes](#52-inline-user-profile-routes)
+- [6. Scheduling, session batches, and conflict control](#6-scheduling-session-batches-and-conflict-control)
+  - [6.1 Session batch master](#61-session-batch-master)
+  - [6.2 Session creation and bulk scheduling](#62-session-creation-and-bulk-scheduling)
+  - [6.3 Conflict prevention](#63-conflict-prevention)
+- [7. Evaluation creation, submission, release, and supervisor logic](#7-evaluation-creation-submission-release-and-supervisor-logic)
+  - [7.1 Automatic evaluation document generation](#71-automatic-evaluation-document-generation)
+  - [7.2 Evaluation schema](#72-evaluation-schema)
+  - [7.3 Evaluation submission](#73-evaluation-submission)
+  - [7.4 Result publication rule](#74-result-publication-rule)
+- [8. Historical vault, permission governance, and unlock flow](#8-historical-vault-permission-governance-and-unlock-flow)
+  - [8.1 Permission model](#81-permission-model)
+  - [8.2 Permission controller](#82-permission-controller)
+- [9. Session materials and protected file access](#9-session-materials-and-protected-file-access)
+- [10. Attendance and QR/PIN flow](#10-attendance-and-qrpin-flow)
+  - [10.1 QR generation and verification](#101-qr-generation-and-verification)
+  - [10.2 Attendance records and derived absence](#102-attendance-records-and-derived-absence)
+- [11. Rubrics and scoring consistency](#11-rubrics-and-scoring-consistency)
+- [12. Panel assignment and AI matching](#12-panel-assignment-and-ai-matching)
+- [13. Frontend pages that matter most operationally](#13-frontend-pages-that-matter-most-operationally)
+- [14. Why ZKP is important in this system specifically](#14-why-zkp-is-important-in-this-system-specifically)
+  - [14.1 It removes password storage from a sensitive academic platform](#141-it-removes-password-storage-from-a-sensitive-academic-platform)
+  - [14.2 It fits shared-device and lab-device usage better](#142-it-fits-shared-device-and-lab-device-usage-better)
+  - [14.3 It reduces phishing and password reuse risk](#143-it-reduces-phishing-and-password-reuse-risk)
+  - [14.4 It works well with strict result privacy](#144-it-works-well-with-strict-result-privacy)
+- [15. Other important system elements besides ZKP](#15-other-important-system-elements-besides-zkp)
+- [16. Demo and seeded data](#16-demo-and-seeded-data)
+- [17. Final implementation summary](#17-final-implementation-summary)
+- [18. Code navigation caveats](#18-code-navigation-caveats)
+
 ## 1. First important truth about the current ZKP implementation
 
 The live login flow is not using a full zk-SNARK verification path today.
@@ -50,7 +94,7 @@ Purpose:
 Important code:
 
 - Admin user creation and registration code issuance:
-  - `backend/src/controllers/userController.js:83`
+  - `backend/src/controllers/userController.js:87`
 - ZKP registration endpoint:
   - `backend/src/controllers/authController.js:58`
 - Registration route:
@@ -251,11 +295,11 @@ Why this matters:
 Important code:
 
 - create user:
-  - `backend/src/controllers/userController.js:83`
+  - `backend/src/controllers/userController.js:87`
 - reset ZKP registration:
-  - `backend/src/controllers/userController.js:231`
+  - `backend/src/controllers/userController.js:235`
 - update user:
-  - `backend/src/controllers/userController.js:308`
+  - `backend/src/controllers/userController.js:312`
 
 Why it matters:
 
@@ -269,19 +313,19 @@ These are implemented directly in routes, not only in the controller.
 Important code:
 
 - get assigned/supervised students:
-  - `backend/src/routes/user.js:27`
+  - `backend/src/routes/user.js:31`
 - update student abstract:
-  - `backend/src/routes/user.js:79`
+  - `backend/src/routes/user.js:83`
 - update profile image:
-  - `backend/src/routes/user.js:126`
+  - `backend/src/routes/user.js:130`
 - get current profile:
-  - `backend/src/routes/user.js:187`
+  - `backend/src/routes/user.js:191`
 - update student research title:
-  - `backend/src/routes/user.js:236`
+  - `backend/src/routes/user.js:240`
 - assign default panels:
-  - `backend/src/routes/user.js:396`
+  - `backend/src/routes/user.js:400`
 - unassign default panel:
-  - `backend/src/routes/user.js:458`
+  - `backend/src/routes/user.js:482`
 
 Why it matters:
 
@@ -313,14 +357,14 @@ Why it matters:
 Important code:
 
 - single-session payload normalization:
-  - `backend/src/controllers/timetableController.js:390`
+  - `backend/src/controllers/timetableController.js:431`
 - create single timetable:
-  - `backend/src/controllers/timetableController.js:443`
+  - `backend/src/controllers/timetableController.js:484`
 - create bulk timetables:
-  - `backend/src/controllers/timetableController.js:519`
+  - `backend/src/controllers/timetableController.js:560`
 - existing/new batch ID logic:
-  - `backend/src/controllers/timetableController.js:118`
-  - `backend/src/controllers/timetableController.js:554-559`
+  - `backend/src/controllers/timetableController.js:122`
+  - `backend/src/controllers/timetableController.js:585-599`
 - frontend scheduler page:
   - `frontend/src/pages/panel/TimetableManagementPage.jsx:60`
   - `frontend/src/pages/panel/TimetableManagementPage.jsx:278`
@@ -339,11 +383,12 @@ Important code:
 - validation helpers:
   - `backend/src/utils/timetableValidation.js`
 - schedule conflict enforcement:
-  - `backend/src/controllers/timetableController.js:315`
-- panel replacement timing rule:
-  - `backend/src/controllers/timetableController.js:282`
+  - `backend/src/controllers/timetableController.js:319`
+- panel replacement timing rule constant and enforcement:
+  - `backend/src/controllers/timetableController.js:49`
+  - `backend/src/controllers/timetableController.js:310`
 - batch time-frame update:
-  - `backend/src/controllers/timetableController.js:727`
+  - `backend/src/controllers/timetableController.js:768`
 
 Why it matters:
 
@@ -399,8 +444,8 @@ Important code:
 - submit evaluation:
   - `backend/src/controllers/evaluationController.js:169`
 - panel evaluation page:
-  - `frontend/src/pages/panel/EvaluationPage.jsx:48`
-  - `frontend/src/pages/panel/EvaluationPage.jsx:190`
+  - `frontend/src/pages/panel/EvaluationPage.jsx:94`
+  - `frontend/src/pages/panel/EvaluationPage.jsx:300`
 - frontend submit payload helper:
   - `frontend/src/utils/evaluationForm.js:130`
 
@@ -460,23 +505,23 @@ Scopes:
 Important code:
 
 - request single historical evaluation:
-  - `backend/src/controllers/feedbackController.js:352`
+  - `backend/src/controllers/feedbackController.js:369`
 - request full student history:
-  - `backend/src/controllers/feedbackController.js:458`
+  - `backend/src/controllers/feedbackController.js:479`
 - request unlock:
-  - `backend/src/controllers/feedbackController.js:594`
+  - `backend/src/controllers/feedbackController.js:618`
 - list my permissions:
-  - `backend/src/controllers/feedbackController.js:689`
+  - `backend/src/controllers/feedbackController.js:717`
 - respond approve/reject:
-  - `backend/src/controllers/feedbackController.js:716`
+  - `backend/src/controllers/feedbackController.js:744`
 - self-unlock after approval:
-  - `backend/src/controllers/feedbackController.js:814`
+  - `backend/src/controllers/feedbackController.js:842`
 - incoming requests:
-  - `backend/src/controllers/feedbackController.js:887`
+  - `backend/src/controllers/feedbackController.js:915`
 - withdraw permission:
-  - `backend/src/controllers/feedbackController.js:935`
+  - `backend/src/controllers/feedbackController.js:963`
 - admin all permissions:
-  - `backend/src/controllers/feedbackController.js:1006`
+  - `backend/src/controllers/feedbackController.js:1034`
 
 Why it matters:
 
@@ -489,15 +534,15 @@ Why it matters:
 Important code:
 
 - session material access rule:
-  - `backend/src/controllers/timetableController.js:139`
+  - `backend/src/controllers/timetableController.js:143`
 - upload document:
-  - `backend/src/controllers/timetableController.js:949`
+  - `backend/src/controllers/timetableController.js:990`
 - delete document:
-  - `backend/src/controllers/timetableController.js:998`
+  - `backend/src/controllers/timetableController.js:1039`
 - create short-lived view ticket:
-  - `backend/src/controllers/timetableController.js:1030`
+  - `backend/src/controllers/timetableController.js:1071`
 - stream with ticket:
-  - `backend/src/controllers/timetableController.js:1074`
+  - `backend/src/controllers/timetableController.js:1115`
 - frontend material opener:
   - `frontend/src/utils/authenticatedFile.js:40`
 
@@ -564,7 +609,7 @@ Important code:
   - `backend/src/controllers/rubricController.js:3`
   - `backend/src/routes/rubric.js:79`
 - shared frontend helper:
-  - `frontend/src/utils/evaluationForm.js:37`
+  - `frontend/src/utils/evaluationForm.js:46`
   - `frontend/src/utils/evaluationForm.js:51`
   - `frontend/src/utils/evaluationForm.js:62`
   - `frontend/src/utils/evaluationForm.js:91`
@@ -572,7 +617,7 @@ Important code:
 - student rubric viewer:
   - `frontend/src/pages/student/StudentRubrics.jsx:14`
 - panel evaluation page:
-  - `frontend/src/pages/panel/EvaluationPage.jsx:48`
+  - `frontend/src/pages/panel/EvaluationPage.jsx:94`
 
 Why it matters:
 
@@ -612,9 +657,9 @@ Main operational pages:
 - device management:
   - `frontend/src/pages/DeviceManagementPage.jsx:19`
 - evaluation:
-  - `frontend/src/pages/panel/EvaluationPage.jsx:48`
+  - `frontend/src/pages/panel/EvaluationPage.jsx:94`
 - historical vault:
-  - `frontend/src/pages/panel/HistoricalFeedbackPage.jsx:94`
+  - `frontend/src/pages/panel/HistoricalFeedbackPage.jsx:99`
 - session management:
   - `frontend/src/pages/panel/TimetableManagementPage.jsx:60`
 - users/admin panel:
@@ -711,14 +756,17 @@ Important code:
   - `backend/src/scripts/seed.js:666`
 - student and supervisor seeding:
   - `backend/src/scripts/seed.js:802`
+  - `backend/src/scripts/seed.js:954`
 - session and batch seed:
-  - `backend/src/scripts/seed.js:1039`
-  - `backend/src/scripts/seed.js:1098`
+  - `backend/src/scripts/seed.js:1473`
+  - `backend/src/scripts/seed.js:1542`
 - evaluation seeding including supervisor records:
   - `backend/src/scripts/seed.js:1555`
-  - `backend/src/scripts/seed.js:1569`
+  - `backend/src/scripts/seed.js:1560`
+  - `backend/src/scripts/seed.js:1615`
 - attendance seed:
   - `backend/src/scripts/seed.js:1617`
+  - `backend/src/scripts/seed.js:1619`
 
 Why it matters:
 

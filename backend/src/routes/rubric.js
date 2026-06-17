@@ -3,6 +3,9 @@ const express = require("express");
 const router = express.Router();
 const { authenticateToken } = require("../middleware/auth");
 const Rubric = require("../models/Rubric");
+const Evaluation = require("../models/Evaluation");
+const Timetable = require("../models/Timetable");
+const SessionBatch = require("../models/SessionBatch");
 const { toSessionTypeCode } = require("../utils/sessionType");
 const cleanText = (value = "", max = 1000) =>
   String(value)
@@ -67,7 +70,46 @@ const buildRubricPayload = (body) => {
   return {
     name,
     sessionType,
+    originalSessionType: sessionType,
     criteria,
+  };
+};
+
+const buildArchivedSessionType = (sessionType, rubricId) =>
+  `${String(sessionType || "RUBRIC")
+    .replace(/[^A-Z0-9_]/g, "_")
+    .slice(0, 24)}__OBSOLETE__${String(rubricId || "")
+    .replace(/[^A-Za-z0-9]/g, "")
+    .slice(-10)
+    .toUpperCase()}`;
+
+const getRubricUsage = async (rubricId) => {
+  const [linkedEvaluationCount, linkedSessionCount, linkedBatchCount] =
+    await Promise.all([
+      Evaluation.countDocuments({ rubricId }),
+      Timetable.countDocuments({ rubricId }),
+      SessionBatch.countDocuments({ rubricId }),
+    ]);
+
+  const totalLinkedCount =
+    linkedEvaluationCount + linkedSessionCount + linkedBatchCount;
+
+  return {
+    linkedEvaluationCount,
+    linkedSessionCount,
+    linkedBatchCount,
+    totalLinkedCount,
+    hasLinkedRecords: totalLinkedCount > 0,
+    canDeletePermanently: totalLinkedCount === 0,
+  };
+};
+
+const serializeRubric = async (rubric) => {
+  const usage = await getRubricUsage(rubric._id);
+
+  return {
+    ...rubric.toObject(),
+    ...usage,
   };
 };
 
@@ -78,13 +120,21 @@ router.use(authenticateToken);
 // @access  Private
 router.get("/", async (req, res) => {
   try {
-    const rubrics = await Rubric.find().sort({ createdAt: -1 });
+    const includeObsolete =
+      String(req.query.includeObsolete || "").toLowerCase() === "true" &&
+      req.user.role === "admin";
+    const filter = includeObsolete ? {} : { isObsolete: { $ne: true } };
+    const rubrics = await Rubric.find(filter).sort({
+      isObsolete: 1,
+      createdAt: -1,
+    });
+    const serializedRubrics = await Promise.all(rubrics.map(serializeRubric));
 
     res.json({
       success: true,
-      count: rubrics.length,
-      data: rubrics, // Provided both 'data' and 'rubrics' keys
-      rubrics: rubrics, // to ensure your frontend api.js doesn't break
+      count: serializedRubrics.length,
+      data: serializedRubrics,
+      rubrics: serializedRubrics,
     });
   } catch (error) {
     console.error("Get rubrics error:", error);
@@ -109,10 +159,12 @@ router.get("/:id", async (req, res) => {
       });
     }
 
+    const serializedRubric = await serializeRubric(rubric);
+
     res.json({
       success: true,
-      data: rubric,
-      rubric: rubric,
+      data: serializedRubric,
+      rubric: serializedRubric,
     });
   } catch (error) {
     console.error("Get rubric error:", error);
@@ -138,11 +190,12 @@ router.post("/", async (req, res) => {
 
     const rubricPayload = buildRubricPayload(req.body);
     const rubric = await Rubric.create(rubricPayload);
+    const serializedRubric = await serializeRubric(rubric);
 
     res.status(201).json({
       success: true,
-      data: rubric,
-      rubric: rubric,
+      data: serializedRubric,
+      rubric: serializedRubric,
     });
   } catch (error) {
     console.error("Create rubric error:", error);
@@ -192,10 +245,12 @@ router.put("/:id", async (req, res) => {
       });
     }
 
+    const serializedRubric = await serializeRubric(rubric);
+
     res.json({
       success: true,
-      data: rubric,
-      rubric: rubric,
+      data: serializedRubric,
+      rubric: serializedRubric,
     });
   } catch (error) {
     console.error("Update rubric error:", error);
@@ -215,6 +270,116 @@ router.put("/:id", async (req, res) => {
   }
 });
 
+// @desc    Mark rubric as obsolete
+// @route   PATCH /api/rubrics/:id/obsolete
+// @access  Private (Admin only)
+router.patch("/:id/obsolete", async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Only admins can move rubrics to obsolete.",
+      });
+    }
+
+    const rubric = await Rubric.findById(req.params.id);
+
+    if (!rubric) {
+      return res.status(404).json({
+        success: false,
+        message: "Rubric not found",
+      });
+    }
+
+    if (!rubric.isObsolete) {
+      const canonicalSessionType =
+        rubric.originalSessionType || rubric.sessionType;
+      rubric.originalSessionType = canonicalSessionType;
+      rubric.sessionType = buildArchivedSessionType(
+        canonicalSessionType,
+        rubric._id,
+      );
+      rubric.isObsolete = true;
+      rubric.obsoleteAt = new Date();
+      await rubric.save();
+    }
+
+    const serializedRubric = await serializeRubric(rubric);
+
+    res.json({
+      success: true,
+      message: "Rubric moved to Obsolete successfully.",
+      data: serializedRubric,
+      rubric: serializedRubric,
+    });
+  } catch (error) {
+    console.error("Obsolete rubric error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error moving rubric to obsolete.",
+    });
+  }
+});
+
+// @desc    Restore obsolete rubric
+// @route   PATCH /api/rubrics/:id/restore
+// @access  Private (Admin only)
+router.patch("/:id/restore", async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Only admins can restore rubrics.",
+      });
+    }
+
+    const rubric = await Rubric.findById(req.params.id);
+
+    if (!rubric) {
+      return res.status(404).json({
+        success: false,
+        message: "Rubric not found",
+      });
+    }
+
+    const restoredSessionType = rubric.originalSessionType || rubric.sessionType;
+    const conflict = await Rubric.findOne({
+      _id: { $ne: rubric._id },
+      isObsolete: { $ne: true },
+      sessionType: restoredSessionType,
+    }).select("_id name");
+
+    if (conflict) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "An active rubric already uses this session type. Rename or remove the conflicting active rubric first.",
+      });
+    }
+
+    rubric.sessionType = restoredSessionType;
+    rubric.originalSessionType = restoredSessionType;
+    rubric.isObsolete = false;
+    rubric.obsoleteAt = null;
+    await rubric.save();
+
+    const serializedRubric = await serializeRubric(rubric);
+
+    res.json({
+      success: true,
+      message: "Rubric restored successfully.",
+      data: serializedRubric,
+      rubric: serializedRubric,
+    });
+  } catch (error) {
+    console.error("Restore rubric error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error restoring rubric.",
+    });
+  }
+});
+
 // @desc    Delete rubric
 // @route   DELETE /api/rubrics/:id
 // @access  Private (Admin only)
@@ -227,7 +392,7 @@ router.delete("/:id", async (req, res) => {
       });
     }
 
-    const rubric = await Rubric.findByIdAndDelete(req.params.id);
+    const rubric = await Rubric.findById(req.params.id);
 
     if (!rubric) {
       return res.status(404).json({
@@ -236,9 +401,30 @@ router.delete("/:id", async (req, res) => {
       });
     }
 
+    const usage = await getRubricUsage(rubric._id);
+
+    if (usage.hasLinkedRecords) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "This rubric is linked to existing evaluations, sessions, or batches. Move it to Obsolete instead of deleting it.",
+        ...usage,
+      });
+    }
+
+    if (!rubric.isObsolete) {
+      return res.status(409).json({
+        success: false,
+        message:
+          "Move the rubric to Obsolete first. Only unlinked rubrics in the Obsolete tab can be deleted permanently.",
+      });
+    }
+
+    await Rubric.deleteOne({ _id: rubric._id });
+
     res.json({
       success: true,
-      message: "Rubric deleted successfully",
+      message: "Rubric deleted permanently.",
     });
   } catch (error) {
     console.error("Delete rubric error:", error);

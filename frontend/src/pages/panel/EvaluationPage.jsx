@@ -41,6 +41,7 @@ import {
   legacyProgressFeedback,
   toNumber,
 } from "../../utils/evaluationForm";
+import { getRubricDisplayName } from "../../utils/rubricLabels";
 
 const getSessionDocuments = (evaluation) =>
   evaluation?.sessionId?.studentDocuments || [];
@@ -56,8 +57,7 @@ const parseTimeToMinutes = (value = "") => {
 };
 const getEvaluationSessionLabel = (evaluation) =>
   evaluation?.sessionId?.title ||
-  evaluation?.rubricId?.name ||
-  evaluation?.sessionType?.replaceAll("_", " ") ||
+  getRubricDisplayName(evaluation?.rubricId, evaluation?.sessionType) ||
   "Evaluation";
 const getEvaluationScheduleSortValue = (evaluation) => {
   const rawDate = evaluation?.sessionId?.date;
@@ -621,8 +621,10 @@ export default function EvaluationPage() {
                     {isLocked && <Lock className="w-4 h-4 text-red-500" />}
                   </h2>
                   <p className="text-sm font-semibold text-indigo-600">
-                    {selectedEval.rubricId?.name ||
-                      selectedEval.sessionType?.replace("_", " ")}
+                    {getRubricDisplayName(
+                      selectedEval.rubricId,
+                      selectedEval.sessionType,
+                    )}
                   </p>
                 </div>
               </div>

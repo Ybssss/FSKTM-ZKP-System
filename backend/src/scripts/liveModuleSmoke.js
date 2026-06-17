@@ -562,6 +562,7 @@ async function main() {
       cleanupTasks.push(async () => {
         if (!rubricId) return;
         try {
+          await adminClient.patch(`/rubrics/${rubricId}/obsolete`);
           await adminClient.delete(`/rubrics/${rubricId}`);
         } catch {}
       });
@@ -579,6 +580,7 @@ async function main() {
         throw new Error("Rubric update failed.");
       }
 
+      await adminClient.patch(`/rubrics/${rubricId}/obsolete`);
       const deleteRes = await adminClient.delete(`/rubrics/${rubricId}`);
       if (!deleteRes.data?.success) {
         throw new Error("Rubric delete failed.");
@@ -595,7 +597,7 @@ async function main() {
     let sessionBatchId = null;
 
     await record("session-batch:create-list-read-update", async () => {
-      const rubric = await Rubric.findOne({})
+      const rubric = await Rubric.findOne({ isObsolete: { $ne: true } })
         .select("_id sessionType")
         .sort({ createdAt: 1 })
         .lean();

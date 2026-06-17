@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Plus,
   Edit,
@@ -7,10 +7,13 @@ import {
   X,
   Settings,
   FileText,
+  Archive,
+  RotateCcw,
 } from "lucide-react";
 import api from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
 import { getScoreDescription as getRubricScoreDescription } from "../../utils/evaluationForm";
+import { getRubricDisplayName } from "../../utils/rubricLabels";
 
 const toSessionTypeCode = (value = "") =>
   String(value)
@@ -20,8 +23,6 @@ const toSessionTypeCode = (value = "") =>
     .replace(/^_+|_+$/g, "")
     .toUpperCase()
     .slice(0, 50);
-
-const formatSessionType = (value = "") => String(value).replaceAll("_", " ");
 
 const SCORE_DESCRIPTORS = {
   5: { label: "Outstanding", field: "outstanding", color: "emerald" },
@@ -72,6 +73,7 @@ export default function RubricPage() {
   const [editingRubric, setEditingRubric] = useState(null);
   const [viewingRubric, setViewingRubric] = useState(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [activeTab, setActiveTab] = useState("active");
 
   const defaultCriterion = () => ({
     key: `crit_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
@@ -96,12 +98,14 @@ export default function RubricPage() {
 
   useEffect(() => {
     loadRubrics();
-  }, []);
+  }, [isAdmin]);
 
   const loadRubrics = async () => {
     try {
       setLoading(true);
-      const res = await api.get("/rubrics");
+      const res = await api.get("/rubrics", {
+        params: isAdmin ? { includeObsolete: true } : {},
+      });
       setRubrics(res.data.data || res.data.rubrics || []);
     } catch (error) {
       console.error("Error loading rubrics:", error);
@@ -243,10 +247,9 @@ export default function RubricPage() {
   const handleDelete = async (id) => {
     if (
       !window.confirm(
-        "Are you sure you want to delete this rubric? This may break historical evaluations linked to it.",
+        "Delete this obsolete rubric permanently? This only works when it has no linked evaluations, sessions, or batches.",
       )
-    )
-      return;
+    ) return;
     try {
       await api.delete(`/rubrics/${id}`);
       loadRubrics();
@@ -254,6 +257,54 @@ export default function RubricPage() {
       alert(error.response?.data?.message || "Failed to delete rubric");
     }
   };
+
+  const handleMoveToObsolete = async (rubric) => {
+    if (
+      !window.confirm(
+        "Move this rubric to Obsolete? It will be hidden from normal rubric selection and preserved for linked historical records.",
+      )
+    ) return;
+
+    try {
+      await api.patch(`/rubrics/${rubric._id}/obsolete`);
+      if (editingRubric?._id === rubric._id) {
+        handleCloseModal();
+      }
+      loadRubrics();
+      setActiveTab("obsolete");
+    } catch (error) {
+      alert(
+        error.response?.data?.message || "Failed to move rubric to Obsolete.",
+      );
+    }
+  };
+
+  const handleRestore = async (rubric) => {
+    if (
+      !window.confirm(
+        "Restore this obsolete rubric back to the active rubric list?",
+      )
+    ) return;
+
+    try {
+      await api.patch(`/rubrics/${rubric._id}/restore`);
+      loadRubrics();
+      setActiveTab("active");
+    } catch (error) {
+      alert(error.response?.data?.message || "Failed to restore rubric.");
+    }
+  };
+
+  const activeRubrics = useMemo(
+    () => rubrics.filter((rubric) => rubric.isObsolete !== true),
+    [rubrics],
+  );
+  const obsoleteRubrics = useMemo(
+    () => rubrics.filter((rubric) => rubric.isObsolete === true),
+    [rubrics],
+  );
+  const visibleRubrics =
+    isAdmin && activeTab === "obsolete" ? obsoleteRubrics : activeRubrics;
 
   const handleCloseModal = () => {
     setShowModal(false);
@@ -293,18 +344,45 @@ export default function RubricPage() {
           </div>
         )}
 
+        {isAdmin && (
+          <div className="bg-gray-100 rounded-lg p-1 inline-flex items-center gap-1">
+            <button
+              onClick={() => setActiveTab("active")}
+              className={`px-4 py-2 rounded-md font-bold text-sm ${
+                activeTab === "active"
+                  ? "bg-white text-indigo-700 shadow-sm"
+                  : "text-gray-600"
+              }`}
+            >
+              Active Rubrics ({activeRubrics.length})
+            </button>
+            <button
+              onClick={() => setActiveTab("obsolete")}
+              className={`px-4 py-2 rounded-md font-bold text-sm ${
+                activeTab === "obsolete"
+                  ? "bg-white text-indigo-700 shadow-sm"
+                  : "text-gray-600"
+              }`}
+            >
+              Obsolete Rubrics ({obsoleteRubrics.length})
+            </button>
+          </div>
+        )}
+
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           {loading ? (
             <div className="p-12 text-center text-gray-500">
               Loading rubrics...
             </div>
-          ) : rubrics.length === 0 ? (
+          ) : visibleRubrics.length === 0 ? (
             <div className="p-12 text-center text-gray-500">
-              No rubrics found. Please seed the database or create one.
+              {isAdmin && activeTab === "obsolete"
+                ? "No obsolete rubrics."
+                : "No active rubrics found. Please seed the database or create one."}
             </div>
           ) : (
             <div className="divide-y divide-gray-100">
-              {rubrics.map((rubric) => (
+              {visibleRubrics.map((rubric) => (
                 <div
                   key={rubric._id}
                   className="p-6 hover:bg-gray-50 transition-colors"
@@ -313,11 +391,8 @@ export default function RubricPage() {
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
                         <h3 className="text-xl font-bold text-gray-900">
-                          {rubric.name}
+                          {getRubricDisplayName(rubric)}
                         </h3>
-                        <span className="px-3 py-1 bg-indigo-50 border border-indigo-100 text-indigo-800 text-xs font-bold uppercase rounded-full">
-                          {formatSessionType(rubric.sessionType || rubric.name)}
-                        </span>
                       </div>
 
                       <div className="flex items-center gap-4 text-sm text-gray-600 mt-3 bg-white border p-3 rounded-lg inline-block">
@@ -338,6 +413,28 @@ export default function RubricPage() {
                           Text Feedbacks
                         </div>
                       </div>
+
+                      <div className="flex flex-wrap gap-2 mt-3 text-xs font-semibold">
+                        <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-md">
+                          {rubric.linkedEvaluationCount || 0} evaluation(s)
+                        </span>
+                        <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-md">
+                          {rubric.linkedSessionCount || 0} session(s)
+                        </span>
+                        <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded-md">
+                          {rubric.linkedBatchCount || 0} batch(es)
+                        </span>
+                        {rubric.isObsolete && (
+                          <span className="px-2 py-1 bg-amber-100 text-amber-800 rounded-md">
+                            Obsolete
+                          </span>
+                        )}
+                        {rubric.hasLinkedRecords && (
+                          <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded-md">
+                            Protected by linked records
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     <div className="flex items-center gap-2">
@@ -350,18 +447,48 @@ export default function RubricPage() {
 
                       {isAdmin && (
                         <>
-                          <button
-                            onClick={() => handleEdit(rubric)}
-                            className="p-2 text-yellow-600 bg-yellow-50 hover:bg-yellow-100 rounded-lg transition-colors"
-                          >
-                            <Edit className="w-5 h-5" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(rubric._id)}
-                            className="p-2 text-red-600 bg-red-50 hover:bg-red-100 rounded-lg transition-colors"
-                          >
-                            <Trash2 className="w-5 h-5" />
-                          </button>
+                          {!rubric.isObsolete ? (
+                            <>
+                              <button
+                                onClick={() => handleEdit(rubric)}
+                                className="p-2 text-yellow-600 bg-yellow-50 hover:bg-yellow-100 rounded-lg transition-colors"
+                                title="Edit rubric"
+                              >
+                                <Edit className="w-5 h-5" />
+                              </button>
+                              <button
+                                onClick={() => handleMoveToObsolete(rubric)}
+                                className="px-3 py-2 text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors font-bold flex items-center gap-2"
+                              >
+                                <Archive className="w-4 h-4" /> Move to Obsolete
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => handleRestore(rubric)}
+                                className="px-3 py-2 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors font-bold flex items-center gap-2"
+                              >
+                                <RotateCcw className="w-4 h-4" /> Restore
+                              </button>
+                              <button
+                                onClick={() => handleDelete(rubric._id)}
+                                disabled={!rubric.canDeletePermanently}
+                                className={`px-3 py-2 rounded-lg transition-colors font-bold flex items-center gap-2 ${
+                                  rubric.canDeletePermanently
+                                    ? "text-red-600 bg-red-50 hover:bg-red-100"
+                                    : "text-gray-400 bg-gray-100 cursor-not-allowed"
+                                }`}
+                                title={
+                                  rubric.canDeletePermanently
+                                    ? "Delete permanently"
+                                    : "Permanent delete is blocked because linked records exist."
+                                }
+                              >
+                                <Trash2 className="w-4 h-4" /> Delete Permanently
+                              </button>
+                            </>
+                          )}
                         </>
                       )}
                     </div>
@@ -374,9 +501,9 @@ export default function RubricPage() {
       </div>
 
       {showModal && isAdmin && (
-        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full my-8 flex flex-col mx-auto">
-            <div className="px-8 py-5 border-b flex justify-between items-center sticky top-0 bg-white z-10">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4 backdrop-blur-sm overflow-hidden">
+          <div className="bg-white rounded-xl shadow-2xl max-w-5xl w-full max-h-[90vh] overflow-hidden flex flex-col mx-auto">
+            <div className="px-8 py-5 border-b flex justify-between items-center bg-white z-10 flex-shrink-0">
               <h2 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
                 <Settings className="w-6 h-6 text-indigo-600" />
                 {editingRubric ? "Edit Rubric" : "Create New Rubric"}
@@ -389,7 +516,7 @@ export default function RubricPage() {
               </button>
             </div>
 
-            <div className="p-8 bg-gray-50 flex-1 overflow-y-auto">
+            <div className="p-8 bg-gray-50 flex-1 overflow-y-auto min-h-0">
               <form
                 id="rubricForm"
                 onSubmit={handleSubmit}
@@ -600,7 +727,7 @@ export default function RubricPage() {
               </form>
             </div>
 
-            <div className="px-6 py-4 border-t flex justify-end gap-3 bg-white sticky bottom-0 rounded-b-xl">
+            <div className="px-6 py-4 border-t flex justify-end gap-3 bg-white rounded-b-xl flex-shrink-0">
               <button
                 type="button"
                 onClick={handleCloseModal}
@@ -631,11 +758,8 @@ export default function RubricPage() {
             <div className="bg-white border-b border-gray-200 px-8 py-5 flex items-center justify-between z-10 rounded-t-xl flex-shrink-0">
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">
-                  {viewingRubric.name}
+                  {getRubricDisplayName(viewingRubric)}
                 </h2>
-                <span className="inline-block mt-2 px-3 py-1 bg-indigo-50 border border-indigo-100 text-indigo-800 text-xs font-bold uppercase rounded-full">
-                  {formatSessionType(viewingRubric.sessionType || viewingRubric.name)}
-                </span>
               </div>
               <button
                 onClick={() => {

@@ -8,8 +8,7 @@ import {
   getScoreDescription,
   getScoreScale,
 } from "../../utils/evaluationForm";
-
-const formatSessionType = (value = "") => String(value).replaceAll("_", " ");
+import { getRubricDisplayName } from "../../utils/rubricLabels";
 
 export default function StudentRubrics() {
   const [rubrics, setRubrics] = useState([]);
@@ -112,11 +111,8 @@ export default function StudentRubrics() {
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
                         <h3 className="text-lg font-semibold text-gray-900">
-                          {rubric.name}
+                          {getRubricDisplayName(rubric)}
                         </h3>
-                        <span className="px-2 py-1 bg-indigo-100 text-indigo-700 text-xs font-semibold rounded">
-                          {formatSessionType(rubric.sessionType) || "Rubric"}
-                        </span>
                       </div>
                       {rubric.description && (
                         <p className="text-sm text-gray-600 mt-1">

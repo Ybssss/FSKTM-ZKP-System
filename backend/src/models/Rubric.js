@@ -38,6 +38,26 @@ const rubricSchema = new mongoose.Schema(
       maxlength: 50,
       match: /^[A-Z0-9_]+$/,
     },
+    originalSessionType: {
+      type: String,
+      required: true,
+      default() {
+        return this.sessionType;
+      },
+      trim: true,
+      uppercase: true,
+      maxlength: 50,
+      match: /^[A-Z0-9_]+$/,
+    },
+    isObsolete: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    obsoleteAt: {
+      type: Date,
+      default: null,
+    },
     criteria: [criterionSchema],
   },
   { timestamps: true },

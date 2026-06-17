@@ -17,6 +17,7 @@ import {
   getScoreBadgeClass,
   getScoreBadgeLabel,
 } from "../../utils/historicalFeedback";
+import { getRubricDisplayName } from "../../utils/rubricLabels";
 
 const getId = (value) => (typeof value === "object" ? value?._id : value);
 
@@ -60,9 +61,7 @@ const getEvaluationDisplayLabel = (item) => {
 
   return (
     session?.title ||
-    rubric?.name ||
-    evaluation?.sessionType?.replaceAll("_", " ") ||
-    session?.sessionType?.replaceAll("_", " ") ||
+    getRubricDisplayName(rubric, evaluation?.sessionType || session?.sessionType) ||
     "Evaluation"
   );
 };
@@ -455,7 +454,10 @@ export default function HistoricalFeedbackPage() {
               <InfoLine label="Batch" value={session?.batchName || session?.batchId} />
               <InfoLine label="Date / Time" value={`${formatDate(session?.date)} · ${session?.startTime || "-"} - ${session?.endTime || "-"}`} />
               <InfoLine label="Evaluator" value={getPersonName(evaluation.evaluatorId)} />
-              <InfoLine label="Rubric" value={rubric?.name || evaluation.sessionType} />
+              <InfoLine
+                label="Rubric"
+                value={getRubricDisplayName(rubric, evaluation.sessionType)}
+              />
               <InfoLine label="Materials" value={`${session?.studentDocuments?.length || 0} file(s)`} />
             </div>
 

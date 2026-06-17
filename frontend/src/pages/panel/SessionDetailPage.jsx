@@ -26,6 +26,7 @@ import {
 } from "../../utils/authenticatedFile";
 import UserProfileLink from "../../components/UserProfileLink";
 import { buildPanelSessionOutcome } from "../../utils/sessionOutcome";
+import { getRubricDisplayName } from "../../utils/rubricLabels";
 
 export default function SessionDetailPage() {
   const { id } = useParams();
@@ -459,10 +460,10 @@ export default function SessionDetailPage() {
         <div className="flex flex-col sm:flex-row justify-between items-start mb-4">
           <div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">
-              {session.rubricId?.name ||
-                session.rubric ||
-                session.sessionType?.replaceAll("_", " ") ||
-                "Session Details"}
+              {getRubricDisplayName(
+                session.rubricId?.name || session.rubric,
+                session.sessionType,
+              ) || "Session Details"}
             </h1>
             <span className="inline-block px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider bg-green-100 text-green-800 border border-green-200">
               {isFutureSession ? "UPCOMING SESSION" : "IN PROGRESS / PAST"}

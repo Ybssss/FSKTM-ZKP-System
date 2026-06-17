@@ -30,7 +30,7 @@ if (!MONGO_URI) {
 // ==========================================
 const rubricsData = [
   {
-    name: "Research Proposal Evaluation Rubric",
+    name: "Research Proposal Rubric",
     sessionType: "PROPOSAL_DEFENSE",
     criteria: [
       {
@@ -249,7 +249,7 @@ const rubricsData = [
     ],
   },
   {
-    name: "Pre-Oral Examination (Pre-Viva Voce) Rubric",
+    name: "Pre-Viva Rubric",
     sessionType: "PRE_VIVA",
     criteria: [
       {
@@ -518,7 +518,7 @@ const rubricsData = [
     ],
   },
   {
-    name: "Progress Report Assessment Form",
+    name: "Progress Report Form",
     sessionType: "PROGRESS_ASSESSMENT",
     criteria: [
       {
