@@ -15,7 +15,7 @@ import {
   Video,
   X,
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import api, { sessionBatchAPI } from "../../services/api";
 import { useAuth } from "../../contexts/AuthContext";
 import UserProfileLink from "../../components/UserProfileLink";
@@ -79,7 +79,9 @@ export default function TimetableManagementPage() {
   const isAdmin = user?.role === "admin";
   const currentUserId = idOf(user?.id || user?._id);
   const canTrackViewerEvaluations = ["admin", "panel"].includes(user?.role);
+  const location = useLocation();
   const navigate = useNavigate();
+  const initialSearchTerm = new URLSearchParams(location.search).get("q") || "";
 
   const [activeTab, setActiveTab] = useState("list");
   const [loading, setLoading] = useState(true);
@@ -90,7 +92,7 @@ export default function TimetableManagementPage() {
   const [panels, setPanels] = useState([]);
   const [rubrics, setRubrics] = useState([]);
   const [batches, setBatches] = useState([]);
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const [sessionScope, setSessionScope] = useState("all");
   const [batchSearch, setBatchSearch] = useState("");
   const [bulkStudentSearch, setBulkStudentSearch] = useState("");
@@ -202,6 +204,10 @@ export default function TimetableManagementPage() {
   useEffect(() => {
     loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    setSearchTerm(new URLSearchParams(location.search).get("q") || "");
+  }, [location.search]);
 
   const selectedBatch = useMemo(
     () => batches.find((batch) => String(batch.batchId) === String(selectedBatchId)),
@@ -759,10 +765,18 @@ export default function TimetableManagementPage() {
         session.sessionType,
         student?.name,
         student?.matricNumber,
+        student?.userId,
+        student?.email,
         student?.researchTitle,
         student?.supervisorId?.name,
         student?.supervisorId?.userId,
         student?.supervisorId?.email,
+        getPanel(session, 0)?.name,
+        getPanel(session, 0)?.userId,
+        getPanel(session, 0)?.email,
+        getPanel(session, 1)?.name,
+        getPanel(session, 1)?.userId,
+        getPanel(session, 1)?.email,
         session.startTime,
         normalizeDateKey(session.date),
       ]

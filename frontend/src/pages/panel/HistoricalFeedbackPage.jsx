@@ -100,6 +100,13 @@ const PERMISSION_SCOPE_LABELS = {
   STUDENT_HISTORY: "Student History",
   UNLOCK_EVALUATION: "Unlock Evaluation",
 };
+const ALLOWED_HISTORICAL_TABS = [
+  "my-access",
+  "locked",
+  "requests",
+  "approved",
+  "my-requests",
+];
 
 const getPermissionScopeLabel = (scope) =>
   PERMISSION_SCOPE_LABELS[scope] || scope || "Single Evaluation";
@@ -110,13 +117,6 @@ export default function HistoricalFeedbackPage() {
   const { user } = useAuth();
   const isAdmin = user?.role === "admin";
   const canManagePermissions = user?.role === "panel" || isAdmin;
-  const allowedTabs = [
-    "my-access",
-    "locked",
-    "requests",
-    "approved",
-    "my-requests",
-  ];
   const initialTab = new URLSearchParams(location.search).get("tab");
   const initialSearchTerm = new URLSearchParams(location.search).get("q") || "";
 
@@ -127,7 +127,7 @@ export default function HistoricalFeedbackPage() {
   const [myRequests, setMyRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(
-    allowedTabs.includes(initialTab) ? initialTab : "my-access",
+    ALLOWED_HISTORICAL_TABS.includes(initialTab) ? initialTab : "my-access",
   );
   const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const [requestModalData, setRequestModalData] = useState(null);
@@ -206,6 +206,19 @@ export default function HistoricalFeedbackPage() {
     loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const nextTab = params.get("tab");
+    const nextSearchTerm = params.get("q") || "";
+
+    setSearchTerm(nextSearchTerm);
+    if (ALLOWED_HISTORICAL_TABS.includes(nextTab)) {
+      setActiveTab(nextTab);
+    } else {
+      setActiveTab("my-access");
+    }
+  }, [location.search]);
+
   const buildReturnUrl = useCallback(() => {
     const params = new URLSearchParams();
     if (activeTab && activeTab !== "my-access") params.set("tab", activeTab);
@@ -251,6 +264,7 @@ export default function HistoricalFeedbackPage() {
       student?.name,
       student?.matricNumber,
       student?.userId,
+      student?.email,
       student?.program,
       evaluation?.semester,
       evaluation?.sessionType,
@@ -262,12 +276,22 @@ export default function HistoricalFeedbackPage() {
       session?.batchName,
       session?.batchId,
       session?.academicSession,
+      evaluation?.evaluatorId?.name,
+      evaluation?.evaluatorId?.userId,
+      evaluation?.evaluatorId?.email,
       item?.currentSessionId?.title,
       item?.currentSessionId?.batchName,
       item?.currentSessionId?.batchId,
+      item?.currentSessionId?.academicSession,
       getPersonName(evaluation?.evaluatorId, ""),
+      evaluation?.evaluatorId?.userId,
+      evaluation?.evaluatorId?.email,
       getPersonName(item?.requestingPanelId, ""),
+      item?.requestingPanelId?.userId,
+      item?.requestingPanelId?.email,
       getPersonName(item?.owningPanelId, ""),
+      item?.owningPanelId?.userId,
+      item?.owningPanelId?.email,
       item?.scope,
       item?.status,
       item?.reason,

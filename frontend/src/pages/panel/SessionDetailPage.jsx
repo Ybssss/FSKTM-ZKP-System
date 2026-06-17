@@ -1200,32 +1200,32 @@ export default function SessionDetailPage() {
       {isStaff && (
         <div
           id="historical-feedback-vault"
-          className="bg-gray-900 rounded-xl shadow-lg border border-gray-700 overflow-hidden mt-8"
+          className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mt-8"
         >
-          <div className="px-6 py-4 border-b border-gray-800 flex items-center justify-between">
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <History className="w-5 h-5 text-indigo-400" /> Historical
+          <div className="px-6 py-4 border-b border-gray-200 bg-gray-50 flex items-center justify-between">
+            <h2 className="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <History className="w-5 h-5 text-indigo-600" /> Historical
               Feedback Vault
             </h2>
-            <span className="text-[10px] text-gray-400 font-bold uppercase tracking-widest bg-gray-800 px-3 py-1 rounded-full border border-gray-700 hidden sm:block">
+            <span className="text-[10px] text-indigo-700 font-bold uppercase tracking-widest bg-indigo-50 px-3 py-1 rounded-full border border-indigo-100 hidden sm:block">
               Anti-Plagiarism & Progression Check
             </span>
           </div>
 
           {canRequestAllHistory && (
-            <div className="px-6 py-4 border-b border-gray-800 bg-gray-950/70 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="px-6 py-4 border-b border-indigo-100 bg-indigo-50/60 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
               <div>
-                <p className="text-sm font-bold text-white">
+                <p className="text-sm font-bold text-gray-900">
                   Locked historical reports are available for request.
                 </p>
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-gray-600 mt-1">
                   Request all unavailable historical evaluations for this candidate in one action.
                 </p>
               </div>
               <button
                 type="button"
                 onClick={handleRequestAllHistory}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-purple-600 text-white rounded-lg font-bold hover:bg-purple-700 transition-colors"
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-colors"
               >
                 <Lock className="w-4 h-4" />
                 Request All History
@@ -1234,11 +1234,11 @@ export default function SessionDetailPage() {
           )}
 
           {historicalEvals.length === 0 ? (
-            <div className="p-8 text-center text-gray-400 font-medium">
+            <div className="p-8 text-center text-gray-500 font-medium">
               No previous completed evaluations found for this candidate.
             </div>
           ) : (
-            <div className="divide-y divide-gray-800">
+            <div className="divide-y divide-gray-100">
               {historicalEvals.map((ev) => {
                 const isOwner =
                   ev.evaluatorId?._id === user.id || ev.evaluatorId === user.id;
@@ -1252,33 +1252,33 @@ export default function SessionDetailPage() {
                 return (
                   <div
                     key={ev._id}
-                    className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gray-900 hover:bg-gray-800 transition-colors"
+                    className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white hover:bg-gray-50 transition-colors"
                   >
                     <div>
-                      <p className="font-bold text-gray-100 text-lg flex items-center gap-2">
+                      <p className="font-bold text-gray-900 text-lg flex items-center gap-2">
                         {ev.sessionType?.replaceAll("_", " ") || "Evaluation"}
                         {!isGranted && request?.status !== "APPROVED" && (
-                          <Lock className="w-4 h-4 text-gray-500" />
+                          <Lock className="w-4 h-4 text-gray-400" />
                         )}
                       </p>
-                      <p className="text-sm text-gray-400 mt-1">
+                      <p className="text-sm text-gray-500 mt-1">
                         Evaluator:{" "}
-                        <span className="text-gray-300 font-semibold">
+                        <span className="text-gray-700 font-semibold">
                           <UserProfileLink
                             user={ev.evaluatorId}
                             fallback="Unknown"
-                            className="font-semibold text-gray-300 hover:text-white"
+                            className="font-semibold text-gray-700 hover:text-gray-900"
                           />
                         </span>
                       </p>
-                      <p className="text-xs text-gray-500 mt-1">
+                      <p className="text-xs text-gray-400 mt-1">
                         Date:{" "}
                         {new Date(ev.updatedAt || ev.date).toLocaleDateString()}
                       </p>
                       {isGranted || request?.status === "APPROVED" ? (
                         ev.sessionId?.studentDocuments?.length > 0 ? (
                           <div className="mt-3 space-y-2">
-                            <p className="text-xs font-bold text-indigo-300 uppercase tracking-widest">
+                            <p className="text-xs font-bold text-indigo-600 uppercase tracking-widest">
                               Approved Student Materials
                             </p>
 
@@ -1287,11 +1287,11 @@ export default function SessionDetailPage() {
                                 type="button"
                                 key={doc._id}
                                 onClick={() => handleMaterialOpen(doc)}
-                                className="block text-left text-sm text-indigo-300 hover:text-indigo-200 hover:underline"
+                                className="block text-left text-sm text-indigo-700 hover:text-indigo-900 hover:underline"
                               >
                                 {doc.title || "Student material"}
                                 {getOriginalFileLabel(doc) && (
-                                  <span className="block text-xs text-gray-400">
+                                  <span className="block text-xs text-gray-500">
                                     {getOriginalFileLabel(doc)}
                                   </span>
                                 )}
@@ -1306,7 +1306,7 @@ export default function SessionDetailPage() {
                         )
                       ) : (
                         ev.studentDocumentsCount > 0 && (
-                          <p className="text-xs text-yellow-400 mt-3">
+                          <p className="text-xs text-amber-700 mt-3">
                             {ev.studentDocumentsCount} student material(s)
                             locked until permission is approved.
                           </p>
@@ -1319,33 +1319,33 @@ export default function SessionDetailPage() {
                         {isGranted || request?.status === "APPROVED" ? (
                           <button
                             onClick={() => goToEvaluation(ev._id)}
-                            className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-md"
+                            className="px-5 py-2.5 bg-indigo-600 text-white font-bold rounded-lg hover:bg-indigo-700 transition-colors flex items-center gap-2 shadow-sm"
                           >
                             <Eye className="w-4 h-4" /> View Full Report
                           </button>
                         ) : request?.status === "PENDING" ? (
-                          <span className="px-5 py-2.5 bg-gray-800 text-yellow-500 font-bold rounded-lg border border-gray-700 flex items-center gap-2">
+                          <span className="px-5 py-2.5 bg-amber-50 text-amber-700 font-bold rounded-lg border border-amber-200 flex items-center gap-2">
                             <Clock className="w-4 h-4" /> Request Pending...
                           </span>
                         ) : request?.status === "REJECTED" ? (
-                          <span className="px-5 py-2.5 bg-gray-800 text-red-500 font-bold rounded-lg border border-gray-700 flex items-center gap-2">
+                          <span className="px-5 py-2.5 bg-red-50 text-red-700 font-bold rounded-lg border border-red-200 flex items-center gap-2">
                             <ShieldAlert className="w-4 h-4" /> Access Denied
                           </span>
                         ) : (
                           <button
                             onClick={() => handleRequestAccess(ev)}
-                            className="px-5 py-2.5 bg-gray-800 text-indigo-400 font-bold rounded-lg hover:bg-gray-700 border border-gray-700 transition-colors flex items-center gap-2"
+                            className="px-5 py-2.5 bg-white text-indigo-700 font-bold rounded-lg hover:bg-indigo-50 border border-indigo-200 transition-colors flex items-center gap-2"
                           >
                             <Lock className="w-4 h-4" /> Request Access
                           </button>
                         )}
                       </div>
                       {request?.status === "REJECTED" && request?.responseNote && (
-                        <div className="max-w-sm rounded-lg border border-red-900 bg-red-950/40 px-4 py-3">
-                          <p className="text-[10px] font-bold uppercase tracking-widest text-red-300">
+                        <div className="max-w-sm rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-red-600">
                             Rejection Feedback
                           </p>
-                          <p className="mt-1 text-sm text-red-100">
+                          <p className="mt-1 text-sm text-red-900">
                             {request.responseNote}
                           </p>
                         </div>

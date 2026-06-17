@@ -126,12 +126,15 @@ const buildEvaluationSearchData = (evaluation) => {
   const partialFields = [
     evaluation?.studentId?.name,
     evaluation?.studentId?.matricNumber,
+    evaluation?.studentId?.userId,
+    evaluation?.studentId?.email,
     getEvaluationSessionLabel(evaluation),
     evaluation?.sessionId?.title,
     evaluation?.semester,
     formatScheduleDate(evaluation?.sessionId?.date),
     getEvaluationScheduleLabel(evaluation),
     evaluation?.evaluatorId?.name,
+    evaluation?.evaluatorId?.userId,
     evaluation?.evaluatorId?.email,
   ]
     .map(normalizeSearchText)
@@ -156,6 +159,7 @@ export default function EvaluationPage() {
   const { id: urlId } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
+  const initialSearchTerm = new URLSearchParams(location.search).get("q") || "";
 
   const [evaluations, setEvaluations] = useState([]);
   const [unlockRequestsByEvaluationId, setUnlockRequestsByEvaluationId] = useState(
@@ -432,7 +436,7 @@ export default function EvaluationPage() {
     }
   };
 
-  const [searchTerm, setSearchTerm] = useState("");
+  const [searchTerm, setSearchTerm] = useState(initialSearchTerm);
   const filteredEvaluations = useMemo(() => {
     const normalizedQuery = normalizeSearchText(searchTerm);
     if (!normalizedQuery) return evaluations;
@@ -476,6 +480,10 @@ export default function EvaluationPage() {
       );
     }
   }, [selectedEval, scores, qualFeedback, overallComments]);
+
+  useEffect(() => {
+    setSearchTerm(new URLSearchParams(location.search).get("q") || "");
+  }, [location.search]);
 
   const getScoreColor = (score) => {
     if (score >= 90) return "text-green-700 bg-green-100 border-green-300";
