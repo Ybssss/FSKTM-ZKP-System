@@ -380,7 +380,7 @@ export default function SessionDetailPage() {
     }
   };
 
-  const currentUserId = idOf(user);
+  const currentUserId = String(user?.id || user?._id || "");
   const myPendingEvaluation = useMemo(
     () =>
       evaluations.find(

@@ -286,6 +286,7 @@ exports.verifyDeviceProof = async (req, res) => {
       token,
       user: {
         id: user._id,
+        _id: user._id,
         name: user.name,
         role: user.role,
         userId: user.userId,
@@ -484,14 +485,22 @@ exports.pollEncryptedKey = async (req, res) => {
 
 exports.getMe = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select(
+    const user = await User.findById(req.user.id)
+      .select(
       "name role userId email matricNumber program profession profileImageUrl",
-    );
+      )
+      .lean();
     if (!user)
       return res
         .status(404)
         .json({ success: false, message: "User not found." });
-    res.json({ success: true, user });
+    res.json({
+      success: true,
+      user: {
+        ...user,
+        id: user._id,
+      },
+    });
   } catch (error) {
     console.error("Get Me Error:", error);
     res
