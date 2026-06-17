@@ -122,21 +122,26 @@ const tokenizeSearchText = (value = "") =>
     .split(/[\s/()-]+/)
     .map((token) => token.trim())
     .filter(Boolean);
-const buildEvaluationSearchData = (evaluation) => {
+const buildEvaluationSearchData = (evaluation, isAdminView = false) => {
   const partialFields = [
     evaluation?.studentId?.name,
     evaluation?.studentId?.matricNumber,
-    evaluation?.studentId?.userId,
-    evaluation?.studentId?.email,
     getEvaluationSessionLabel(evaluation),
-    evaluation?.sessionId?.title,
+    getEvaluationRoleLabel(evaluation),
     evaluation?.semester,
     formatScheduleDate(evaluation?.sessionId?.date),
     getEvaluationScheduleLabel(evaluation),
-    evaluation?.evaluatorId?.name,
-    evaluation?.evaluatorId?.userId,
-    evaluation?.evaluatorId?.email,
+    evaluation?.status,
   ]
+    .concat(
+      isAdminView
+        ? [
+            evaluation?.evaluatorId?.name,
+            evaluation?.evaluatorId?.userId,
+            getEvaluationRoleLabel(evaluation),
+          ]
+        : [],
+    )
     .map(normalizeSearchText)
     .filter(Boolean);
 
@@ -144,12 +149,16 @@ const buildEvaluationSearchData = (evaluation) => {
     [
       evaluation?.status,
       getEvaluationRoleLabel(evaluation),
-      evaluation?.sessionType,
-      evaluation?.sessionId?.sessionType,
+      isAdminView ? evaluation?.evaluatorId?.userId : "",
+      evaluation?.studentId?.matricNumber,
     ].flatMap(tokenizeSearchText),
   );
 
-  return { partialFields, exactTokens };
+  return {
+    partialFields,
+    exactTokens,
+    fullQueryText: partialFields.join(" "),
+  };
 };
 
 export default function EvaluationPage() {
@@ -441,25 +450,23 @@ export default function EvaluationPage() {
     const normalizedQuery = normalizeSearchText(searchTerm);
     if (!normalizedQuery) return evaluations;
 
-    const queryTokens = tokenizeSearchText(normalizedQuery);
-    if (!queryTokens.length) return evaluations;
-
     return evaluations.filter((evaluation) => {
-      const { partialFields, exactTokens } = buildEvaluationSearchData(evaluation);
+      const { fullQueryText, exactTokens } = buildEvaluationSearchData(
+        evaluation,
+        isAdmin,
+      );
 
-      return queryTokens.every(
-        (token) =>
-          exactTokens.has(token) ||
-          partialFields.some((field) => field.includes(token)),
+      return (
+        fullQueryText.includes(normalizedQuery) || exactTokens.has(normalizedQuery)
       );
     });
-  }, [evaluations, searchTerm]);
+  }, [evaluations, isAdmin, searchTerm]);
   const evaluationSortAccessors = useMemo(
     () => ({
       candidate: (ev) => `${ev.studentId?.name || ""} ${ev.studentId?.matricNumber || ""}`,
       session: (ev) => `${getEvaluationSessionLabel(ev)} ${getEvaluationRoleLabel(ev)} ${ev.semester || ""}`,
       schedule: (ev) => getEvaluationScheduleSortValue(ev),
-      evaluator: (ev) => `${ev.evaluatorId?.name || ""} ${getEvaluationRoleLabel(ev)}`,
+      evaluator: (ev) => `${ev.evaluatorId?.name || ""} ${ev.evaluatorId?.userId || ""} ${getEvaluationRoleLabel(ev)}`,
       status: (ev) => ev.status || "",
       score: (ev) => getEvaluationDisplayedTotal(ev),
     }),
@@ -548,7 +555,7 @@ export default function EvaluationPage() {
             <div className="p-4 bg-gray-50 border-b border-gray-200">
               <input
                 type="text"
-                placeholder="Search candidate, session, schedule, evaluator, or status..."
+                placeholder="Search candidate, session, schedule, evaluator name / ID, or status..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full md:w-1/3 p-2 border rounded-lg focus:ring-2 focus:ring-indigo-500"
@@ -640,6 +647,9 @@ export default function EvaluationPage() {
                             fallback="Unknown Evaluator"
                             className="font-semibold"
                           />
+                          <p className="mt-1 text-xs font-mono text-gray-500">
+                            {ev.evaluatorId?.userId || ev.evaluatorId?.email || "-"}
+                          </p>
                           <p className="mt-1 text-[11px] font-bold uppercase text-gray-400">
                             {getEvaluationRoleLabel(ev)}
                           </p>
