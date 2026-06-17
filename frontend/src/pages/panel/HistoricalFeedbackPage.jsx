@@ -18,6 +18,10 @@ import {
   getScoreBadgeLabel,
 } from "../../utils/historicalFeedback";
 import { emitHistoricalRequestsUpdated } from "../../utils/historicalRequestEvents";
+import {
+  isRequestUpdateUnseen,
+  markRequestUpdateSeen,
+} from "../../utils/historicalRequestBadgeState";
 import { getRubricDisplayName } from "../../utils/rubricLabels";
 
 const getId = (value) => (typeof value === "object" ? value?._id : value);
@@ -129,6 +133,9 @@ export default function HistoricalFeedbackPage() {
   const [requestModalData, setRequestModalData] = useState(null);
   const [requestReason, setRequestReason] = useState("");
   const [actionLoading, setActionLoading] = useState(false);
+  const requestBadgeUserKey = String(
+    user?._id || user?.id || user?.userId || "",
+  ).trim();
 
   const loadData = useCallback(async () => {
     try {
@@ -551,6 +558,12 @@ export default function HistoricalFeedbackPage() {
     const session = getSession(request);
     const student = getStudent(request);
     const currentSession = request.currentSessionId;
+    const isReadonlyUpdate =
+      mode === "readonly" &&
+      ["APPROVED", "REJECTED"].includes(String(request.status || "").toUpperCase());
+    const hasUnreadUpdate =
+      isReadonlyUpdate &&
+      isRequestUpdateUnseen(request, requestBadgeUserKey);
     const scopeLabel = getPermissionScopeLabel(request.scope);
     const showRequestGroup =
       request.scope === "STUDENT_HISTORY" && Boolean(request.batchId);
@@ -628,8 +641,36 @@ export default function HistoricalFeedbackPage() {
       ...requestContextFields,
     ];
 
+    const acknowledgeReadonlyUpdate = () => {
+      if (!isReadonlyUpdate) return;
+
+      const updated = markRequestUpdateSeen(request, requestBadgeUserKey);
+      if (updated) {
+        emitHistoricalRequestsUpdated();
+      }
+    };
+
+    const handleReadonlyCardClick = () => {
+      acknowledgeReadonlyUpdate();
+    };
+
+    const handleReadonlyCardKeyDown = (event) => {
+      if (!isReadonlyUpdate) return;
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      handleReadonlyCardClick();
+    };
+
     return (
-      <div className="p-4 sm:p-5 border-b border-gray-100 last:border-b-0 hover:bg-gray-50">
+      <div
+        className={`p-4 sm:p-5 border-b border-gray-100 last:border-b-0 hover:bg-gray-50 ${
+          isReadonlyUpdate ? "cursor-pointer" : ""
+        } ${hasUnreadUpdate ? "bg-indigo-50/60" : ""}`}
+        onClick={isReadonlyUpdate ? handleReadonlyCardClick : undefined}
+        onKeyDown={isReadonlyUpdate ? handleReadonlyCardKeyDown : undefined}
+        role={isReadonlyUpdate ? "button" : undefined}
+        tabIndex={isReadonlyUpdate ? 0 : undefined}
+      >
         <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-4">
           <div className="space-y-3 flex-1 min-w-0">
             <div className="flex flex-wrap gap-2">
@@ -647,6 +688,11 @@ export default function HistoricalFeedbackPage() {
               <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-blue-100 text-blue-700">
                 {scopeLabel}
               </span>
+              {hasUnreadUpdate && (
+                <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-indigo-100 text-indigo-700">
+                  New Update
+                </span>
+              )}
               {showRequestGroup && (
                 <span className="px-2 py-1 rounded-full text-[11px] font-bold bg-purple-100 text-purple-700">
                   Appeal Group {request.batchId}

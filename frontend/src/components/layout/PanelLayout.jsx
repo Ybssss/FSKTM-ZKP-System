@@ -6,6 +6,9 @@ import {
   HISTORICAL_REQUESTS_UPDATED_EVENT,
 } from "../../utils/historicalRequestEvents";
 import {
+  countUnseenRequestUpdates,
+} from "../../utils/historicalRequestBadgeState";
+import {
   LayoutDashboard,
   ClipboardCheck,
   FileText,
@@ -43,6 +46,9 @@ export default function PanelLayout() {
     () => ["admin", "panel"].includes(user?.role),
     [user?.role],
   );
+  const requestBadgeUserKey = String(
+    user?._id || user?.id || user?.userId || "",
+  ).trim();
 
   const loadHistoricalRequestCounts = useCallback(async () => {
     if (!canTrackHistoricalRequests) {
@@ -60,18 +66,22 @@ export default function PanelLayout() {
       const incomingPending = incomingRes.data?.requests || [];
 
       setHistoricalRequestCounts({
-        pending:
-          incomingPending.length +
-          myRequests.filter((request) => request.status === "PENDING").length,
-        approved: myRequests.filter((request) => request.status === "APPROVED")
-          .length,
-        rejected: myRequests.filter((request) => request.status === "REJECTED")
-          .length,
+        pending: incomingPending.length,
+        approved: countUnseenRequestUpdates(
+          myRequests,
+          requestBadgeUserKey,
+          "APPROVED",
+        ),
+        rejected: countUnseenRequestUpdates(
+          myRequests,
+          requestBadgeUserKey,
+          "REJECTED",
+        ),
       });
     } catch (error) {
       console.error("Failed to load historical request counts:", error);
     }
-  }, [canTrackHistoricalRequests]);
+  }, [canTrackHistoricalRequests, requestBadgeUserKey]);
 
   useEffect(() => {
     if (!canTrackHistoricalRequests) return undefined;
@@ -178,7 +188,7 @@ export default function PanelLayout() {
       key: "pending",
       count: historicalRequestCounts.pending,
       className: "bg-amber-100 text-amber-800 border border-amber-200",
-      title: "Pending requests",
+      title: "Requests waiting for your action",
     },
     {
       key: "approved",
