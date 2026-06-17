@@ -87,10 +87,10 @@ exports.generateQRCode = async (req, res) => {
         )
       : false;
 
-    if (req.user.role === "panel" && !isAssignedPanel) {
+    if (!isAssignedPanel) {
       return res.status(403).json({
         success: false,
-        message: "You are not assigned to this session.",
+        message: "Only the assigned panel examiners can generate this attendance QR code.",
       });
     }
 
@@ -261,12 +261,25 @@ exports.getQRCode = async (req, res) => {
   try {
     const { timetableId } = req.params;
 
-    const timetable = await Timetable.findById(timetableId);
+    const timetable = await Timetable.findById(timetableId).select("panels qrCode qrExpiresAt");
 
     if (!timetable) {
       return res.status(404).json({
         success: false,
         message: "Timetable entry not found",
+      });
+    }
+
+    const isAssignedPanel = Array.isArray(timetable.panels)
+      ? timetable.panels.some(
+          (panelId) => String(panelId || "") === String(req.user.id || req.user._id || ""),
+        )
+      : false;
+
+    if (!["admin", "panel"].includes(req.user.role) || !isAssignedPanel) {
+      return res.status(403).json({
+        success: false,
+        message: "Only the assigned panel examiners can view this attendance QR code.",
       });
     }
 

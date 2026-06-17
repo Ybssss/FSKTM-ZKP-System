@@ -30,6 +30,11 @@ import { buildPanelSessionOutcome } from "../../utils/sessionOutcome";
 import { getRubricDisplayName } from "../../utils/rubricLabels";
 
 const idOf = (value) => String(value?._id || value || "");
+const sameId = (left, right) => {
+  const normalizedLeft = idOf(left);
+  const normalizedRight = idOf(right);
+  return Boolean(normalizedLeft) && normalizedLeft === normalizedRight;
+};
 const formatMinutesToClock = (totalMinutes) => {
   const normalized = Number(totalMinutes);
   if (!Number.isFinite(normalized) || normalized < 0) return "";
@@ -375,10 +380,24 @@ export default function SessionDetailPage() {
     }
   };
 
-  const isAssignedEvaluator = evaluations.some(
-    (e) => e.evaluatorId?._id === user.id || e.evaluatorId === user.id,
+  const currentUserId = idOf(user);
+  const myPendingEvaluation = useMemo(
+    () =>
+      evaluations.find(
+        (evaluation) =>
+          evaluation?.status === "PENDING" &&
+          sameId(evaluation?.evaluatorId, currentUserId),
+      ) || null,
+    [currentUserId, evaluations],
   );
-  const canViewGateway = isStaff && (isAdmin || isAssignedEvaluator || isPanel);
+  const isAssignedSessionPanel = useMemo(
+    () =>
+      isStaff &&
+      Array.isArray(session?.panels) &&
+      session.panels.some((panel) => sameId(panel, currentUserId)),
+    [currentUserId, isStaff, session?.panels],
+  );
+  const canViewGateway = isAssignedSessionPanel;
 
   const isFutureSession = session
     ? new Date(
@@ -572,24 +591,14 @@ export default function SessionDetailPage() {
             </span>
           </div>
 
-          {isStaff &&
-            (() => {
-              const myPendingEval = evaluations.find(
-                (e) =>
-                  (e.evaluatorId?._id === user.id ||
-                    e.evaluatorId === user.id) &&
-                  e.status === "PENDING",
-              );
-
-              return myPendingEval ? (
-                <button
-                  onClick={() => goToEvaluation(myPendingEval._id)}
-                  className="mt-4 sm:mt-0 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 font-bold shadow-md transition-transform hover:scale-105"
-                >
-                  <FileText className="w-5 h-5" /> Evaluate Now
-                </button>
-              ) : null;
-            })()}
+          {isStaff && myPendingEvaluation ? (
+            <button
+              onClick={() => goToEvaluation(myPendingEvaluation._id)}
+              className="mt-4 sm:mt-0 px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 flex items-center gap-2 font-bold shadow-md transition-transform hover:scale-105"
+            >
+              <FileText className="w-5 h-5" /> Evaluate Now
+            </button>
+          ) : null}
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-sm mt-6 pt-6 border-t border-gray-100">
@@ -700,15 +709,10 @@ export default function SessionDetailPage() {
             </button>
           )}
 
-          {isStaff && evaluations.some((e) => e.status === "PENDING") && (
+          {isStaff && myPendingEvaluation && (
             <button
               type="button"
-              onClick={() => {
-                const pendingEval = evaluations.find(
-                  (e) => e.status === "PENDING",
-                );
-                if (pendingEval) goToEvaluation(pendingEval._id);
-              }}
+              onClick={() => goToEvaluation(myPendingEvaluation._id)}
               className="w-full min-w-0 px-4 py-3 bg-green-50 text-green-700 rounded-lg font-bold border border-green-100 hover:bg-green-100 flex items-center justify-center gap-2 text-center leading-tight"
             >
               <FileText className="w-4 h-4" />

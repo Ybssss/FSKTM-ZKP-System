@@ -129,10 +129,11 @@ router.patch("/me/research-abstract", async (req, res) => {
 
 router.patch("/:id/profile-image", async (req, res) => {
   try {
-    if (req.user.role !== "admin") {
+    const isOwnProfile = String(req.user.id || "") === String(req.params.id || "");
+    if (req.user.role !== "admin" && !isOwnProfile) {
       return res.status(403).json({
         success: false,
-        message: "Only administrators can update user profile images.",
+        message: "You can only update your own profile image unless you are an administrator.",
       });
     }
 

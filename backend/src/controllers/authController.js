@@ -289,6 +289,11 @@ exports.verifyDeviceProof = async (req, res) => {
         name: user.name,
         role: user.role,
         userId: user.userId,
+        email: user.email,
+        matricNumber: user.matricNumber || "",
+        program: user.program || "",
+        profession: user.profession || "",
+        profileImageUrl: user.profileImageUrl || "",
         deviceId: finalDeviceId,
         trusted: trustDevice,
       },
@@ -480,7 +485,7 @@ exports.pollEncryptedKey = async (req, res) => {
 exports.getMe = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select(
-      "name role userId email",
+      "name role userId email matricNumber program profession profileImageUrl",
     );
     if (!user)
       return res

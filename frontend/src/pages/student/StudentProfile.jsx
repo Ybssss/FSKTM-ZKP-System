@@ -107,7 +107,8 @@ export default function StudentProfile() {
     (displayUserId && currentUserId && String(displayUserId) === String(currentUserId)) ||
     (displayUser.userId && user?.userId && displayUser.userId === user.userId);
   const canEditOwnStudentResearch = isOwnProfile && displayUser.role === "student";
-  const canManageProfileImage = user?.role === "admin" && Boolean(displayUserId);
+  const canManageProfileImage =
+    Boolean(displayUserId) && (isOwnProfile || user?.role === "admin");
 
   const originalTitle = useMemo(
     () => normalizeText(displayUser.researchTitle || ""),

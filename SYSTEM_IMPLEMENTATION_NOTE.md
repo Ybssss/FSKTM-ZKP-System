@@ -318,6 +318,9 @@ Important code:
   - `backend/src/routes/user.js:83`
 - update profile image:
   - `backend/src/routes/user.js:130`
+- auth payload that keeps sidebar/avatar state fresh:
+  - `backend/src/controllers/authController.js`
+  - `frontend/src/contexts/AuthContext.jsx`
 - get current profile:
   - `backend/src/routes/user.js:191`
 - update student research title:
@@ -330,6 +333,8 @@ Important code:
 Why it matters:
 
 - this is where profile image support, own-profile viewing, and student self-edit features really live;
+- profile image update is not admin-only anymore for self-service use; users can update their own avatar, while admin still retains override access for other profiles;
+- the authenticated user payload now carries `profileImageUrl`, so sidebar avatars persist after login and page refresh instead of falling back to initials;
 - default panel assignment affects future scheduling, not already-created sessions.
 
 ## 6. Scheduling, session batches, and conflict control
@@ -454,6 +459,7 @@ Why it matters:
 - rubric scores are converted into `totalMarks`;
 - qualitative and quantitative criteria are both supported;
 - once submitted, evaluation becomes `COMPLETED` and re-locks unless explicitly unlocked.
+- the session detail quick action must resolve only to the current viewer's own pending evaluation document; otherwise staff can be sent into another evaluator's pending form in read-only mode, which is operationally misleading.
 
 ### 7.4 Result publication rule
 
@@ -577,6 +583,7 @@ Important code:
 Why it matters:
 
 - attendance token is tied to a specific timetable session;
+- only the assigned live-session panel examiners can generate or reopen the attendance gateway QR/PIN;
 - only assigned student can redeem it;
 - token expiry is enforced;
 - duplicate attendance is handled safely.
@@ -664,6 +671,8 @@ Main operational pages:
   - `frontend/src/pages/panel/TimetableManagementPage.jsx:60`
 - users/admin panel:
   - `frontend/src/pages/panel/UsersPage.jsx:93`
+- staff/student profile:
+  - `frontend/src/pages/student/StudentProfile.jsx`
 - student attendance:
   - `frontend/src/pages/student/AttendancePage.jsx:84`
 - student rubric view:
@@ -672,6 +681,7 @@ Main operational pages:
 Why they matter:
 
 - these pages expose the actual operational workflows used in demo and live use;
+- `StudentProfile.jsx` is also operationally important because it now owns self-avatar upload, profile preview, and staff quick-search jump-outs;
 - if you are preparing slides or a system walkthrough, these are the screens to anchor the flow.
 
 ## 14. Why ZKP is important in this system specifically
